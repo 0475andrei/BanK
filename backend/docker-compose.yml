@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bank
+      POSTGRES_PASSWORD: bank
+      POSTGRES_DB: bank
+    ports:
+      - "5432:5432"
+    volumes:
+      - bank_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bank -d bank"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: .
+    env_file: .env
+    environment:
+      # Overrides the .env value so the app always reaches Postgres via the
+      # compose network, regardless of what a developer put in .env for
+      # local/non-docker use.
+      DATABASE_URL: postgresql+asyncpg://bank:bank@db:5432/bank
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - ./tests:/app/tests
+
+volumes:
+  bank_pg_data:
