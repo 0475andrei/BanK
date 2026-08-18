@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}BanK{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <nav class="topnav">
+    <a href="{{ url_for('index') }}" class="brand">BanK</a>
+    <a href="{{ url_for('accounts') }}">Accounts</a>
+    <a href="{{ url_for('transfers') }}">Transfers</a>
+    <a href="{{ url_for('login') }}">Log in</a>
+  </nav>
+
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script>
+    // Shared by every page's inline script. The API is a separate origin
+    // (FastAPI on :8000 vs this Flask app on :5000), so `credentials:
+    // "include"` is required for the browser to send/receive the
+    // HttpOnly session cookie cross-origin - and the backend's CORS_ORIGINS
+    // must list this app's origin with allow_credentials on (already set
+    // up, see README.md).
+    const API_BASE_URL = "{{ api_base_url }}";
+
+    async function apiFetch(path, options = {}) {
+      const res = await fetch(API_BASE_URL + path, {
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+        ...options,
+      });
+      if (!res.ok) {
+        let message = `Request failed: ${res.status}`;
+        try {
+          const body = await res.json();
+          message = body?.error?.message || message;
+        } catch {
+          /* non-JSON error body, fall back to the generic message above */
+        }
+        throw new Error(message);
+      }
+      return res.status === 204 ? null : res.json();
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

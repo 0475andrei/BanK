@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Transfers - BanK{% endblock %}
+{% block content %}
+  <h1>Transfers</h1>
+  <p><em>TODO:</em> follow the same pattern as accounts.html - call
+  <code>apiFetch("/transfers")</code> to list them, and
+  <code>apiFetch("/transfers", { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({...}) })</code>
+  to create one. See README.md for the exact request/response shape and
+  why the Idempotency-Key header is required.</p>
+{% endblock %}

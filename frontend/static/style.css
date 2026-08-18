@@ -1,0 +1,50 @@
+/* Minimal, deliberately unopinionated - the real frontend dev should
+   replace this however they like (a CSS framework, a JS framework's own
+   build pipeline, whatever). This just keeps the placeholder pages legible. */
+
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  color: #1a1a1a;
+  background: #fafafa;
+}
+
+.topnav {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1rem 1.5rem;
+  background: #1a1a1a;
+}
+
+.topnav a {
+  color: #fafafa;
+  text-decoration: none;
+}
+
+.topnav .brand {
+  font-weight: 700;
+}
+
+.content {
+  max-width: 640px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+  line-height: 1.5;
+}
+
+form label {
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+form input {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  padding: 0.4rem;
+  margin-top: 0.25rem;
+}
+
+.error {
+  color: #b00020;
+}

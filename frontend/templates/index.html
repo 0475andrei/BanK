@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}BanK{% endblock %}
+{% block content %}
+  <h1>BanK</h1>
+  <p>
+    This is a placeholder shell, not the real frontend. It exists to prove
+    the wiring works: this page, its templates, and the API it talks to.
+    See <code>README.md</code> in this folder for the full API reference
+    and what's still TODO.
+  </p>
+  <p>
+    <a href="{{ url_for('accounts') }}">View accounts</a> is the fullest
+    worked example - it calls the real backend and handles both the
+    logged-in and logged-out cases.
+  </p>
+{% endblock %}

@@ -256,3 +256,15 @@ For every task you (Claude Code) implement:
 
 **Git:** one branch per task (e.g. `feat/ledger-core`, `feat/auth-session`,
 `feat/ai-agent-loop`). Small, meaningful commits. Keep `main` green.
+
+---
+
+## 9. Frontend
+
+The frontend is a **separate project** at `frontend/` (sibling to
+`backend/`), consuming `backend/`'s JSON API — this spec above is backend
+only, per §1. `frontend/` currently holds a minimal Flask starter (page
+shells + a couple of worked examples, not a finished UI) for whoever picks
+up the real frontend work; see `frontend/README.md` for the full API
+reference, the auth/cookie contract the frontend must follow, and what's
+scaffolded vs. still TODO.

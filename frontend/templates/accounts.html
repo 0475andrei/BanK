@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Accounts - BanK{% endblock %}
+{% block content %}
+  <h1>Accounts</h1>
+  <div id="accounts-root">Loading&hellip;</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Worked example of the intended pattern: call the backend directly from
+  // the browser, handle "not logged in" (401) explicitly, otherwise render
+  // the data. This will show "please log in" until the real login page
+  // (see login.html) is wired up against the auth endpoints - that's
+  // expected, not a bug in this page.
+  const loginUrl = "{{ url_for('login') }}";
+
+  async function loadAccounts() {
+    const root = document.getElementById("accounts-root");
+    try {
+      const accounts = await apiFetch("/accounts");
+      if (accounts.length === 0) {
+        root.innerHTML = "<p>No accounts yet.</p>";
+        return;
+      }
+      root.innerHTML = "<ul>" + accounts.map(a => `
+        <li>
+          <strong>${a.name}</strong>
+          &mdash; ${(a.balance_minor / 100).toFixed(2)} ${a.currency}
+          (${a.status})
+        </li>
+      `).join("") + "</ul>";
+    } catch (err) {
+      root.innerHTML = `<p>Please <a href="${loginUrl}">log in</a> to view your accounts.</p>
+                         <p><small>${err.message}</small></p>`;
+    }
+  }
+
+  loadAccounts();
+</script>
+{% endblock %}

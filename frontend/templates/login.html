@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Log in - BanK{% endblock %}
+{% block content %}
+  <h1>Log in</h1>
+  <p><em>Not wired up yet</em> - the backend's login endpoint doesn't exist
+  yet (a teammate is building it). The form below has the right shape for
+  when it does: it will POST to <code>/auth/login</code> and rely on the
+  browser storing the session cookie the backend sets in its response.</p>
+
+  <form id="login-form">
+    <label>Email <input type="email" name="email" required></label>
+    <label>Password <input type="password" name="password" required></label>
+    <button type="submit">Log in</button>
+  </form>
+  <p id="login-error" class="error"></p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById("login-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const errorEl = document.getElementById("login-error");
+    errorEl.textContent = "";
+    try {
+      await apiFetch("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          email: form.get("email"),
+          password: form.get("password"),
+        }),
+      });
+      window.location.href = "{{ url_for('accounts') }}";
+    } catch (err) {
+      errorEl.textContent = err.message;
+    }
+  });
+</script>
+{% endblock %}
