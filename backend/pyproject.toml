@@ -1,7 +1,7 @@
 [project]
 name = "bank-backend"
 version = "0.1.0"
-description = "BanK backend API"
+description = "BanK backend API (banking core + AI agent layer)"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
@@ -12,6 +12,8 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.5",
     "bcrypt>=4.2",
+    # AI layer (app/ai): Azure OpenAI is reached through the OpenAI SDK.
+    "openai>=1.40",
 ]
 
 [project.optional-dependencies]
@@ -31,7 +33,10 @@ build-backend = "setuptools.build_meta"
 include = ["app*"]
 
 [tool.pytest.ini_options]
+# A's banking tests are async; [B]'s AI tests under tests/ai are plain sync
+# functions, which "auto" leaves alone.
 asyncio_mode = "auto"
+# One testpath covers both: tests/unit, tests/integration and tests/ai.
 testpaths = ["tests"]
 
 [tool.ruff]

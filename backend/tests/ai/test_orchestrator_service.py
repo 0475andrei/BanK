@@ -9,7 +9,7 @@ from app.ai.orchestrator import Orchestrator
 from app.ai.providers.mock_provider import MockProvider
 from app.ai.schemas import Message, ModelResponse
 from app.ai.service import AIService, build_banking_tools
-from tests.conftest import OWNED_ACCOUNT_IDS, balance_call
+from tests.ai.conftest import OWNED_ACCOUNT_IDS, balance_call
 
 
 def _service(script: list[ModelResponse]) -> tuple[AIService, MockProvider]:

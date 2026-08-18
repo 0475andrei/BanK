@@ -1,7 +1,9 @@
-"""Shared fixtures.
+"""Shared fixtures for the AI layer's tests.
 
-Every test in this suite is OFFLINE: the mock provider is the only provider used
-and no Azure credentials are read or required.
+Every test in this suite is OFFLINE: the mock provider is the only provider
+used, no Azure credentials are read or required, and the OpenAI SDK is never
+imported. These tests also touch no database - see the `clean_db` override
+below for why that needs saying out loud.
 """
 
 from __future__ import annotations
@@ -14,6 +16,21 @@ from app.ai.providers.mock_provider import MockProvider
 from app.ai.schemas import ModelResponse, ToolCall
 from app.ai.service import build_banking_tools
 from app.ai.tools.registry import ToolRegistry
+
+
+@pytest.fixture(autouse=True)
+def clean_db():
+    """Override the DB-truncating autouse fixture from tests/conftest.py.
+
+    [A]'s tests/conftest.py declares `clean_db` as autouse, so without this it
+    would apply to the whole tests/ tree - dragging a real Postgres (via the
+    session-scoped `test_engine`) into this suite, which is deliberately
+    offline and DB-free. pytest resolves fixtures by name from the closest
+    conftest, so defining it here shadows the parent's for tests/ai only;
+    [A]'s unit/ and integration/ suites still get the real one.
+    """
+    return None
+
 
 # The accounts the test user owns, and one they emphatically do not. Tests use
 # UNOWNED_ACCOUNT_ID whenever they play the part of a model trying to widen access.

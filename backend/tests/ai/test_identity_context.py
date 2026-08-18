@@ -12,6 +12,7 @@ import json
 import logging
 
 import pytest
+from pydantic import ValidationError
 
 from app.ai.context import (
     AccessDeniedError,
@@ -24,7 +25,7 @@ from app.ai.context import (
 from app.ai.schemas import Message, ModelResponse
 from app.ai.service import AIService, build_banking_tools
 from app.ai.tools.banking import GetBalanceTool
-from tests.conftest import OWNED_ACCOUNT_IDS, UNOWNED_ACCOUNT_ID, balance_call
+from tests.ai.conftest import OWNED_ACCOUNT_IDS, UNOWNED_ACCOUNT_ID, balance_call
 
 
 def user(text: str) -> list[Message]:
@@ -42,9 +43,12 @@ def tool_payload(messages: list[Message]) -> dict:
 
 def test_context_is_frozen_so_nothing_downstream_can_widen_it(context):
     """Identity is immutable for the life of the request."""
-    with pytest.raises(Exception):
+    # Pydantic turns a write to a frozen model into a ValidationError; asserting
+    # that specific type (rather than bare Exception) means an AttributeError
+    # from a typo in the test would fail loudly instead of passing silently.
+    with pytest.raises(ValidationError):
         context.account_ids = (UNOWNED_ACCOUNT_ID,)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         context.user_id = "someone-else"
 
 

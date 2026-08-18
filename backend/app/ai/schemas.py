@@ -45,7 +45,7 @@ class ToolResult(BaseModel):
             return json.dumps({"ok": True, "result": self.data or {}})
         return json.dumps({"ok": False, "error": self.error or "tool failed"})
 
-    def to_message(self) -> "Message":
+    def to_message(self) -> Message:
         return Message(
             role="tool",
             content=self.to_content(),
@@ -54,7 +54,7 @@ class ToolResult(BaseModel):
         )
 
     @classmethod
-    def failure(cls, name: str, error: str, tool_call_id: str = "") -> "ToolResult":
+    def failure(cls, name: str, error: str, tool_call_id: str = "") -> ToolResult:
         return cls(tool_call_id=tool_call_id, name=name, ok=False, error=error)
 
 
@@ -79,7 +79,7 @@ class ModelResponse(BaseModel):
     tool_calls: list[ToolCall] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _exactly_one_kind(self) -> "ModelResponse":
+    def _exactly_one_kind(self) -> ModelResponse:
         if self.text is not None and self.tool_calls:
             raise ValueError("ModelResponse carries either text or tool_calls, not both")
         if self.text is None and not self.tool_calls:

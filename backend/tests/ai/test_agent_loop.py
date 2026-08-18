@@ -8,7 +8,7 @@ import pytest
 
 from app.ai.agents.banking_agent import FALLBACK_REPLY
 from app.ai.schemas import Message, ModelResponse, ToolCall
-from tests.conftest import OWNED_ACCOUNT_IDS, balance_call
+from tests.ai.conftest import OWNED_ACCOUNT_IDS, balance_call
 
 
 def user(text: str) -> list[Message]:

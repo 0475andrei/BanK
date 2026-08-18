@@ -31,6 +31,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./tests:/app/tests
+      - ./scripts:/app/scripts
 
 volumes:
   bank_pg_data:

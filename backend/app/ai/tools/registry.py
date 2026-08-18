@@ -32,7 +32,7 @@ class ToolRegistry:
         """Advertisements for every registered tool."""
         return [tool.spec() for tool in self._tools.values()]
 
-    def subset(self, names: Iterable[str]) -> "ToolRegistry":
+    def subset(self, names: Iterable[str]) -> ToolRegistry:
         """A narrower registry — how a future agent gets fewer tools."""
         return ToolRegistry(
             self._tools[name] for name in names if name in self._tools

@@ -7,10 +7,10 @@ from pydantic import BaseModel
 
 from app.ai.context import Context
 from app.ai.schemas import ToolCall, ToolResult
-from app.ai.tools.base import Tool
 from app.ai.tools.banking import GetBalanceTool
+from app.ai.tools.base import Tool
 from app.ai.tools.registry import ToolRegistry
-from tests.conftest import OWNED_ACCOUNT_IDS
+from tests.ai.conftest import OWNED_ACCOUNT_IDS
 
 
 def test_get_balance_returns_fixed_stub_figures(context):

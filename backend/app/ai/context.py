@@ -15,6 +15,7 @@ agents and tools are untouched.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -106,8 +107,23 @@ _DEV_ACCOUNT_IDS = ("acc-checking-001", "acc-savings-002")
 
 
 def dev_context() -> Context:
-    """A hard-coded local identity for the CLI. NOT for production use."""
-    return Context(user_id=_DEV_USER_ID, account_ids=_DEV_ACCOUNT_IDS)
+    """A local identity for the CLI. NOT for production use.
+
+    `scripts/seed_dev_user.py` creates a real user + funded account and prints
+    their ids; exporting DEV_USER_ID / DEV_ACCOUNT_IDS (comma-separated) makes
+    the CLI act as that seeded identity instead of the fixed placeholders.
+    This is only a way to *supply* ids - the ids are still not verified against
+    the database, so it remains dev-only and is not a substitute for auth.
+    """
+    user_id = os.environ.get("DEV_USER_ID") or _DEV_USER_ID
+
+    raw_accounts = os.environ.get("DEV_ACCOUNT_IDS")
+    if raw_accounts:
+        account_ids = tuple(part.strip() for part in raw_accounts.split(",") if part.strip())
+    else:
+        account_ids = _DEV_ACCOUNT_IDS
+
+    return Context(user_id=user_id, account_ids=account_ids)
 
 
 def build_context(user_id: str, account_ids: Sequence[str]) -> Context:

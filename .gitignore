@@ -17,3 +17,8 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+
+# A stray second clone of this repo was once checked out at ./BanK/ and was
+# neither tracked nor ignored - one `git add .` away from being committed.
+# Never commit a nested clone of ourselves.
+/BanK/
