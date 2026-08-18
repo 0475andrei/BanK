@@ -10,6 +10,7 @@ COPY app ./app
 RUN pip install --no-cache-dir ".[dev]" && rm -rf build *.egg-info
 
 COPY tests ./tests
+COPY scripts ./scripts
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
