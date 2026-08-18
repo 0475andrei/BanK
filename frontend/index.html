@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BanK Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h2>BanK.</h2>
+            </div>
+            <nav class="nav-menu">
+                <button class="nav-item active" data-view="dashboard">
+                    <i data-lucide="layout-dashboard" class="icon"></i>
+                    <span>Prezentare Generală</span>
+                </button>
+                <button class="nav-item" data-view="chat">
+                    <i data-lucide="sparkles" class="icon"></i>
+                    <span>Asistent AI & Proiecții</span>
+                </button>
+                <button class="nav-item" data-view="cards">
+                    <i data-lucide="credit-card" class="icon"></i>
+                    <span>Cardurile Mele</span>
+                </button>
+                <button class="nav-item" data-view="analytics">
+                    <i data-lucide="trending-up" class="icon"></i>
+                    <span>Investiții & Bugetare</span>
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="top-header">
+                <div class="search-bar">
+                    <i data-lucide="search" class="icon"></i>
+                    <input type="text" placeholder="Caută tranzacții, carduri, contacte...">
+                </div>
+                <div class="user-actions">
+                    <button class="notification-btn"><i data-lucide="bell" class="icon"></i><span class="badge"></span></button>
+                    <div class="user-profile">
+                        <img src="https://ui-avatars.com/api/?name=User&background=2DD4BF&color=fff" alt="User" class="avatar">
+                    </div>
+                </div>
+            </header>
+
+            <!-- Views Container -->
+            <div class="views-container">
+                <!-- Dashboard View -->
+                <section id="view-dashboard" class="view active">
+                    <div class="dashboard-header">
+                        <div class="total-balance-card">
+                            <span class="label">Total Balance</span>
+                            <h1 class="balance">2,450<span class="minor">.70 RON</span></h1>
+                            <div class="actions">
+                                <button class="btn btn-primary"><i data-lucide="plus" class="icon"></i> Adaugă bani</button>
+                                <button class="btn btn-secondary"><i data-lucide="send" class="icon"></i> Plătește</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="accounts-section">
+                            <h2 class="section-title">Conturi și Pușculițe</h2>
+                            <div class="accounts-grid">
+                                <div class="account-card">
+                                    <div class="acc-icon ron"><i data-lucide="coins"></i></div>
+                                    <div class="acc-info">
+                                        <h3>Cont Curent</h3>
+                                        <p>RON</p>
+                                    </div>
+                                    <div class="acc-balance">1,250.70</div>
+                                </div>
+                                <div class="account-card">
+                                    <div class="acc-icon eur"><i data-lucide="euro"></i></div>
+                                    <div class="acc-info">
+                                        <h3>Cont Curent</h3>
+                                        <p>EUR</p>
+                                    </div>
+                                    <div class="acc-balance">€ 240.00</div>
+                                </div>
+                                <div class="account-card">
+                                    <div class="acc-icon savings"><i data-lucide="piggy-bank"></i></div>
+                                    <div class="acc-info">
+                                        <h3>Savings Pot</h3>
+                                        <p>Vacanță</p>
+                                    </div>
+                                    <div class="acc-balance">1,200.00 RON</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="transactions-section">
+                            <h2 class="section-title">Tranzacții Recente</h2>
+                            <div class="transactions-list">
+                                <div class="transaction-item">
+                                    <div class="tx-icon expense"><i data-lucide="shopping-cart"></i></div>
+                                    <div class="tx-details">
+                                        <h4>Mega Image</h4>
+                                        <span class="time">Azi, 14:30</span>
+                                    </div>
+                                    <div class="tx-amount negative">- 45.50 RON</div>
+                                </div>
+                                <div class="transaction-item">
+                                    <div class="tx-icon income"><i data-lucide="briefcase"></i></div>
+                                    <div class="tx-details">
+                                        <h4>Salariu</h4>
+                                        <span class="time">Ieri, 09:00</span>
+                                    </div>
+                                    <div class="tx-amount positive">+ 5,400.00 RON</div>
+                                </div>
+                                <div class="transaction-item">
+                                    <div class="tx-icon expense"><i data-lucide="coffee"></i></div>
+                                    <div class="tx-details">
+                                        <h4>Starbucks</h4>
+                                        <span class="time">Ieri, 08:15</span>
+                                    </div>
+                                    <div class="tx-amount negative">- 18.00 RON</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- AI Chat View -->
+                <section id="view-chat" class="view hidden">
+                    <div class="chat-container">
+                        <div class="chat-header">
+                            <div class="ai-avatar"><i data-lucide="sparkles"></i></div>
+                            <div class="ai-info">
+                                <h2>BanK AI Assistant</h2>
+                                <span class="status">Online • Agent Financiar</span>
+                            </div>
+                        </div>
+                        <div class="chat-messages" id="chat-messages">
+                            <div class="message ai">
+                                <div class="avatar"><i data-lucide="sparkles"></i></div>
+                                <div class="bubble">Salut! Sunt asistentul tău AI. Cum te pot ajuta astăzi cu finanțele tale?</div>
+                            </div>
+                            <div class="message user">
+                                <div class="bubble">Dacă economisesc 200 RON pe lună, când îmi ating obiectivul de vacanță?</div>
+                            </div>
+                            <div class="message ai">
+                                <div class="avatar"><i data-lucide="sparkles"></i></div>
+                                <div class="bubble">
+                                    <p>Am analizat "Savings Pot: Vacanță". Ai deja 1,200 RON din obiectivul de 3,000 RON.</p>
+                                    <div class="projection-widget">
+                                        <div class="chart-placeholder">
+                                            <div class="progress-bar-bg"><div class="progress-bar-fill" style="width: 40%"></div></div>
+                                        </div>
+                                        <p class="projection-text">Dacă adaugi 200 RON lunar, vei atinge obiectivul în <strong>9 luni</strong>.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="message ai">
+                                <div class="avatar"><i data-lucide="sparkles"></i></div>
+                                <div class="bubble">
+                                    <p>Vrei să configurez un transfer automat de 200 RON în fiecare lună?</p>
+                                    <div class="human-in-the-loop-card">
+                                        <div class="action-proposal">
+                                            <strong>AI Proposal</strong>
+                                            <p>Transfer automat recurent: 200 RON -> Savings Pot: Vacanță (în data de 1 a fiecărei luni)</p>
+                                        </div>
+                                        <div class="hitl-actions">
+                                            <button class="btn btn-primary" onclick="confirmAIAction(this)">Confirmă</button>
+                                            <button class="btn btn-secondary" onclick="cancelAIAction(this)">Anulează</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chat-input-area">
+                            <input type="text" placeholder="Întreabă asistentul AI..." class="chat-input" id="chat-input">
+                            <button class="btn-send" onclick="sendMessage()">➤</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Cards Management View -->
+                <section id="view-cards" class="view hidden">
+                    <h2 class="view-title">Cardurile Mele</h2>
+                    <div class="cards-carousel">
+                        <div class="credit-card virtual">
+                            <div class="card-header">
+                                <span class="card-type">Virtual Disposable</span>
+                                <span class="card-logo">VISA</span>
+                            </div>
+                            <div class="card-number">**** **** **** 9090</div>
+                            <div class="card-footer">
+                                <div class="card-details">
+                                    <div class="detail"><span class="label">Exp</span><span>12/28</span></div>
+                                    <div class="detail"><span class="label">CVV</span><span>***</span></div>
+                                </div>
+                                <div class="status-indicator active">Activ</div>
+                            </div>
+                        </div>
+                        <div class="credit-card physical">
+                            <div class="card-header">
+                                <span class="card-type">Physical EUR Card</span>
+                                <span class="card-logo">Mastercard</span>
+                            </div>
+                            <div class="card-number">**** **** **** 1234</div>
+                            <div class="card-footer">
+                                <div class="card-details">
+                                    <div class="detail"><span class="label">Exp</span><span>05/27</span></div>
+                                </div>
+                                <div class="status-indicator active">Activ</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="cards-actions">
+                        <button class="btn btn-primary"><i data-lucide="sparkles" class="icon"></i> Generează Card Virtual</button>
+                        <button class="btn btn-secondary"><i data-lucide="credit-card" class="icon"></i> Comandă Card Fizic</button>
+                    </div>
+                    <div class="card-limits">
+                        <h3>Limite de Cheltuieli (Card Virtual)</h3>
+                        <div class="limit-bar">
+                            <div class="limit-info">
+                                <span>Cheltuit: 450 RON</span>
+                                <span>Limită: 2,000 RON</span>
+                            </div>
+                            <div class="progress-bg"><div class="progress-fill" style="width: 22.5%"></div></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Analytics & Insights View -->
+                <section id="view-analytics" class="view hidden">
+                    <h2 class="view-title">Investiții & Bugetare</h2>
+                    <div class="analytics-grid">
+                        <div class="chart-card">
+                            <h3>Cheltuieli pe Categorii (Luna curentă)</h3>
+                            <div class="donut-chart-container">
+                                <!-- Simple CSS visual representation -->
+                                <div class="css-donut"></div>
+                                <div class="legend">
+                                    <div class="legend-item"><span class="dot groceries"></span> Supermarket (40%)</div>
+                                    <div class="legend-item"><span class="dot bills"></span> Facturi (35%)</div>
+                                    <div class="legend-item"><span class="dot entertainment"></span> Divertisment (25%)</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pots-card">
+                            <h3>Bugetare (Pots)</h3>
+                            <div class="pots-list">
+                                <div class="pot-item">
+                                    <div class="pot-header">
+                                        <span class="pot-icon"><i data-lucide="plane"></i></span>
+                                        <div class="pot-name">Vacanță vară</div>
+                                        <div class="pot-amounts">1,200 / 3,000 RON</div>
+                                    </div>
+                                    <div class="progress-bg"><div class="progress-fill teal" style="width: 40%"></div></div>
+                                </div>
+                                <div class="pot-item">
+                                    <div class="pot-header">
+                                        <span class="pot-icon"><i data-lucide="car"></i></span>
+                                        <div class="pot-name">Avans Mașină</div>
+                                        <div class="pot-amounts">5,000 / 20,000 EUR</div>
+                                    </div>
+                                    <div class="progress-bg"><div class="progress-fill blue" style="width: 25%"></div></div>
+                                </div>
+                                <div class="pot-item">
+                                    <div class="pot-header">
+                                        <span class="pot-icon"><i data-lucide="shield-alert"></i></span>
+                                        <div class="pot-name">Fond de Urgență</div>
+                                        <div class="pot-amounts">10,000 / 10,000 RON</div>
+                                    </div>
+                                    <div class="progress-bg"><div class="progress-fill green" style="width: 100%"></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="app.js"></script>
+</body>
+</html>
