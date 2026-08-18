@@ -188,6 +188,18 @@ body {
     cursor: pointer;
 }
 
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-profile span {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-main);
+}
+
 /* Views Container */
 .views-container {
     flex: 1;
@@ -791,4 +803,251 @@ body {
 /* Responsive Adjustments */
 @media (max-width: 1024px) {
     .dashboard-grid, .analytics-grid { grid-template-columns: 1fr; }
+}
+
+/* --- Auth pages (login.html / register.html) --- */
+.auth-body {
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+}
+
+.auth-page {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 380px;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 36px;
+}
+
+.auth-card-wide { max-width: 480px; }
+
+.auth-card .logo h2 { margin-bottom: 4px; }
+
+.auth-subtitle {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin-bottom: 24px;
+}
+
+.auth-error {
+    background-color: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--expense-red);
+    color: var(--expense-red);
+    border-radius: var(--border-radius-sm);
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 20px;
+}
+
+.field-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    margin-top: 16px;
+}
+
+.field-label:first-child { margin-top: 0; }
+
+.field-optional { font-weight: 400; color: var(--text-muted); }
+
+.field-input {
+    width: 100%;
+    background-color: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    padding: 11px 14px;
+    color: var(--text-main);
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.field-input:focus {
+    outline: none;
+    border-color: var(--primary-teal);
+}
+
+.field-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 5px;
+}
+
+.field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.auth-submit {
+    width: 100%;
+    justify-content: center;
+    margin-top: 28px;
+}
+
+.auth-switch {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 24px;
+}
+
+.auth-switch a { color: var(--primary-teal); text-decoration: none; font-weight: 500; }
+.auth-switch a:hover { text-decoration: underline; }
+
+/* --- Modals (new account / transfer) --- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.modal-overlay[hidden] { display: none; }
+
+.modal {
+    width: 100%;
+    max-width: 420px;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 28px;
+    margin: 20px;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.modal-header h3 { font-size: 18px; font-weight: 600; }
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+}
+
+.modal-close:hover { color: var(--text-main); }
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.modal-actions .btn { flex: 1; justify-content: center; }
+
+/* --- Misc UI states --- */
+.demo-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: rgba(255, 255, 255, 0.06);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 4px 10px;
+    border-radius: 20px;
+    margin-left: 12px;
+    vertical-align: middle;
+}
+
+.account-card.closed { opacity: 0.55; }
+
+.account-card .acc-status {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-top: 6px;
+}
+
+.empty-state, .loading-state {
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 24px 0;
+    text-align: center;
+}
+
+.logout-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    border-radius: var(--border-radius-sm);
+}
+
+.logout-btn:hover { color: var(--text-main); background-color: rgba(255,255,255,0.05); }
+
+/* --- Real card statuses (issued via POST /cards) --- */
+.status-indicator.cancelled {
+    background-color: rgba(148, 163, 184, 0.12);
+    color: var(--text-muted);
+}
+
+.credit-card.cancelled {
+    opacity: 0.5;
+}
+
+.card-cancel-btn {
+    align-self: flex-start;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+    margin-top: 10px;
+    position: relative;
+    z-index: 1;
+    text-decoration: underline;
+}
+
+.card-cancel-btn:hover { color: var(--expense-red); }
+
+.card-reveal-number {
+    font-family: monospace;
+    font-size: 24px;
+    letter-spacing: 3px;
+    text-align: center;
+    background-color: var(--bg-dark);
+    border: 1px solid var(--primary-teal);
+    border-radius: var(--border-radius-sm);
+    padding: 16px;
+    margin: 16px 0;
+    color: var(--primary-teal);
+}
+
+.card-reveal-note {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
 }

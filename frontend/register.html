@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - BanK</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="auth-body">
+    <div class="auth-page">
+        <div class="auth-card auth-card-wide">
+            <div class="logo"><h2>BanK.</h2></div>
+            <p class="auth-subtitle">Create your account</p>
+
+            <div class="auth-error" id="auth-error" hidden></div>
+
+            <form id="register-form">
+                <div class="field-row">
+                    <div>
+                        <label class="field-label" for="first_name">First name</label>
+                        <input class="field-input" type="text" id="first_name" name="first_name" required>
+                    </div>
+                    <div>
+                        <label class="field-label" for="last_name">Last name</label>
+                        <input class="field-input" type="text" id="last_name" name="last_name" required>
+                    </div>
+                </div>
+
+                <label class="field-label" for="email">Email</label>
+                <input class="field-input" type="email" id="email" name="email" required autocomplete="email">
+
+                <label class="field-label" for="password">Password</label>
+                <input class="field-input" type="password" id="password" name="password" minlength="8" required autocomplete="new-password">
+                <p class="field-hint">At least 8 characters</p>
+
+                <label class="field-label" for="national_id">National ID (CNP)</label>
+                <input class="field-input" type="text" id="national_id" name="national_id" pattern="\d{13}" required>
+                <p class="field-hint">Gender and date of birth are read from this automatically</p>
+
+                <div class="field-row">
+                    <div>
+                        <label class="field-label" for="phone">Phone <span class="field-optional">(optional)</span></label>
+                        <input class="field-input" type="tel" id="phone" name="phone">
+                    </div>
+                    <div>
+                        <label class="field-label" for="address">Address <span class="field-optional">(optional)</span></label>
+                        <input class="field-input" type="text" id="address" name="address">
+                    </div>
+                </div>
+
+                <button class="btn btn-primary auth-submit" type="submit">Register</button>
+            </form>
+
+            <p class="auth-switch">Already have an account? <a href="login.html">Log in</a></p>
+        </div>
+    </div>
+
+    <script src="api.js"></script>
+    <script>
+        document.getElementById("register-form").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const errorEl = document.getElementById("auth-error");
+            errorEl.hidden = true;
+            try {
+                await apiFetch("/auth/register", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        email: document.getElementById("email").value,
+                        password: document.getElementById("password").value,
+                        first_name: document.getElementById("first_name").value,
+                        last_name: document.getElementById("last_name").value,
+                        national_id: document.getElementById("national_id").value,
+                        phone: document.getElementById("phone").value || null,
+                        address: document.getElementById("address").value || null,
+                    }),
+                });
+                // Registration also logs the user in (see backend/docs/AUTH_HANDOFF.md).
+                window.location.href = "index.html";
+            } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.hidden = false;
+            }
+        });
+    </script>
+</body>
+</html>

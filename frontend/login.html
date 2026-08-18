@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log in - BanK</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="auth-body">
+    <div class="auth-page">
+        <div class="auth-card">
+            <div class="logo"><h2>BanK.</h2></div>
+            <p class="auth-subtitle">Log in to your account</p>
+
+            <div class="auth-error" id="auth-error" hidden></div>
+
+            <form id="login-form">
+                <label class="field-label" for="email">Email</label>
+                <input class="field-input" type="email" id="email" name="email" required autocomplete="email">
+
+                <label class="field-label" for="password">Password</label>
+                <input class="field-input" type="password" id="password" name="password" required autocomplete="current-password">
+
+                <button class="btn btn-primary auth-submit" type="submit">Log in</button>
+            </form>
+
+            <p class="auth-switch">No account yet? <a href="register.html">Register</a></p>
+        </div>
+    </div>
+
+    <script src="api.js"></script>
+    <script>
+        document.getElementById("login-form").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const errorEl = document.getElementById("auth-error");
+            errorEl.hidden = true;
+            try {
+                await apiFetch("/auth/login", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        email: document.getElementById("email").value,
+                        password: document.getElementById("password").value,
+                    }),
+                });
+                window.location.href = "index.html";
+            } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.hidden = false;
+            }
+        });
+    </script>
+</body>
+</html>
