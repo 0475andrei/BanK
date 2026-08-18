@@ -2,29 +2,73 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>{% block title %}BanK{% endblock %}</title>
+  <title>{% block title %}BanK Banca{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
-  <nav class="topnav">
-    <a href="{{ url_for('index') }}" class="brand">BanK</a>
-    <a href="{{ url_for('accounts') }}">Accounts</a>
-    <a href="{{ url_for('transfers') }}">Transfers</a>
-    <a href="{{ url_for('login') }}">Log in</a>
-    <a href="{{ url_for('register') }}">Register</a>
-  </nav>
+  <div class="app-container">
+    {% block sidebar %}
+    <aside class="sidebar">
+      <a href="{{ url_for('index') }}" class="brand">
+        <div style="background: var(--accent-teal); padding: 6px; border-radius: 8px;">
+          <i data-lucide="building" style="color: black;"></i>
+        </div>
+        <div>BanK<br><span style="font-size: 0.6rem; color: var(--accent-teal); text-transform: uppercase;">Banca</span></div>
+      </a>
+      <nav class="nav-menu">
+        <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
+          <i data-lucide="home" width="20" height="20"></i>
+          Prezentare Generală
+        </a>
+        <a href="{{ url_for('exchange') }}" class="nav-link {% if request.endpoint == 'exchange' %}active{% endif %}">
+          <i data-lucide="arrow-left-right" width="20" height="20"></i>
+          Schimb Valutar
+        </a>
+        <a href="{{ url_for('cards') }}" class="nav-link {% if request.endpoint == 'cards' %}active{% endif %}">
+          <i data-lucide="credit-card" width="20" height="20"></i>
+          Carduri
+        </a>
+        <a href="{{ url_for('transfers') }}" class="nav-link {% if request.endpoint == 'transfers' %}active{% endif %}">
+          <i data-lucide="credit-card" width="20" height="20"></i>
+          Plăți
+        </a>
+        <a href="{{ url_for('investments') }}" class="nav-link {% if request.endpoint == 'investments' %}active{% endif %}">
+          <i data-lucide="bar-chart-2" width="20" height="20"></i>
+          Investiții
+        </a>
+      </nav>
+      
+      <div style="margin-top: auto; padding: 0 1rem;">
+        <button id="logoutBtn" class="nav-link" style="background:none; border:none; width: 100%; cursor: pointer; text-align:left;">
+          <i data-lucide="log-out" width="20" height="20"></i>
+          Deconectare
+        </button>
+      </div>
+    </aside>
+    {% endblock %}
 
-  <main class="content">
-    {% block content %}{% endblock %}
-  </main>
+    <div class="main-wrapper">
+      <header class="top-bar">
+        <button class="icon-btn"><i data-lucide="search" width="20" height="20"></i></button>
+        <button class="icon-btn" style="position: relative;">
+          <i data-lucide="bell" width="20" height="20"></i>
+          <span style="position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; background: var(--accent-teal); border-radius: 50%;"></span>
+        </button>
+        <div class="user-avatar" style="background: #60a5fa;"></div>
+      </header>
+      
+      <main class="content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
 
   <script>
-    // Shared by every page's inline script. The API is a separate origin
-    // (FastAPI on :8000 vs this Flask app on :5000), so `credentials:
-    // "include"` is required for the browser to send/receive the
-    // HttpOnly session cookie cross-origin - and the backend's CORS_ORIGINS
-    // must list this app's origin with allow_credentials on (already set
-    // up, see README.md).
+    // Initialize Lucide icons
+    lucide.createIcons();
+
+    // API Config
     const API_BASE_URL = "{{ api_base_url }}";
 
     async function apiFetch(path, options = {}) {
@@ -34,16 +78,30 @@
         ...options,
       });
       if (!res.ok) {
+        if (res.status === 401 && !path.includes('/auth/login') && !path.includes('/auth/register')) {
+           window.location.href = "{{ url_for('login') }}";
+        }
         let message = `Request failed: ${res.status}`;
         try {
           const body = await res.json();
           message = body?.error?.message || message;
-        } catch {
-          /* non-JSON error body, fall back to the generic message above */
-        }
+        } catch {}
         throw new Error(message);
       }
       return res.status === 204 ? null : res.json();
+    }
+
+    // Logout handler
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async () => {
+        try {
+          await apiFetch('/auth/logout', { method: 'POST' });
+          window.location.href = "{{ url_for('login') }}";
+        } catch (err) {
+          console.error(err);
+        }
+      });
     }
   </script>
   {% block scripts %}{% endblock %}

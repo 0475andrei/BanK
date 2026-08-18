@@ -1,10 +1,190 @@
 {% extends "base.html" %}
-{% block title %}Transfers - BanK{% endblock %}
+{% block title %}Centru de Plăți{% endblock %}
+
 {% block content %}
-  <h1>Transfers</h1>
-  <p><em>TODO:</em> follow the same pattern as accounts.html - call
-  <code>apiFetch("/transfers")</code> to list them, and
-  <code>apiFetch("/transfers", { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({...}) })</code>
-  to create one. See README.md for the exact request/response shape and
-  why the Idempotency-Key header is required.</p>
+<h1 style="font-size: 1.5rem; margin-bottom: 1.5rem;">Centru de Plăți</h1>
+
+<div class="grid-2 mb-6">
+  <!-- Send Money Card -->
+  <div class="card" style="background: linear-gradient(135deg, #1c2e35 0%, #152227 100%); border-color: #2b5454;">
+    <div class="flex items-center gap-4 mb-4">
+      <i data-lucide="send" width="32" height="32" style="color: var(--accent-teal);"></i>
+      <div>
+        <h2 style="font-size: 1.125rem; margin: 0;">Trimite Bani</h2>
+        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">Transferă fonduri instant către contacte sau alte bănci.</div>
+      </div>
+    </div>
+    <button class="btn" style="width: 100%;" onclick="document.getElementById('transferForm').style.display='block';">Inițiază Transfer</button>
+  </div>
+
+  <!-- Pay Bills Card -->
+  <div class="card" style="background: linear-gradient(135deg, #1c2e35 0%, #152227 100%); border-color: #2b5454;">
+    <div class="flex items-center gap-4 mb-4">
+      <i data-lucide="file-text" width="32" height="32" style="color: var(--accent-teal);"></i>
+      <div>
+        <h2 style="font-size: 1.125rem; margin: 0;">Plătește Facturi</h2>
+        <div style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">Achită-ți utilitățile, telefonul sau facturile diverse.</div>
+      </div>
+    </div>
+    <button class="btn" style="width: 100%;">Plătește Facturi</button>
+  </div>
+</div>
+
+<!-- Transfer Form Modal (Hidden by default) -->
+<div id="transferForm" class="card mb-6" style="display: none; border-left: 4px solid var(--accent-teal);">
+  <div class="flex justify-between items-center mb-4">
+    <h2>Efectuează un Transfer</h2>
+    <button class="icon-btn" onclick="document.getElementById('transferForm').style.display='none';"><i data-lucide="x"></i></button>
+  </div>
+  <form id="txForm" onsubmit="handleTransfer(event)">
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Din contul</label>
+        <select id="fromAccount" class="form-control" required></select>
+      </div>
+      <div class="form-group">
+        <label>În contul</label>
+        <select id="toAccount" class="form-control" required></select>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Suma (Minore / Cents)</label>
+        <input type="number" id="amount" class="form-control" required min="1">
+      </div>
+      <div class="form-group">
+        <label>Moneda</label>
+        <input type="text" id="currency" class="form-control" value="RON" required>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Descriere (Opțional)</label>
+      <input type="text" id="description" class="form-control">
+    </div>
+    <div id="txError" class="error mb-4"></div>
+    <button type="submit" class="btn" id="submitTxBtn">Transferă Acum</button>
+  </form>
+</div>
+
+<!-- Recent Recipients -->
+<div class="flex justify-between items-center mb-4">
+  <h2 style="font-size: 1.25rem; margin: 0;">Recipienți Recenți</h2>
+  <button class="btn-outline" style="padding: 0.5rem 1rem; border-radius: 0.5rem;">Vezi Toți</button>
+</div>
+
+<div class="card" style="padding: 0;">
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>Avatar</th>
+          <th>Nume Recipient</th>
+          <th>Tip Tranzacție</th>
+          <th>Detalii</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><div class="avatar-sm avatar-teal">PI</div></td>
+          <td style="font-weight: 500;">Popa Ioan</td>
+          <td><span style="color: var(--text-secondary);">Transfer</span></td>
+          <td><span style="color: var(--text-secondary);">BT-RO555...</span></td>
+          <td><button class="btn" style="padding: 0.4rem 1rem; font-size: 0.875rem;">Repetă</button></td>
+        </tr>
+        <tr>
+          <td><div class="avatar-sm avatar-indigo">IE</div></td>
+          <td style="font-weight: 500;">Ionescu Elena</td>
+          <td><span style="color: var(--text-secondary);">Utilități</span></td>
+          <td><span style="color: var(--text-secondary);">Cod: 12345...</span></td>
+          <td><button class="btn" style="padding: 0.4rem 1rem; font-size: 0.875rem;">Repetă</button></td>
+        </tr>
+        <tr>
+          <td><div class="avatar-sm" style="background: white;"><img src="https://ui-avatars.com/api/?name=Enel&background=fff&color=000" style="width:100%; border-radius:50%;"></div></td>
+          <td style="font-weight: 500;">Enel</td>
+          <td><span style="color: var(--text-secondary);">Transfer</span></td>
+          <td><span style="color: var(--text-secondary);">Revolut-GB...</span></td>
+          <td><button class="btn" style="padding: 0.4rem 1rem; font-size: 0.875rem;">Repetă</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid-2 mt-6">
+  <div class="flex items-center gap-4">
+    <div class="avatar-sm avatar-teal"><i data-lucide="clock" width="16" height="16"></i></div>
+    <div>
+      <div style="font-weight: 500;">Plăți Programate</div>
+      <div style="font-size: 0.875rem; color: var(--text-secondary);">Vezi și gestionează plățile viitoare.</div>
+    </div>
+  </div>
+  <div class="flex items-center gap-4">
+    <div class="avatar-sm avatar-teal"><i data-lucide="calendar" width="16" height="16"></i></div>
+    <div>
+      <div style="font-weight: 500;">Istoric Tranzacții</div>
+      <div style="font-size: 0.875rem; color: var(--text-secondary);">Accesează înregistrările plăților anterioare.</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let accounts = [];
+
+  async function loadAccounts() {
+    try {
+      accounts = await apiFetch('/accounts');
+      const options = accounts.map(a => `<option value="${a.id}">${a.name} (${a.currency} ${a.balance_minor / 100})</option>`).join('');
+      document.getElementById('fromAccount').innerHTML = options;
+      document.getElementById('toAccount').innerHTML = options;
+      
+      // Select the second account for "toAccount" if available
+      if (accounts.length > 1) {
+        document.getElementById('toAccount').selectedIndex = 1;
+      }
+    } catch (err) {
+      console.error("Could not load accounts", err);
+    }
+  }
+
+  async function handleTransfer(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitTxBtn');
+    const errDiv = document.getElementById('txError');
+    errDiv.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Se procesează...';
+
+    const payload = {
+      from_account_id: document.getElementById('fromAccount').value,
+      to_account_id: document.getElementById('toAccount').value,
+      amount_minor: parseInt(document.getElementById('amount').value, 10),
+      currency: document.getElementById('currency').value,
+      description: document.getElementById('description').value || undefined
+    };
+
+    try {
+      await apiFetch('/transfers', {
+        method: 'POST',
+        headers: {
+          'Idempotency-Key': crypto.randomUUID()
+        },
+        body: JSON.stringify(payload)
+      });
+      alert('Transfer inițiat cu succes!');
+      document.getElementById('transferForm').style.display = 'none';
+      e.target.reset();
+      loadAccounts(); // Refresh balances
+    } catch (err) {
+      errDiv.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Transferă Acum';
+    }
+  }
+
+  loadAccounts();
+</script>
 {% endblock %}

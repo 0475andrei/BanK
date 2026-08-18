@@ -1,16 +1,183 @@
 {% extends "base.html" %}
-{% block title %}BanK{% endblock %}
+
 {% block content %}
-  <h1>BanK</h1>
-  <p>
-    This is a placeholder shell, not the real frontend. It exists to prove
-    the wiring works: this page, its templates, and the API it talks to.
-    See <code>README.md</code> in this folder for the full API reference
-    and what's still TODO.
-  </p>
-  <p>
-    <a href="{{ url_for('accounts') }}">View accounts</a> is the fullest
-    worked example - it calls the real backend and handles both the
-    logged-in and logged-out cases.
-  </p>
+<div style="display: flex; gap: 1.5rem; margin-bottom: 2rem;">
+  <!-- Total Balance Card -->
+  <div class="card card-gradient" style="flex: 1.5; color: white; position: relative; overflow: hidden; min-height: 200px; display: flex; flex-direction: column; justify-content: center;">
+    <div style="position: relative; z-index: 1;">
+      <h2 style="color: var(--text-secondary); font-weight: 500; font-size: 1.125rem;">Sold Total</h2>
+      <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent-teal); margin: 0.5rem 0;" id="totalBalance">€0.00</div>
+      <div style="color: var(--text-secondary); font-size: 0.875rem;" id="mainAccountName">Cont Principal (Main Account)</div>
+      <div style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem;">**** 8855</div>
+    </div>
+    <!-- Decorative glare -->
+    <div style="position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 60%);"></div>
+  </div>
+
+  <!-- Accounts Grid -->
+  <div class="grid-2" style="flex: 2;" id="accountsGrid">
+    <div class="card" style="padding: 1.25rem;">
+      <div style="color: var(--text-secondary); margin-bottom: 0.5rem;">Economii</div>
+      <div style="font-size: 1.5rem; font-weight: 600;">€0.00</div>
+    </div>
+    <div class="card" style="padding: 1.25rem;">
+      <div style="color: var(--text-secondary); margin-bottom: 0.5rem;">Investiții</div>
+      <div style="font-size: 1.5rem; font-weight: 600;">€0.00</div>
+    </div>
+    <div class="card" style="padding: 1.25rem;">
+      <div style="color: var(--text-secondary); margin-bottom: 0.5rem;">Finanți</div>
+      <div style="font-size: 1.5rem; font-weight: 600;">€0.00</div>
+    </div>
+    <div class="card" style="padding: 1.25rem;">
+      <div style="color: var(--text-secondary); margin-bottom: 0.5rem;">Fond Urgențe</div>
+      <div style="font-size: 1.5rem; font-weight: 600;">€0.00</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <!-- Recent Transactions -->
+  <div>
+    <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem;">Tranzacții Recente</h2>
+    <div class="card" style="padding: 0;">
+      <div id="transactionsList">
+        <!-- JS will populate -->
+        <div style="padding: 2rem; text-align: center; color: var(--text-muted);">Se încarcă...</div>
+      </div>
+      <div style="padding: 1.5rem;">
+        <a href="{{ url_for('transfers') }}" class="btn" style="width: 100%;">Vezi Toate Tranzacțiile</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Spending Analysis -->
+  <div>
+    <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem;">Analiză Cheltuieli</h2>
+    <div class="card" style="display: flex; flex-direction: column; align-items: center;">
+      <div style="width: 200px; height: 200px; position: relative;">
+         <canvas id="spendingChart"></canvas>
+      </div>
+      <div class="flex gap-4 mt-4" style="font-size: 0.875rem; color: var(--text-secondary);">
+        <div class="flex items-center gap-2"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent-teal);"></span> Cumpărături</div>
+        <div class="flex items-center gap-2"><span style="width: 8px; height: 8px; border-radius: 50%; background: #4f46e5;"></span> Utilități</div>
+        <div class="flex items-center gap-2"><span style="width: 8px; height: 8px; border-radius: 50%; background: #6b7280;"></span> Divertisment</div>
+      </div>
+      <button class="btn mt-4" style="width: 100%;">Planifică Buget</button>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2 mt-4">
+  <div class="flex items-center gap-4">
+    <div class="avatar-sm avatar-teal"><i data-lucide="refresh-cw" width="16" height="16"></i></div>
+    <div>
+      <div style="font-weight: 500;">Cashback</div>
+      <div style="font-size: 0.875rem; color: var(--text-secondary);">Cashback for tick entinsted benehunts</div>
+    </div>
+  </div>
+  <div class="flex items-center gap-4">
+    <div class="avatar-sm" style="background: rgba(16, 185, 129, 0.15); color: var(--success);"><i data-lucide="shopping-bag" width="16" height="16"></i></div>
+    <div>
+      <div style="font-weight: 500;">Product Benefits</div>
+      <div style="font-size: 0.875rem; color: var(--text-secondary);">Cashback for 15% act/card benefits</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  function formatMoney(minorUnits, currency) {
+    const formatter = new Intl.NumberFormat('ro-RO', { style: 'currency', currency: currency });
+    return formatter.format(minorUnits / 100);
+  }
+
+  async function loadDashboardData() {
+    try {
+      const [accountsRes, userRes] = await Promise.all([
+        apiFetch('/accounts'),
+        apiFetch('/users/me')
+      ]);
+
+      if (accountsRes && accountsRes.length > 0) {
+        const mainAcc = accountsRes[0];
+        document.getElementById('totalBalance').textContent = formatMoney(mainAcc.balance_minor, mainAcc.currency);
+        document.getElementById('mainAccountName').textContent = mainAcc.name || 'Cont Principal';
+
+        // Populate accounts grid if more than 1
+        const gridHtml = accountsRes.slice(0, 4).map(acc => `
+          <div class="card" style="padding: 1.25rem;">
+            <div style="color: var(--text-secondary); margin-bottom: 0.5rem;">${acc.name}</div>
+            <div style="font-size: 1.5rem; font-weight: 600;">${formatMoney(acc.balance_minor, acc.currency)}</div>
+          </div>
+        `).join('');
+        document.getElementById('accountsGrid').innerHTML = gridHtml;
+
+        // Load recent transactions for main account
+        const txRes = await apiFetch(`/accounts/${mainAcc.id}/transactions?limit=3`);
+        
+        if (txRes && txRes.length > 0) {
+          const txHtml = txRes.map(tx => {
+            const isNegative = tx.amount_minor < 0;
+            const amountColor = isNegative ? 'var(--text-primary)' : 'var(--accent-teal)';
+            const sign = isNegative ? '' : '+';
+            return `
+              <div class="flex justify-between items-center" style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color);">
+                <div class="flex items-center gap-4">
+                  <div class="avatar-sm avatar-teal"><i data-lucide="arrow-${isNegative ? 'up' : 'down'}-right" width="16" height="16"></i></div>
+                  <div>
+                    <div style="font-weight: 500;">${tx.description || 'Tranzacție'}</div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">${new Date(tx.created_at).toLocaleDateString('ro-RO')}</div>
+                  </div>
+                </div>
+                <div style="font-weight: 600; color: ${amountColor};">
+                  ${sign}${formatMoney(tx.amount_minor, mainAcc.currency)}
+                </div>
+              </div>
+            `;
+          }).join('');
+          document.getElementById('transactionsList').innerHTML = txHtml;
+          lucide.createIcons();
+        } else {
+          document.getElementById('transactionsList').innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Nu există tranzacții recente.</div>';
+        }
+      } else {
+         document.getElementById('totalBalance').textContent = '€0.00';
+         document.getElementById('transactionsList').innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Nu există conturi.</div>';
+      }
+    } catch (err) {
+      console.error(err);
+      if (err.message.includes('401')) return; // handled by base
+      document.getElementById('transactionsList').innerHTML = `<div class="error" style="padding: 1.5rem;">${err.message}</div>`;
+    }
+  }
+
+  // Init Chart
+  const ctx = document.getElementById('spendingChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Cumpărături', 'Utilități', 'Divertisment'],
+      datasets: [{
+        data: [25, 15, 10],
+        backgroundColor: [
+          '#2bd3c6',
+          '#4f46e5',
+          '#6b7280'
+        ],
+        borderWidth: 0,
+        hoverOffset: 4
+      }]
+    },
+    options: {
+      cutout: '75%',
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+
+  loadDashboardData();
+</script>
 {% endblock %}
