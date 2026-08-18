@@ -41,7 +41,8 @@ from app.modules.users.models import User
 
 DEV_EMAIL = "dev@test.local"
 DEV_PASSWORD = "devpassword123"  # noqa: S105 - dev fixture, not a real credential
-DEV_FULL_NAME = "Dev User"
+DEV_FIRST_NAME = "Dev"
+DEV_LAST_NAME = "User"
 
 DEV_ACCOUNT_NAME = "Dev Checking"
 DEV_ACCOUNT_CURRENCY = "USD"
@@ -58,7 +59,8 @@ async def _get_or_create_user(db: AsyncSession) -> tuple[User, bool]:
     user = User(
         email=DEV_EMAIL,
         password_hash=hash_password(DEV_PASSWORD),
-        full_name=DEV_FULL_NAME,
+        first_name=DEV_FIRST_NAME,
+        last_name=DEV_LAST_NAME,
     )
     db.add(user)
     await db.flush()
