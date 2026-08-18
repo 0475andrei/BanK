@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Schimb Valutar{% endblock %}
+
+{% block content %}
+<h1 style="font-size: 1.5rem; margin-bottom: 1.5rem;">Schimb Valutar</h1>
+
+<div class="grid-2">
+  <!-- Converter -->
+  <div class="card" style="display: flex; flex-direction: column;">
+    <h2 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 1.5rem;">Convertor Valutar</h2>
+    
+    <div class="form-group">
+      <label>Vinde</label>
+      <div class="flex" style="background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 0.5rem; overflow: hidden;">
+        <div class="flex items-center gap-2" style="padding: 0.75rem 1rem; border-right: 1px solid var(--border-color); background: var(--bg-card);">
+          <span style="font-size: 1.25rem;">🇺🇸</span> USD
+        </div>
+        <input type="number" class="form-control" style="border: none; border-radius: 0; background: transparent; flex: 1; text-align: right; font-size: 1.25rem;" value="1000" id="sellAmount">
+      </div>
+    </div>
+    
+    <div class="flex justify-center" style="margin: -0.5rem 0; position: relative; z-index: 2;">
+      <button class="icon-btn" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 50%; width: 32px; height: 32px;"><i data-lucide="arrow-up-down" width="16" height="16"></i></button>
+    </div>
+
+    <div class="form-group mb-6">
+      <label>Cumpără</label>
+      <div class="flex" style="background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 0.5rem; overflow: hidden;">
+        <div class="flex items-center gap-2" style="padding: 0.75rem 1rem; border-right: 1px solid var(--border-color); background: var(--bg-card);">
+          <span style="font-size: 1.25rem;">🇷🇴</span> RON
+        </div>
+        <input type="number" class="form-control" style="border: none; border-radius: 0; background: transparent; flex: 1; text-align: right; font-size: 1.25rem;" value="4500" readonly id="buyAmount">
+      </div>
+    </div>
+    
+    <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
+      1 USD = 4.5 RON (Actualizat: acum)
+    </div>
+
+    <button class="btn" style="width: 100%; margin-top: auto;" onclick="alert('Schimb valutar simulat cu succes! (Backend endpoint in dezvoltare)')">Schimbă Acum</button>
+    
+    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem;">
+      Actualizat la <span id="currentTime"></span>
+    </div>
+  </div>
+
+  <!-- History Chart -->
+  <div class="card">
+    <div class="flex justify-between items-center mb-4">
+      <h2 style="font-size: 1.125rem; font-weight: 600; margin: 0;">Istoric Curs Valutar</h2>
+      <div class="flex gap-2 text-muted" style="font-size: 0.875rem;">
+        <span>1Z</span> <span>1S</span> <span>1L</span> <span class="text-teal" style="font-weight: 600;">3L</span>
+      </div>
+    </div>
+    
+    <div style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.875rem;" class="flex items-center gap-2">
+      <span style="width: 8px; height: 2px; background: var(--accent-teal); display: inline-block;"></span>
+      USD/RON <i data-lucide="chevron-down" width="14" height="14"></i>
+    </div>
+    
+    <div style="width: 100%; height: 250px; position: relative;">
+      <canvas id="currencyChart"></canvas>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  // Set current time
+  document.getElementById('currentTime').textContent = new Date().toLocaleTimeString('ro-RO');
+
+  // Simple exchange logic
+  const sellInput = document.getElementById('sellAmount');
+  const buyInput = document.getElementById('buyAmount');
+  const rate = 4.5;
+  
+  sellInput.addEventListener('input', (e) => {
+    buyInput.value = (e.target.value * rate).toFixed(2);
+  });
+
+  // Chart setup
+  const ctx = document.getElementById('currencyChart').getContext('2d');
+  
+  // Create gradient
+  const gradient = ctx.createLinearGradient(0, 0, 0, 250);
+  gradient.addColorStop(0, 'rgba(43, 211, 198, 0.3)');
+  gradient.addColorStop(1, 'rgba(43, 211, 198, 0.0)');
+
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['12 Ian', '15 Ian', '18 Ian', '20 Ian', '24 Ian', '27 Ian', '3 Mar', '15 Mar', '23 Mar'],
+      datasets: [{
+        label: 'USD/RON',
+        data: [1.71, 1.62, 1.69, 1.74, 1.72, 1.78, 1.70, 1.79, 1.71],
+        borderColor: '#2bd3c6',
+        backgroundColor: gradient,
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          grid: { display: false, drawBorder: false },
+          ticks: { color: '#6b7280', font: { size: 10 } }
+        },
+        y: {
+          grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
+          ticks: { color: '#6b7280', font: { size: 10 } },
+          min: 1.6
+        }
+      }
+    }
+  });
+</script>
+{% endblock %}
