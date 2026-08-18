@@ -11,12 +11,15 @@ python app.py
 ```
 
 Serverul porneste implicit pe `http://localhost:5000` (portul e configurabil
-din `.env` cu `FLASK_PORT`). Toate rutele API sunt sub prefixul `/api`.
+din `.env` cu `API_PORT`). Toate rutele API sunt sub prefixul `/api`.
 
-CORS e activat pe `/api/*` pentru orice origine (potrivit pentru dezvoltare
-locala). Cand exista un domeniu de productie pentru frontend, backend-ul
-trebuie restrictionat sa accepte cereri doar de acolo (vezi comentariul din
-`app.py`).
+Backend-ul e scris cu **FastAPI**. Documentatie interactiva (Swagger UI) e
+disponibila automat la `http://localhost:5000/docs` — util pentru cine face
+frontend-ul, poate testa direct din browser fara Postman/curl.
+
+CORS e activat pentru orice origine (potrivit pentru dezvoltare locala). Cand
+exista un domeniu de productie pentru frontend, backend-ul trebuie
+restrictionat sa accepte cereri doar de acolo (vezi comentariul din `app.py`).
 
 Toate cererile si raspunsurile sunt JSON (`Content-Type: application/json`).
 
@@ -70,6 +73,7 @@ Creeaza un cont nou.
 | HTTP | Cand apare | Exemplu `error` |
 |---|---|---|
 | `400` | date invalide (email/parola/CNP/nume/prenume) | `"Adresa de email nu este valida"`, `"Parola trebuie sa aiba cel putin 8 caractere"`, `"Numele si prenumele sunt obligatorii"`, sau un motiv specific de CNP invalid (ex: `"Luna nasterii din CNP este invalida"`, `"Cifra de control a CNP-ului este invalida"`) |
+| `400` | cerere malformata (camp obligatoriu lipseste complet din JSON, sau are alt tip decat string) | `"Date invalide in cererea trimisa"` |
 | `409` | emailul sau CNP-ul exista deja in baza de date | `"Exista deja un cont cu acest email"` / `"Exista deja un cont asociat acestui CNP"` |
 
 Toate raspunsurile de eroare au forma:
@@ -124,7 +128,8 @@ Nu se returneaza parola/hash-ul sau alte date sensibile (CNP, telefon, adresa).
 | HTTP | Cand | `error` |
 |---|---|---|
 | `500` | eroare interna neasteptata (ex: Supabase indisponibil) | `"A aparut o eroare interna. Incearca din nou mai tarziu."` — mesaj generic, fara detalii tehnice |
-| `404` | ruta nu exista | pagina HTML standard Flask (nu JSON) |
+| `404` | ruta nu exista | `"Not Found"` (JSON, aceeasi forma `{success, error}` ca restul API-ului) |
+| `405` | metoda HTTP gresita pentru ruta (ex: GET pe `/api/login`) | `"Method Not Allowed"` |
 
 ---
 
