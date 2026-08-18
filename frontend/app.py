@@ -58,6 +58,18 @@ def accounts():
 def transfers():
     return render_template("transfers.html")
 
+@app.get("/exchange")
+def exchange():
+    return render_template("exchange.html")
+
+@app.get("/cards")
+def cards():
+    return render_template("cards.html")
+
+@app.get("/investments")
+def investments():
+    return render_template("investments.html")
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
