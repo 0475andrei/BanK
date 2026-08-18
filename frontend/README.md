@@ -47,23 +47,24 @@ cp .env.example .env
 python app.py
 ```
 
-Visit `http://localhost:5000`. `/accounts` is the fullest worked example —
-it calls the real backend and correctly shows a "please log in" state
-(since login isn't built yet — see below).
+Visit `http://localhost:5000`. Register an account, then `/accounts` is the
+fullest worked example of a data page — it calls the real backend and
+renders the list (or a "please log in" state if your session expired).
 
 ## What's scaffolded vs. what's TODO
 
 | Page | Status |
 |---|---|
 | `/` | Static placeholder |
+| `/register` | **Working**: creates an account and logs you in |
+| `/login` | **Working** |
 | `/accounts` | **Working example**: calls `GET /accounts`, renders the list, handles 401 |
 | `/transfers` | Stub with comments only — follow the accounts.html pattern |
-| `/login` | Form posts to `/auth/login` with the right shape, but that endpoint doesn't exist yet |
 
-`/auth/*` isn't live yet — a teammate is building login/logout/register
-against the backend's own contract (`backend/docs/AUTH_HANDOFF.md`). Once
-it exists, `/login` here should start working without changes, since it
-already targets the right endpoint and payload shape.
+Auth is fully live now (`/auth/register`, `/auth/login`, `/auth/logout` —
+see the reference below). Registration requires a valid Romanian national
+ID (CNP) — the backend checks the real checksum, not just that it's 13
+digits.
 
 ## API reference
 
@@ -127,10 +128,41 @@ safe to retry a failed request without double-charging.
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | GET | `/users/me` | — | `200` current user |
-| PATCH | `/users/me` | `{full_name?}` | `200` updated user |
+| PATCH | `/users/me` | `{first_name?, last_name?, phone?, address?}` | `200` updated user |
 
-### Auth (not live yet — see above)
+User shape:
+```json
+{
+  "id": "uuid", "email": "jane@example.com",
+  "first_name": "Jane", "last_name": "Doe", "email_verified": false,
+  "national_id": "1234567890123", "gender": "F", "date_of_birth": "1990-01-01",
+  "phone": null, "address": null, "created_at": "2026-01-01T00:00:00Z"
+}
+```
 
-Expected shape once built (from `backend/docs/AUTH_HANDOFF.md`):
-`POST /auth/register`, `POST /auth/login` (`{email, password}` →
-sets the session cookie), `POST /auth/logout`.
+### Auth
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/auth/register` | see below | `201` user, sets session cookie (auto-login) |
+| POST | `/auth/login` | `{email, password}` | `200` user, sets session cookie |
+| POST | `/auth/logout` | — | `204`, clears session cookie |
+
+```json
+// POST /auth/register request body
+{
+  "email": "jane@example.com", "password": "at least 8 chars",
+  "first_name": "Jane", "last_name": "Doe",
+  "national_id": "1234567890123",
+  "phone": "optional", "address": "optional"
+}
+```
+
+`national_id` must be a structurally valid Romanian CNP (13 digits,
+correct checksum) — `gender` and `date_of_birth` are derived from it
+automatically, don't send them separately. Login failures always return
+the same generic `401` message regardless of whether the email exists or
+the password is wrong (avoids leaking which accounts exist); after 5
+failed attempts for the same email within 15 minutes, login returns `429`
+(`login_rate_limited`) even for the correct password until the window
+passes.

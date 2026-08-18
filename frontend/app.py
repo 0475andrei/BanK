@@ -44,6 +44,11 @@ def login():
     return render_template("login.html")
 
 
+@app.get("/register")
+def register():
+    return render_template("register.html")
+
+
 @app.get("/accounts")
 def accounts():
     return render_template("accounts.html")

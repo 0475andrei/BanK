@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Register - BanK{% endblock %}
+{% block content %}
+  <h1>Register</h1>
+  <p>National ID must be a valid 13-digit Romanian CNP (the backend checks
+  the official checksum, not just the length).</p>
+
+  <form id="register-form">
+    <label>Email <input type="email" name="email" required></label>
+    <label>Password (min. 8 characters) <input type="password" name="password" minlength="8" required></label>
+    <label>First name <input type="text" name="first_name" required></label>
+    <label>Last name <input type="text" name="last_name" required></label>
+    <label>National ID (CNP) <input type="text" name="national_id" pattern="\d{13}" required></label>
+    <label>Phone (optional) <input type="tel" name="phone"></label>
+    <label>Address (optional) <input type="text" name="address"></label>
+    <button type="submit">Register</button>
+  </form>
+  <p id="register-error" class="error"></p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById("register-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const errorEl = document.getElementById("register-error");
+    errorEl.textContent = "";
+    try {
+      await apiFetch("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({
+          email: form.get("email"),
+          password: form.get("password"),
+          first_name: form.get("first_name"),
+          last_name: form.get("last_name"),
+          national_id: form.get("national_id"),
+          phone: form.get("phone") || null,
+          address: form.get("address") || null,
+        }),
+      });
+      // Registration also logs the user in (see backend/docs/AUTH_HANDOFF.md).
+      window.location.href = "{{ url_for('accounts') }}";
+    } catch (err) {
+      errorEl.textContent = err.message;
+    }
+  });
+</script>
+{% endblock %}

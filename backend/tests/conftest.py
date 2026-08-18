@@ -122,11 +122,16 @@ async def client(app) -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 def user_factory(test_sessionmaker) -> Callable[..., Awaitable[User]]:
-    async def _factory(email: str | None = None, full_name: str = "Test User") -> User:
+    async def _factory(
+        email: str | None = None, first_name: str = "Test", last_name: str = "User"
+    ) -> User:
         email = email or f"user-{uuid.uuid4().hex[:8]}@example.com"
         async with test_sessionmaker() as session:
             user = User(
-                email=email, password_hash=hash_password("password123"), full_name=full_name
+                email=email,
+                password_hash=hash_password("password123"),
+                first_name=first_name,
+                last_name=last_name,
             )
             session.add(user)
             await session.commit()

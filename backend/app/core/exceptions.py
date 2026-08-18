@@ -92,3 +92,21 @@ class RateLimitExceededError(AppError):
     status_code = 429
     error_code = "rate_limit_exceeded"
     default_message = "Too many requests."
+
+
+class EmailAlreadyRegisteredError(AppError):
+    status_code = 409
+    error_code = "email_already_registered"
+    default_message = "An account with this email already exists."
+
+
+class NationalIdAlreadyRegisteredError(AppError):
+    status_code = 409
+    error_code = "national_id_already_registered"
+    default_message = "An account associated with this national ID already exists."
+
+
+class LoginRateLimitedError(AppError):
+    status_code = 429
+    error_code = "login_rate_limited"
+    default_message = "Too many failed login attempts. Try again later."

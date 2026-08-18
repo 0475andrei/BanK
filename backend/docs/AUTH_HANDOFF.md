@@ -1,56 +1,51 @@
-# Auth handoff — context for building `modules/auth`
+# Auth — how it's built
 
-This is for whoever (and whichever Claude Code session) builds login,
-logout, and registration. It explains exactly what already exists, what
-you're building, and the contract between the two, so you don't have to
-reverse-engineer it from the diff.
+This originally was a handoff doc for whoever would build
+`app/modules/auth`. That's done now (2026-08-18) — this describes what's
+actually there, so anyone touching it (or the frontend consuming it)
+doesn't have to reverse-engineer it from the diff.
+
+The registration/login business logic (national ID validation, login
+rate-limiting) was ported from a teammate's standalone Flask + Supabase
+prototype into this FastAPI backend, translating field names to English
+and moving the data onto the existing Postgres/SQLAlchemy setup rather
+than a second database. See `app/modules/auth/validation.py`'s docstring
+and `app/modules/auth/service.py` for that history.
 
 Read `flow.md` at the repo root first for the overall project spec. This
 document only covers the auth boundary.
 
-## Where things stand
-
-Person A's side of `backend/` is implemented and tested: Docker/Postgres
-setup, `core/` (money, security primitives, idempotency, exceptions, audit,
-middleware, `get_db`/`get_current_user`), the ledger (`post_transaction`),
-accounts, transfers, users (profile read/update), and transaction history.
-44 tests pass (unit + integration, including concurrent-transfer and
-idempotency proofs) against real Postgres.
-
-**Deliberately not built: `app/modules/auth/router.py`, `service.py`,
-`schemas.py`.** That's this handoff's subject. Everything else in
-`app/modules/auth/` — just `models.py` — already exists, because
-`core/dependencies.py::get_current_user` (which every protected endpoint in
-the app depends on) needs the `sessions` table to query. See "The contract"
-below for exactly what's there and how to use it.
-
 ## The contract
 
-### Database (already migrated, don't recreate)
+### Database
 
 ```
 users
-  id (UUID pk), email (unique), password_hash, full_name, created_at
+  id (UUID pk), email (unique), password_hash,
+  first_name, last_name, email_verified (default false),
+  national_id (unique, nullable), gender, date_of_birth,
+  phone (nullable), address (nullable), created_at
 
 sessions   -- ORM class name is UserSession, not Session (see why below)
   id (UUID pk), user_id -> users.id (CASCADE), token_hash (unique),
   expires_at (TIMESTAMPTZ), created_at
+
+login_attempts   -- append-only, used only for login rate-limiting
+  id (UUID pk), email, success (bool), created_at
 ```
 
 Models: `app/modules/users/models.py::User`,
-`app/modules/auth/models.py::UserSession`. Named `UserSession` (table is
-still `sessions`) to avoid colliding with `sqlalchemy.orm.Session` /
-`AsyncSession` in files that import both — use that name when you import
-it.
+`app/modules/auth/models.py::UserSession` and `LoginAttempt`. `UserSession`
+(table is still `sessions`) avoids colliding with `sqlalchemy.orm.Session`
+/ `AsyncSession` in files that import both.
 
-The initial Alembic migration (`app/db/migrations/versions/*_initial_schema.py`)
-already created both tables. You won't need a new migration unless you add
-columns (e.g. if you want an `is_active` flag or similar) — if so, run
-`alembic revision --autogenerate -m "..."` the same way the initial one was
-generated (see "Dev workflow" below); autogenerate will pick up your
-changes because `app/db/models_registry.py` already imports both models.
+`national_id`/`gender`/`date_of_birth`/`phone`/`address` are nullable at
+the DB level (not every `User` row necessarily comes through
+self-registration - test fixtures don't set them) but the `/auth/register`
+endpoint always requires and validates `national_id`, `email`, `password`,
+`first_name`, `last_name`.
 
-### `app/core/security.py` — primitives you call, don't reimplement
+### `app/core/security.py` — primitives, don't reimplement
 
 ```python
 hash_password(password: str) -> str
@@ -63,15 +58,9 @@ Session design: the cookie carries one opaque random token. It is **never**
 stored raw — only `hash_session_token(token)` goes in the DB, the same
 "store a hash, not the secret" pattern as passwords (SHA-256 here, not
 bcrypt, because the token already has 256 bits of entropy — there's nothing
-for a slow KDF to protect against). This means:
+for a slow KDF to protect against).
 
-- **Login**: verify credentials, then `token = generate_session_token()`,
-  insert a `UserSession(token_hash=hash_session_token(token), ...)`, and put
-  the *raw* `token` in the cookie. That's the only moment the raw token
-  exists outside the client's cookie jar.
-- **Logout**: hash the cookie's token, delete the matching row.
-
-### `app/core/dependencies.py::get_current_user` — the read side, already done
+### `app/core/dependencies.py::get_current_user` — the read side
 
 ```python
 async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
@@ -80,18 +69,13 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
 Reads `request.cookies[settings.SESSION_COOKIE_NAME]`, hashes it, looks up
 `sessions.token_hash`, checks `expires_at`, returns the `User` (via an
 eager-loaded relationship, so no extra query). Raises `UnauthorizedError`
-(401) for: no cookie, unknown token, expired session. **You never call this
-directly** — every protected route already depends on it. Your job is only
-to make sure a valid row ends up in `sessions` and the cookie ends up in
-the client's browser; this function does the rest.
-
-It never writes to `sessions`, only reads — so it has zero coupling to how
-you implement login. That's also why the test suite could authenticate
-without your endpoints existing yet: `tests/conftest.py`'s
-`user_factory`/`session_token_factory` fixtures insert directly using these
-same primitives. Those fixtures remain valid after you build real login —
-other modules' tests use them for cheap setup, not to exercise login
-itself.
+(401) for: no cookie, unknown token, expired session. Every protected route
+depends on this; it never writes to `sessions`, only `app/modules/auth/service.py`
+does. This is also why the test suite could authenticate before this module
+existed: `tests/conftest.py`'s `user_factory`/`session_token_factory`
+fixtures insert directly using these same primitives, and still do — other
+modules' tests use them for cheap setup rather than exercising the real
+endpoints.
 
 ### Config (`app/config.py`)
 
@@ -100,151 +84,64 @@ SESSION_COOKIE_NAME: str = "session_token"
 SESSION_TTL_SECONDS: int = 60 * 60 * 24 * 7   # 7 days
 ```
 
-Use `settings.SESSION_COOKIE_NAME` and `settings.SESSION_TTL_SECONDS` —
-don't hard-code the cookie name or a duration. `settings.is_production` is
-available if you want `secure=True` on the cookie only outside dev.
+## The endpoints
 
-## What you're building
+`app/modules/auth/router.py` (mounted at `/api/v1/auth` in `app/api/v1.py`):
 
-`app/modules/auth/schemas.py`, `service.py`, `router.py` — same
-models.py/schemas.py/service.py/router.py layout every other module uses
-(e.g. look at `app/modules/transfers/` for the pattern: schemas are plain
-Pydantic, service.py takes `db` + validated input and does the work,
-router.py is thin and just wires `Depends()` to service calls).
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/auth/register` | see below | `201` `UserRead`, sets session cookie (auto-login) |
+| POST | `/auth/login` | `{email, password}` | `200` `UserRead`, sets session cookie |
+| POST | `/auth/logout` | — | `204`, clears session cookie (requires being logged in) |
 
-Suggested endpoints (adjust freely — this isn't dictated by the schema,
-just a reasonable shape):
-
-- `POST /api/v1/auth/register` — create a `User` (hash the password with
-  `hash_password`), then log them in (same as login, below).
-- `POST /api/v1/auth/login` — verify credentials, create a session, set the
-  cookie.
-- `POST /api/v1/auth/logout` — delete the session row, clear the cookie.
-  Needs `get_current_user` (or just read+hash the cookie yourself) to know
-  which session to delete.
-
-None of these are money-moving endpoints, so **no `Idempotency-Key`** is
-needed (that mechanism — `core/idempotency.py` — is specific to
-transfers/payments/cards/etc. per flow.md rule #5).
-
-### Setting/clearing the cookie — the one FastAPI gotcha
-
-To set cookies while still returning a Pydantic `response_model`, inject
-`Response` as a parameter and mutate it — FastAPI merges its headers into
-the real response:
-
-```python
-from datetime import UTC, datetime, timedelta
-
-from fastapi import APIRouter, Depends, Request, Response
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.config import settings
-from app.core.dependencies import get_current_user, get_db
-from app.core.exceptions import UnauthorizedError
-from app.core.security import (
-    generate_session_token,
-    hash_password,
-    hash_session_token,
-    verify_password,
-)
-from app.modules.auth.models import UserSession
-from app.modules.users.models import User
-
-router = APIRouter()
-
-
-async def _start_session(db: AsyncSession, response: Response, user: User) -> None:
-    token = generate_session_token()
-    db.add(
-        UserSession(
-            user_id=user.id,
-            token_hash=hash_session_token(token),
-            expires_at=datetime.now(UTC) + timedelta(seconds=settings.SESSION_TTL_SECONDS),
-        )
-    )
-    await db.flush()
-    response.set_cookie(
-        key=settings.SESSION_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        samesite="lax",
-        secure=settings.is_production,
-        max_age=settings.SESSION_TTL_SECONDS,
-    )
-
-
-@router.post("/login", response_model=UserRead)  # UserRead from users/schemas.py
-async def login(
-    payload: LoginRequest,  # your schema: email + password
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    stmt = select(User).where(User.email == payload.email.lower())
-    user = (await db.execute(stmt)).scalar_one_or_none()
-    # Same error for "no such email" and "wrong password" - don't leak
-    # which one it is (avoids user enumeration).
-    if user is None or not verify_password(payload.password, user.password_hash):
-        raise UnauthorizedError("Invalid email or password.")
-    await _start_session(db, response, user)
-    return user
-
-
-@router.post("/logout", status_code=204)
-async def logout(
-    request: Request,
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),  # 401s if already not logged in
-) -> None:
-    token = request.cookies.get(settings.SESSION_COOKIE_NAME)
-    if token:
-        token_hash = hash_session_token(token)
-        stmt = select(UserSession).where(UserSession.token_hash == token_hash)
-        session_row = (await db.execute(stmt)).scalar_one_or_none()
-        if session_row is not None:
-            await db.delete(session_row)
-    response.delete_cookie(settings.SESSION_COOKIE_NAME)
+```json
+// POST /auth/register
+{
+  "email": "jane@example.com", "password": "at least 8 chars",
+  "first_name": "Jane", "last_name": "Doe",
+  "national_id": "1234567890123",
+  "phone": "optional", "address": "optional"
+}
 ```
 
-This sketch is a starting point, not a spec to match exactly — e.g. decide
-for yourself whether login should revoke the user's other existing
-sessions (single-session-per-user) or leave them alone (multi-device,
-simpler — just insert a new row). Both are reasonable; nothing else in the
-codebase assumes either way.
+`national_id` must be a structurally valid Romanian CNP - checked in
+`app/modules/auth/validation.py::validate_national_id` (length, digit
+ranges, and the official MOD-11 check digit, not just "13 digits").
+`gender` and `date_of_birth` are derived from it automatically
+(`extract_gender`, `extract_date_of_birth`) - don't accept them as
+separate input. That file also has `validate_iban` (MOD-97), unused so
+far but there for whenever a beneficiaries/payments feature needs to
+validate external account numbers.
 
-### Mount the router
+None of these are money-moving endpoints, so no `Idempotency-Key` header
+is needed (that mechanism is specific to transfers/payments/cards/etc.
+per flow.md rule #5).
 
-`app/api/v1.py` already has this waiting, uncommented, as the last lines of
-the file:
+### Errors
 
-```python
-from app.modules.auth.router import router as auth_router
-api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
-```
+Same shape as everywhere else - `{"error": {"code", "message"}}`, via
+`app/core/exceptions.py`:
 
-### Conventions to match
+- `validation_error` (422) — bad national ID, password too short, etc.
+- `email_already_registered` / `national_id_already_registered` (409) —
+  distinguished by inspecting the Postgres unique-constraint name that
+  fired (see `_duplicate_registration_error` in service.py).
+- `unauthorized` (401) — bad login. **Deliberately the same message**
+  whether the email doesn't exist or the password is wrong, to avoid
+  leaking which accounts exist.
+- `login_rate_limited` (429) — 5 failed attempts for the same email within
+  15 minutes (`LOGIN_MAX_FAILED_ATTEMPTS` / `LOGIN_LOCKOUT_WINDOW_MINUTES`
+  in service.py), tracked via the append-only `login_attempts` table.
+  Applies even to the correct password until the window passes.
 
-- **Errors**: raise `AppError` subclasses from `app/core/exceptions.py`
-  (`UnauthorizedError` for bad login, `ValidationError` for bad input).
-  You'll likely want a new one for duplicate registration, e.g.:
-  ```python
-  class EmailAlreadyRegisteredError(AppError):
-      status_code = 409
-      error_code = "email_already_registered"
-      default_message = "An account with this email already exists."
-  ```
-  (add it next to `IdempotencyKeyConflictError`, which follows the same
-  pattern). `core/middleware.py` already turns any `AppError` into a
-  consistent `{"error": {"code", "message"}}` JSON body — you don't need to
-  handle that yourself.
-- **Audit log**: call `record_audit_event` (`app/core/audit.py`) for
-  `auth.login` / `auth.logout` / `auth.register`, same as `accounts.open`,
-  `ledger.post_transaction`, etc. already do.
-- **Password strength / email validation**: not specified anywhere in
-  flow.md — your call. A minimum length check on register is reasonable;
-  nothing downstream depends on a specific rule.
+A subtlety worth knowing if you touch `login_user`: recording a *failed*
+attempt has to `await db.commit()` immediately, before raising
+`UnauthorizedError` - otherwise `get_db`'s rollback-on-exception wraps the
+whole request, including the attempt row that the rate limit depends on,
+and 5 failed logins would never actually trip the limit. (Money-writing
+code elsewhere wants the opposite - a failed transfer should roll back
+everything - so this pattern is specific to attempt-logging, not a general
+rule.)
 
 ## Dev workflow
 
@@ -252,36 +149,36 @@ api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 cd backend
 cp .env.example .env        # start.sh does this automatically too
 docker compose up -d --build
-docker compose exec backend pytest -q          # full suite
+docker compose exec backend pytest -q          # full suite (64 tests)
 docker compose exec backend ruff check .        # lint
 docker compose exec backend mypy app            # types
 
-# if you add columns to users/sessions:
+# after changing models:
 docker compose exec backend alembic revision --autogenerate -m "..."
 docker compose exec backend alembic upgrade head
 ```
 
 `./app` and `./tests` are bind-mounted into the container, so edits on the
-host show up immediately — no rebuild needed unless you change
-`pyproject.toml` (new dependency) or the Dockerfile itself.
+host show up immediately — no rebuild needed unless `pyproject.toml` (new
+dependency) or the Dockerfile changes.
 
-For tests: `tests/conftest.py` runs everything against a real Postgres
+Tests: `tests/conftest.py` runs everything against a real Postgres
 `<db>_test` database (not SQLite — the concurrency tests need real row
-locking), truncating all tables before each test. Reuse `client`,
-`user_factory`, `db` from there; add `tests/integration/test_auth_api.py`
-following the pattern in `tests/integration/test_accounts_api.py`. Once
-your login endpoint exists, prefer testing through it directly (real
-`POST /api/v1/auth/login`, assert on `Set-Cookie`) rather than only via the
-fixture shortcuts — that's the actual code path users hit.
+locking). `tests/integration/test_auth_api.py` covers register/login/
+logout/rate-limiting/duplicates end-to-end through the real endpoints;
+`tests/unit/test_national_id_validation.py` covers the CNP/IBAN math
+directly.
 
 ## Known gaps worth knowing about
 
-- **No password reset / email verification** — not in flow.md's spec at
-  all; out of scope unless you're asked for it.
-- **Rate limiting** is global, in-process, per-IP (`core/middleware.py`) —
-  it already applies to whatever you build, but it's not brute-force-aware
-  per-account. Fine for this exercise; would need Redis + per-account
-  limits for anything real.
-- **No "remember me" / sliding expiration** — a session is a fixed
-  `SESSION_TTL_SECONDS` window from creation; logging in again just creates
-  another row.
+- **No password reset / email verification / "remember me"** — not in
+  flow.md's spec; `email_verified` exists as a column but nothing sets it
+  to true anywhere.
+- **General rate limiting** (`core/middleware.py`) is global, in-process,
+  per-IP — separate from and in addition to the per-email login limiter
+  above. Neither survives a restart or scales past one process; would need
+  Redis for anything real.
+- **CNP → gender/date_of_birth derivation** trusts the submitted national
+  ID's structure; there's no cross-check against a real government
+  registry (out of scope for this exercise, same as flow.md's "no
+  KYC/AML" rule).

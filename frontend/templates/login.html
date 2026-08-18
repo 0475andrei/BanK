@@ -2,10 +2,7 @@
 {% block title %}Log in - BanK{% endblock %}
 {% block content %}
   <h1>Log in</h1>
-  <p><em>Not wired up yet</em> - the backend's login endpoint doesn't exist
-  yet (a teammate is building it). The form below has the right shape for
-  when it does: it will POST to <code>/auth/login</code> and rely on the
-  browser storing the session cookie the backend sets in its response.</p>
+  <p>No account yet? <a href="{{ url_for('register') }}">Register</a>.</p>
 
   <form id="login-form">
     <label>Email <input type="email" name="email" required></label>
