@@ -3,12 +3,12 @@
     python -m scripts.seed_dev_user
 
 THIS IS NOT AUTHENTICATION. Real login/logout/register (app/modules/auth/
-router.py, service.py, schemas.py) is owned by the teammate building auth -
-see docs/AUTH_HANDOFF.md. This script deliberately creates NO session row and
-touches nothing in modules/auth beyond the User model, so it cannot collide
-with that work. It exists because app/ai/ currently has no way to get a real
-user id or account id to act as, and because there is no deposit/funding
-concept in the app yet (see below).
+router.py, service.py, schemas.py) is the real thing - see
+docs/AUTH_HANDOFF.md. This script deliberately creates NO session row and
+touches nothing in modules/auth beyond the users table, so it cannot
+collide with that work. It exists because app/ai/ currently has no way to
+get a real user id or account id to act as, and because there is no
+deposit/funding concept in the app yet (see below).
 
 What it does, idempotently:
   1. creates (or finds) the user dev@test.local, password hashed with the same
@@ -29,15 +29,9 @@ import asyncio
 import os
 import uuid
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import hash_password
-from app.db.session import session_scope
-from app.modules.accounts.models import Account, AccountStatus
+from app.db.supabase_client import get_client
 from app.modules.ledger import service as ledger_service
-from app.modules.ledger.models import JournalTransaction, LedgerDirection, LedgerEntry
-from app.modules.users.models import User
 
 # Not a .local / .test address: this script inserts the row directly, but
 # /auth/login validates the address with Pydantic's EmailStr, which rejects
@@ -52,47 +46,59 @@ DEV_ACCOUNT_CURRENCY = "USD"
 DEV_OPENING_BALANCE_MINOR = 250_000  # 2,500.00 USD
 
 
-async def _get_or_create_user(db: AsyncSession) -> tuple[User, bool]:
-    existing = (
-        await db.execute(select(User).where(User.email == DEV_EMAIL))
-    ).scalar_one_or_none()
+async def _get_or_create_user(supabase) -> tuple[dict, bool]:
+    resp = await supabase.table("users").select("*").eq("email", DEV_EMAIL).maybe_single().execute()
+    existing = resp.data if resp is not None else None
     if existing is not None:
         return existing, False
 
-    user = User(
-        email=DEV_EMAIL,
-        password_hash=hash_password(DEV_PASSWORD),
-        first_name=DEV_FIRST_NAME,
-        last_name=DEV_LAST_NAME,
+    resp = (
+        await supabase.table("users")
+        .insert(
+            {
+                "email": DEV_EMAIL,
+                "password_hash": hash_password(DEV_PASSWORD),
+                "first_name": DEV_FIRST_NAME,
+                "last_name": DEV_LAST_NAME,
+            }
+        )
+        .execute()
     )
-    db.add(user)
-    await db.flush()
-    return user, True
+    return resp.data[0], True
 
 
-async def _get_or_create_account(db: AsyncSession, user: User) -> tuple[Account, bool]:
-    stmt = select(Account).where(
-        Account.user_id == user.id, Account.name == DEV_ACCOUNT_NAME
+async def _get_or_create_account(supabase, user: dict) -> tuple[dict, bool]:
+    resp = (
+        await supabase.table("accounts")
+        .select("*")
+        .eq("user_id", user["id"])
+        .eq("name", DEV_ACCOUNT_NAME)
+        .maybe_single()
+        .execute()
     )
-    existing = (await db.execute(stmt)).scalar_one_or_none()
+    existing = resp.data if resp is not None else None
     if existing is not None:
         return existing, False
 
-    # Deliberately constructs the model directly rather than calling
+    # Deliberately inserts directly rather than calling
     # accounts.service.open_account: that writes an audit event, and a dev
     # fixture should not litter the audit log with fake activity.
-    account = Account(
-        user_id=user.id,
-        name=DEV_ACCOUNT_NAME,
-        currency=DEV_ACCOUNT_CURRENCY,
-        status=AccountStatus.ACTIVE,
+    resp = (
+        await supabase.table("accounts")
+        .insert(
+            {
+                "user_id": user["id"],
+                "name": DEV_ACCOUNT_NAME,
+                "currency": DEV_ACCOUNT_CURRENCY,
+                "status": "active",
+            }
+        )
+        .execute()
     )
-    db.add(account)
-    await db.flush()
-    return account, True
+    return resp.data[0], True
 
 
-async def _fund_if_empty(db: AsyncSession, account: Account) -> tuple[int, bool]:
+async def _fund_if_empty(supabase, account: dict) -> tuple[int, bool]:
     """Give the account an opening balance if it has none.
 
     Balance is always derived (SUM of ledger entries), so "already funded" is
@@ -100,28 +106,31 @@ async def _fund_if_empty(db: AsyncSession, account: Account) -> tuple[int, bool]
     account id, so even a concurrent second run hits the UNIQUE constraint on
     journal_transactions.idempotency_key rather than double-funding.
     """
-    balance = await ledger_service.get_balance(db, account.id)
+    balance = await ledger_service.get_balance(supabase, uuid.UUID(account["id"]))
     if balance != 0:
         return balance, False
 
-    journal = JournalTransaction(
-        reference="DEV-SEED",
-        idempotency_key=f"dev-seed-opening-balance:{account.id}",
-        description="DEV-ONLY seeded opening balance",
-    )
-    db.add(journal)
-    await db.flush()
-
-    db.add(
-        LedgerEntry(
-            journal_id=journal.id,
-            account_id=account.id,
-            direction=LedgerDirection.CREDIT,
-            amount_minor=DEV_OPENING_BALANCE_MINOR,
-            currency=DEV_ACCOUNT_CURRENCY,
+    journal = (
+        await supabase.table("journal_transactions")
+        .insert(
+            {
+                "reference": "DEV-SEED",
+                "idempotency_key": f"dev-seed-opening-balance:{account['id']}",
+                "description": "DEV-ONLY seeded opening balance",
+            }
         )
-    )
-    await db.flush()
+        .execute()
+    ).data[0]
+
+    await supabase.table("ledger_entries").insert(
+        {
+            "journal_id": journal["id"],
+            "account_id": account["id"],
+            "direction": "credit",
+            "amount_minor": DEV_OPENING_BALANCE_MINOR,
+            "currency": DEV_ACCOUNT_CURRENCY,
+        }
+    ).execute()
     return DEV_OPENING_BALANCE_MINOR, True
 
 
@@ -129,15 +138,15 @@ def _describe(created: bool) -> str:
     return "created" if created else "already existed"
 
 
-async def seed() -> tuple[uuid.UUID, list[uuid.UUID]]:
-    async with session_scope() as db:
-        user, user_created = await _get_or_create_user(db)
-        account, account_created = await _get_or_create_account(db, user)
-        balance, funded = await _fund_if_empty(db, account)
+async def seed() -> tuple[str, list[str]]:
+    supabase = await get_client()
 
-        # Read the ids out before the session closes.
-        user_id = user.id
-        account_id = account.id
+    user, user_created = await _get_or_create_user(supabase)
+    account, account_created = await _get_or_create_account(supabase, user)
+    balance, funded = await _fund_if_empty(supabase, account)
+
+    user_id = user["id"]
+    account_id = account["id"]
 
     print("DEV SEED (not auth - see module docstring)")
     print(f"  user     {_describe(user_created):<16} {DEV_EMAIL}  password={DEV_PASSWORD}")

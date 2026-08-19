@@ -145,27 +145,36 @@ rule.)
 
 ## Dev workflow
 
+Data layer moved to Supabase REST (`supabase-py`) — see
+`backend/supabase/migrations/*.sql` for the schema and the ledger's RPC
+functions, and `db/supabase_client.py` for the client + error mapping. No
+local Postgres, no Alembic: schema changes are applied by pasting the
+relevant `.sql` file into the Supabase SQL Editor (this was built on a
+network that blocks direct Postgres ports 5432/6543 — only 443/HTTPS is
+open, which is all PostgREST needs).
+
 ```bash
 cd backend
-cp .env.example .env        # start.sh does this automatically too
+cp .env.example .env        # fill in SUPABASE_URL / SUPABASE_KEY (service_role)
 docker compose up -d --build
-docker compose exec backend pytest -q          # full suite (64 tests)
+docker compose exec backend pytest -q          # full suite (127 tests)
 docker compose exec backend ruff check .        # lint
 docker compose exec backend mypy app            # types
-
-# after changing models:
-docker compose exec backend alembic revision --autogenerate -m "..."
-docker compose exec backend alembic upgrade head
 ```
 
 `./app` and `./tests` are bind-mounted into the container, so edits on the
 host show up immediately — no rebuild needed unless `pyproject.toml` (new
 dependency) or the Dockerfile changes.
 
-Tests: `tests/conftest.py` runs everything against a real Postgres
-`<db>_test` database (not SQLite — the concurrency tests need real row
-locking). `tests/integration/test_auth_api.py` covers register/login/
-logout/rate-limiting/duplicates end-to-end through the real endpoints;
+Tests: `tests/conftest.py` runs everything against the REAL Supabase
+project pointed at by `SUPABASE_URL`/`SUPABASE_KEY` (not a local database —
+none exists). `clean_db` deletes every row from every table before each
+test, so never point this at a project you want to keep data in. The
+concurrency tests still exercise real Postgres row locking (`FOR UPDATE`
+inside the `post_transaction` RPC function) — reached over REST instead of
+a direct connection, but the guarantee itself is unaffected by that.
+`tests/integration/test_auth_api.py` covers register/login/logout/
+rate-limiting/duplicates end-to-end through the real endpoints;
 `tests/unit/test_national_id_validation.py` covers the CNP/IBAN math
 directly.
 

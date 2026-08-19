@@ -1,50 +1,64 @@
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
 from app.core.audit import record_audit_event
 from app.modules.accounts import service as accounts_service
-from app.modules.accounts.models import Account
-from app.modules.card_orders.models import CardOrder
 from app.modules.card_orders.schemas import CardOrderCreate
 from app.modules.cards import service as cards_service
 from app.modules.cards.schemas import CardCreate
-from app.modules.users.models import User
+from app.modules.users.schemas import UserRead
 
 
-async def create_order(db: AsyncSession, user: User, payload: CardOrderCreate) -> CardOrder:
-    account = await accounts_service.get_account(db, user, payload.account_id)
+async def create_order(supabase: AsyncClient, user: UserRead, payload: CardOrderCreate) -> dict:
+    account = await accounts_service.get_account(supabase, user, payload.account_id)
 
-    card = await cards_service.issue_card(db, user, CardCreate(account_id=account.id))
+    card = await cards_service.issue_card(supabase, user, CardCreate(account_id=account["id"]))
 
-    order = CardOrder(
-        account_id=account.id,
-        card_id=card.id,
-        full_name=payload.full_name,
-        phone=payload.phone,
-        address=payload.address,
-        city=payload.city,
-        postal_code=payload.postal_code,
-        country=payload.country,
+    resp = (
+        await supabase.table("card_orders")
+        .insert(
+            {
+                "account_id": str(account["id"]),
+                "card_id": card["id"],
+                "full_name": payload.full_name,
+                "phone": payload.phone,
+                "address": payload.address,
+                "city": payload.city,
+                "postal_code": payload.postal_code,
+                "country": payload.country,
+            }
+        )
+        .execute()
     )
-    db.add(order)
-    await db.flush()
-    order.card = card
+    order = resp.data[0]
+    order["card"] = card
 
     await record_audit_event(
-        db,
+        supabase,
         user_id=user.id,
         action="card_orders.create",
-        entity=f"card_orders:{order.id}",
-        metadata={"account_id": str(account.id)},
+        entity=f"card_orders:{order['id']}",
+        metadata={"account_id": str(account["id"])},
     )
     return order
 
 
-async def list_orders(db: AsyncSession, user: User) -> list[CardOrder]:
-    stmt = (
-        select(CardOrder)
-        .join(Account, Account.id == CardOrder.account_id)
-        .where(Account.user_id == user.id)
-        .order_by(CardOrder.created_at.desc())
+async def list_orders(supabase: AsyncClient, user: UserRead) -> list[dict]:
+    # Safe two-call fallback instead of relying on PostgREST's embedded-
+    # filter syntax (unstable across versions) - not a hot/concurrent path.
+    # The card:cards(*) embed is a straight FK-based join, not this same
+    # instability, so it's kept for the nested card details.
+    accounts_resp = (
+        await supabase.table("accounts").select("id").eq("user_id", str(user.id)).execute()
     )
-    return list((await db.execute(stmt)).scalars().all())
+    account_ids = [row["id"] for row in accounts_resp.data]
+    if not account_ids:
+        return []
+
+    resp = (
+        await supabase.table("card_orders")
+        .select("*, card:cards(*)")
+        .in_("account_id", account_ids)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return resp.data

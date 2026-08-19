@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, Request, Response
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
 from app.config import settings
-from app.core.dependencies import get_current_user, get_db
+from app.core.dependencies import get_current_user
+from app.db.supabase_client import get_supabase
 from app.modules.auth import service
 from app.modules.auth.schemas import LoginRequest, RegisterRequest
-from app.modules.users.models import User
 from app.modules.users.schemas import UserRead
 
 router = APIRouter()
@@ -26,9 +26,9 @@ def _set_session_cookie(response: Response, token: str) -> None:
 async def register(
     payload: RegisterRequest,
     response: Response,
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    user, token = await service.register_user(db, payload)
+    supabase: AsyncClient = Depends(get_supabase),
+) -> UserRead:
+    user, token = await service.register_user(supabase, payload)
     _set_session_cookie(response, token)
     return user
 
@@ -37,9 +37,9 @@ async def register(
 async def login(
     payload: LoginRequest,
     response: Response,
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    user, token = await service.login_user(db, payload)
+    supabase: AsyncClient = Depends(get_supabase),
+) -> UserRead:
+    user, token = await service.login_user(supabase, payload)
     _set_session_cookie(response, token)
     return user
 
@@ -48,9 +48,9 @@ async def login(
 async def logout(
     request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
 ) -> None:
     token = request.cookies.get(settings.SESSION_COOKIE_NAME)
-    await service.logout_user(db, user, token)
+    await service.logout_user(supabase, user, token)
     response.delete_cookie(settings.SESSION_COOKIE_NAME)
