@@ -57,13 +57,24 @@ _TABLES_IN_FK_ORDER = (
 _NIL_UUID = "00000000-0000-0000-0000-000000000000"
 
 
+# Optional, separate Supabase project reserved for tests (see
+# backend/.env.example). When set, clean_db's wipe is provably scoped to
+# disposable test data instead of whatever the app's own SUPABASE_URL points
+# at - this is what actually happened once already: an ordinary `pytest` run
+# wiped the shared dev project because no separate test project existed yet.
+_TEST_SUPABASE_URL = os.environ.get("TEST_SUPABASE_URL")
+_TEST_SUPABASE_KEY = os.environ.get("TEST_SUPABASE_KEY")
+
+
 @pytest_asyncio.fixture
 async def supabase() -> AsyncIterator[AsyncClient]:
     """Function-scoped (not session-scoped): pytest-asyncio gives each test
     function its own event loop by default, and an AsyncClient created
     against one loop breaks ("Event loop is closed") once reused from a
     later test's different loop. A fresh client per test avoids that."""
-    client = await acreate_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+    url = _TEST_SUPABASE_URL or settings.SUPABASE_URL
+    key = _TEST_SUPABASE_KEY or settings.SUPABASE_KEY
+    client = await acreate_client(url, key)
     yield client
 
 
@@ -71,21 +82,20 @@ async def supabase() -> AsyncIterator[AsyncClient]:
 async def clean_db(supabase: AsyncClient) -> None:
     """Runs before every test: empties every table (child tables first).
 
-    This is the ONLY thing standing between a routine test run and wiping
-    every row in whatever project SUPABASE_URL points at - there is no
-    separate test database. backend/.env is shared across the app and the
-    test suite, so an ordinary `pytest` here deletes real dev/demo data.
-    Require an explicit opt-in env var so that can never happen by
-    accident (e.g. an IDE auto-running tests, or a CI job with the wrong
-    .env wired in).
+    If TEST_SUPABASE_URL isn't configured, this is the ONLY thing standing
+    between a routine test run and wiping every row in the DEV project - so
+    require an explicit opt-in env var in that case, to make sure that can
+    never happen again by accident (e.g. an IDE auto-running tests, or a CI
+    job with the wrong .env wired in).
     """
-    if os.environ.get("ALLOW_TEST_DB_WIPE") != "1":
+    if not _TEST_SUPABASE_URL and os.environ.get("ALLOW_TEST_DB_WIPE") != "1":
         pytest.fail(
-            "Refusing to run: this test suite wipes every row in the "
-            f"Supabase project at {settings.SUPABASE_URL!r} before each "
-            "test (see clean_db in conftest.py), and there is no separate "
-            "test project configured. Set ALLOW_TEST_DB_WIPE=1 only if you "
-            "are sure this project's data is disposable.",
+            "Refusing to run: no TEST_SUPABASE_URL/TEST_SUPABASE_KEY configured "
+            "(see backend/.env.example), so this suite would wipe every row in "
+            f"the DEV project at {settings.SUPABASE_URL!r} before each test (see "
+            "clean_db in conftest.py). Set up a separate Supabase project for "
+            "tests, or set ALLOW_TEST_DB_WIPE=1 only if you are sure that "
+            "project's data is disposable.",
             pytrace=False,
         )
     for table in _TABLES_IN_FK_ORDER:
