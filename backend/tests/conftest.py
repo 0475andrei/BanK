@@ -19,6 +19,7 @@ core/dependencies.py define - proving those primitives are a self-contained
 contract that doesn't require going through the login endpoint.
 """
 
+import os
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -68,7 +69,25 @@ async def supabase() -> AsyncIterator[AsyncClient]:
 
 @pytest_asyncio.fixture(autouse=True)
 async def clean_db(supabase: AsyncClient) -> None:
-    """Runs before every test: empties every table (child tables first)."""
+    """Runs before every test: empties every table (child tables first).
+
+    This is the ONLY thing standing between a routine test run and wiping
+    every row in whatever project SUPABASE_URL points at - there is no
+    separate test database. backend/.env is shared across the app and the
+    test suite, so an ordinary `pytest` here deletes real dev/demo data.
+    Require an explicit opt-in env var so that can never happen by
+    accident (e.g. an IDE auto-running tests, or a CI job with the wrong
+    .env wired in).
+    """
+    if os.environ.get("ALLOW_TEST_DB_WIPE") != "1":
+        pytest.fail(
+            "Refusing to run: this test suite wipes every row in the "
+            f"Supabase project at {settings.SUPABASE_URL!r} before each "
+            "test (see clean_db in conftest.py), and there is no separate "
+            "test project configured. Set ALLOW_TEST_DB_WIPE=1 only if you "
+            "are sure this project's data is disposable.",
+            pytrace=False,
+        )
     for table in _TABLES_IN_FK_ORDER:
         await supabase.table(table).delete().neq("id", _NIL_UUID).execute()
 
