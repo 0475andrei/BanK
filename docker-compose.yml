@@ -1,3 +1,11 @@
+# The whole app: database, API, and frontend.
+#
+#   docker compose up -d --build     start everything
+#   docker compose down              stop everything
+#
+# (./run.sh and .\run.ps1 are thin wrappers around exactly this.)
+name: bank
+
 services:
   db:
     image: postgres:16-alpine
@@ -16,8 +24,13 @@ services:
       retries: 20
 
   backend:
-    build: .
-    env_file: .env
+    build: ./backend
+    env_file:
+      # Optional so a fresh clone can `docker compose up` before anyone has
+      # made a .env; app/config.py has sensible defaults for everything
+      # except the AI layer's Azure keys.
+      - path: ./backend/.env
+        required: false
     environment:
       # Overrides the .env value so the app always reaches Postgres via the
       # compose network, regardless of what a developer put in .env for
@@ -29,9 +42,16 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - ./app:/app/app
-      - ./tests:/app/tests
-      - ./scripts:/app/scripts
+      - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
+      - ./backend/scripts:/app/scripts
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
 
 volumes:
   bank_pg_data:

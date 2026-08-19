@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
-# One-command startup: from a clean checkout, this brings up Postgres + the
-# API, running migrations automatically (see docker-entrypoint.sh).
+# Kept because flow.md names this as the backend's one-command start.
+# The compose file now lives at the repo root and starts the frontend too,
+# so this just delegates - ../run.sh is the single real implementation.
 set -euo pipefail
-cd "$(dirname "$0")"
-
-if [ ! -f .env ]; then
-  cp .env.example .env
-  echo "Created .env from .env.example"
-fi
-
-docker compose up --build
+exec "$(dirname "$0")/../run.sh" "$@"

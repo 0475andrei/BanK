@@ -263,8 +263,9 @@ For every task you (Claude Code) implement:
 
 The frontend is a **separate project** at `frontend/` (sibling to
 `backend/`), consuming `backend/`'s JSON API — this spec above is backend
-only, per §1. `frontend/` currently holds a minimal Flask starter (page
-shells + a couple of worked examples, not a finished UI) for whoever picks
-up the real frontend work; see `frontend/README.md` for the full API
-reference, the auth/cookie contract the frontend must follow, and what's
-scaffolded vs. still TODO.
+only, per §1. `frontend/` is a plain HTML/CSS/JS app (no framework, no
+build step), served by nginx as its own container; the browser calls the
+backend directly, never through a server-side proxy. `./run.sh` (repo
+root) starts the whole stack - database, API, and frontend - in Docker.
+See `frontend/README.md` for the full API reference, the auth/cookie
+contract, and what's live vs. still a mockup.

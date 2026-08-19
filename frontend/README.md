@@ -1,70 +1,69 @@
 # BanK frontend
 
-A minimal Flask starter — page structure and a couple of worked examples,
-not a finished UI. Whoever builds the real frontend can keep extending
-this, replace it with a JS framework, or start over; nothing in the
-backend assumes Flask specifically. What the backend *does* assume is
-documented below, and that part matters regardless of what this folder
-ends up looking like.
+Plain HTML, CSS and JavaScript — no framework, no build step. nginx serves
+these files as a container; everything dynamic happens in the browser by
+calling the backend's JSON API.
 
-## How auth works here (read this first)
-
-The backend (`../backend`) uses **cookie-based sessions**: after logging
-in, the browser holds an `HttpOnly` cookie and sends it automatically on
-every request. That has one big consequence for how this frontend is
-built:
-
-**The browser must call the FastAPI backend directly** (`fetch(...,
-{credentials: "include"})`), not through a server-side proxy in Flask.
-Flask here only renders page shells and static assets — it never sees or
-forwards the session cookie itself. See `templates/base.html`'s
-`apiFetch()` helper, which every page's inline script uses.
-
-This means the backend's `CORS_ORIGINS` setting must include this app's
-origin (already set up — `backend/.env.example` lists
-`http://localhost:5000` alongside `:3000`, with `allow_credentials`
-turned on). If you change this app's port or replace it with something
-else, that setting needs to grow too, or every request will fail with an
-opaque CORS error before it even reaches the API.
-
-If you'd rather do a server-side proxy (Flask forwards the cookie itself,
-managing its own session) instead of calling the API from the browser,
-that's a reasonable alternative architecture — just know it's a
-deliberate change from what's scaffolded here, not a small tweak.
+```
+index.html      dashboard (accounts, transactions, transfers, cards)
+login.html      /register.html    auth pages
+api.js          apiFetch() wrapper + money formatting + session guard
+app.js          all dashboard behaviour
+style.css       styles
+```
 
 ## Running it
 
-```bash
-# 1. Start the backend first (separate terminal)
-cd ../backend && ./start.sh
+From the repo root — this starts the database, the API *and* this frontend:
 
-# 2. This app
-cd frontend
-python -m venv .venv
-.venv/Scripts/activate        # .venv/bin/activate on macOS/Linux
-pip install -r requirements.txt
-cp .env.example .env
-python app.py
+```bash
+./run.sh          # or  .\run.ps1  on PowerShell
 ```
 
-Visit `http://localhost:5000`. Register an account, then `/accounts` is the
-fullest worked example of a data page — it calls the real backend and
-renders the list (or a "please log in" state if your session expired).
+Then open **http://localhost:8080**. `./run.sh stop` shuts it down,
+`./run.sh logs` follows the logs.
 
-## What's scaffolded vs. what's TODO
+Editing an `.html`/`.js`/`.css` file here needs a rebuild to show up, since
+the files are baked into the image:
 
-| Page | Status |
+```bash
+docker compose up -d --build frontend
+```
+
+## How auth works (read this first)
+
+The backend uses **cookie-based sessions**: after logging in the browser
+holds an `HttpOnly` cookie and sends it automatically. Two consequences:
+
+1. **Every API call needs `credentials: "include"`.** The API is a
+   different origin (`:8000`) from this app (`:8080`), so without it the
+   browser silently omits the cookie and every request looks logged-out.
+   `api.js::apiFetch` already does this — use it rather than raw `fetch`.
+2. **The backend's `CORS_ORIGINS` must list this app's origin.**
+   `http://localhost:8080` is already there (`backend/.env.example`). If
+   you serve this from a different port, add it there too, or requests
+   fail with an opaque CORS error before reaching the API.
+
+There's deliberately no server-side code here: nothing proxies the API and
+nothing touches the session cookie except the browser itself.
+
+## What's connected vs. what's still a mockup
+
+| Area | Status |
 |---|---|
-| `/` | Static placeholder |
-| `/register` | **Working**: creates an account and logs you in |
-| `/login` | **Working** |
-| `/accounts` | **Working example**: calls `GET /accounts`, renders the list, handles 401 |
-| `/transfers` | Stub with comments only — follow the accounts.html pattern |
+| Register / log in / log out | **Live** |
+| Accounts (list, balances, open, close) | **Live** |
+| Transfers between your own accounts | **Live** |
+| Transactions list | **Live** |
+| Cards (issue, list, cancel) | **Live** |
+| AI chat | Mockup — the backend's AI module has no HTTP endpoint yet |
+| Investments / budgeting | Mockup — no backend feature exists |
 
-Auth is fully live now (`/auth/register`, `/auth/login`, `/auth/logout` —
-see the reference below). Registration requires a valid Romanian national
-ID (CNP) — the backend checks the real checksum, not just that it's 13
-digits.
+Mockup sections are labelled "Demo" in the UI so nobody mistakes them for
+working features.
+
+Registration requires a valid Romanian national ID (CNP) — the backend
+verifies the real checksum, not just that it's 13 digits.
 
 ## API reference
 

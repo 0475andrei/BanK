@@ -39,7 +39,10 @@ from app.modules.ledger import service as ledger_service
 from app.modules.ledger.models import JournalTransaction, LedgerDirection, LedgerEntry
 from app.modules.users.models import User
 
-DEV_EMAIL = "dev@test.local"
+# Not a .local / .test address: this script inserts the row directly, but
+# /auth/login validates the address with Pydantic's EmailStr, which rejects
+# reserved TLDs - so a seeded user on one of those could never actually log in.
+DEV_EMAIL = "dev@example.com"
 DEV_PASSWORD = "devpassword123"  # noqa: S105 - dev fixture, not a real credential
 DEV_FIRST_NAME = "Dev"
 DEV_LAST_NAME = "User"
