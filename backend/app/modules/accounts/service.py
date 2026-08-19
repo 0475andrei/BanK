@@ -1,12 +1,22 @@
 import uuid
 
+from postgrest.exceptions import APIError
 from supabase import AsyncClient
 
 from app.core.audit import record_audit_event
 from app.core.exceptions import AccountNotEmptyError, AccountNotFoundError, ValidationError
+from app.modules.accounts.iban import generate_iban
 from app.modules.accounts.models import AccountStatus
 from app.modules.ledger import service as ledger_service
 from app.modules.users.schemas import UserRead
+
+UNIQUE_VIOLATION = "23505"
+_IBAN_GENERATION_ATTEMPTS = 5
+
+# Every new account starts funded - there's no deposit/funding endpoint
+# anywhere else in this app (see design_decisions), so this is a deliberate
+# "welcome balance" rather than a real bank giving out free money.
+OPENING_BALANCE_MINOR = 50_000
 
 
 def _validate_currency(currency: str) -> str:
@@ -16,29 +26,54 @@ def _validate_currency(currency: str) -> str:
     return currency
 
 
+async def _insert_account_with_iban(supabase: AsyncClient, user: UserRead, name: str, currency: str) -> dict:
+    """A generated IBAN is practically always unique (36^16 possibilities),
+    but "practically" isn't a guarantee - retry a few times on a genuine
+    collision rather than letting it surface as a confusing 500."""
+    last_error: APIError | None = None
+    for _ in range(_IBAN_GENERATION_ATTEMPTS):
+        try:
+            resp = (
+                await supabase.table("accounts")
+                .insert(
+                    {
+                        "user_id": str(user.id),
+                        "name": name,
+                        "currency": currency,
+                        "status": AccountStatus.ACTIVE.value,
+                        "iban": generate_iban(),
+                    }
+                )
+                .execute()
+            )
+            return resp.data[0]
+        except APIError as exc:
+            if exc.code != UNIQUE_VIOLATION or "iban" not in f"{exc.message} {exc.details or ''}".lower():
+                raise
+            last_error = exc
+    raise last_error  # pragma: no cover - astronomically unlikely
+
+
 async def open_account(supabase: AsyncClient, user: UserRead, name: str, currency: str) -> dict:
     currency = _validate_currency(currency)
 
-    resp = (
-        await supabase.table("accounts")
-        .insert(
-            {
-                "user_id": str(user.id),
-                "name": name,
-                "currency": currency,
-                "status": AccountStatus.ACTIVE.value,
-            }
-        )
-        .execute()
-    )
-    account = resp.data[0]
+    account = await _insert_account_with_iban(supabase, user, name, currency)
 
     await record_audit_event(
         supabase,
         user_id=user.id,
         action="accounts.open",
         entity=f"accounts:{account['id']}",
-        metadata={"name": name, "currency": currency},
+        metadata={"name": name, "currency": currency, "iban": account["iban"]},
+    )
+
+    await ledger_service.grant_opening_balance(
+        supabase,
+        uuid.UUID(account["id"]),
+        OPENING_BALANCE_MINOR,
+        currency,
+        idempotency_key=f"opening-balance:{account['id']}",
+        actor_user_id=user.id,
     )
     return account
 

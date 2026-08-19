@@ -881,6 +881,66 @@ body {
     margin-bottom: 20px;
 }
 
+.auth-success {
+    background-color: rgba(16, 185, 129, 0.1);
+    border: 1px solid var(--income-green);
+    color: var(--income-green);
+    border-radius: var(--border-radius-sm);
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 20px;
+}
+
+.my-iban-box {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background-color: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    padding: 10px 14px;
+    margin-bottom: 20px;
+}
+
+.my-iban-box .iban-value {
+    font-family: monospace;
+    font-size: 14px;
+    letter-spacing: 1px;
+    flex: 1;
+}
+
+.contact-item, .payment-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+    cursor: default;
+}
+
+.contact-item:last-child, .payment-item:last-child {
+    border-bottom: none;
+}
+
+.contact-item { cursor: pointer; }
+.contact-item:hover { color: var(--primary-teal); }
+
+.contact-item .name, .payment-item .name {
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.contact-item .iban, .payment-item .meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: monospace;
+}
+
+.payment-item .amount {
+    font-weight: 600;
+    font-size: 14px;
+}
+
 .field-label {
     display: block;
     font-size: 13px;

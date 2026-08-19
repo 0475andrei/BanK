@@ -19,6 +19,7 @@ async def _to_read_model(supabase: AsyncClient, account: dict) -> AccountRead:
         id=account["id"],
         name=account["name"],
         currency=account["currency"],
+        iban=account.get("iban"),
         status=account["status"],
         balance_minor=balance_minor,
         created_at=account["created_at"],
