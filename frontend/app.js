@@ -21,6 +21,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // Show the corresponding view
             const viewId = `view-${item.dataset.view}`;
             document.getElementById(viewId).classList.add('active');
+
+            // Re-fetch balances/transactions whenever the dashboard is opened,
+            // so money received while the user was on another tab shows up
+            // without needing a full page reload.
+            if (item.dataset.view === 'dashboard') {
+                refreshDashboard();
+            }
         });
     });
 
@@ -122,8 +129,7 @@ async function initDashboard() {
     if (!user) return; // requireSession already redirected to login.html
 
     document.getElementById('user-name').textContent = `${user.first_name} ${user.last_name}`;
-    document.getElementById('user-avatar').src =
-        `https://ui-avatars.com/api/?name=${encodeURIComponent(user.first_name + ' ' + user.last_name)}&background=2DD4BF&color=fff`;
+    applyAvatar(user);
 
     document.getElementById('logout-btn').addEventListener('click', async () => {
         try {
@@ -138,6 +144,7 @@ async function initDashboard() {
     wireNewCardModal();
     wireCardOrderModal();
     wirePaymentsForm();
+    wireProfileView(user);
 
     await refreshDashboard();
 }
@@ -669,5 +676,69 @@ function wirePaymentsForm() {
             errorEl.textContent = err.message;
             errorEl.hidden = false;
         }
+    });
+}
+
+/* --- Profile view (bank-themed emoji avatar picker) --- */
+
+const EMOJI_AVATAR_OPTIONS = [
+    '🏦', '💰', '💳', '💵', '💴', '💶', '💷', '🪙', '📈', '📉',
+    '💹', '🔒', '🔐', '🛡️', '👛', '💎', '🧾', '🐷', '🤑', '🏧',
+];
+
+function avatarStorageKey(user) {
+    return `bank_avatar_emoji:${user.id}`;
+}
+
+function applyAvatar(user) {
+    const avatarEl = document.getElementById('user-avatar');
+    const emoji = localStorage.getItem(avatarStorageKey(user));
+    if (emoji) {
+        avatarEl.classList.add('avatar-emoji');
+        avatarEl.textContent = emoji;
+    } else {
+        avatarEl.classList.remove('avatar-emoji');
+        avatarEl.innerHTML = `<img src="https://ui-avatars.com/api/?name=${encodeURIComponent(user.first_name + ' ' + user.last_name)}&background=2DD4BF&color=fff" alt="">`;
+    }
+}
+
+function wireProfileView(user) {
+    const grid = document.getElementById('emoji-grid');
+    const preview = document.getElementById('profile-avatar-preview');
+    const navItems = document.querySelectorAll('.nav-item');
+    const views = document.querySelectorAll('.view');
+
+    grid.innerHTML = EMOJI_AVATAR_OPTIONS.map(emoji =>
+        `<button type="button" class="emoji-option" data-emoji="${emoji}">${emoji}</button>`
+    ).join('');
+
+    function refreshSelection() {
+        const current = localStorage.getItem(avatarStorageKey(user)) || '🏦';
+        preview.textContent = current;
+        grid.querySelectorAll('.emoji-option').forEach(btn => {
+            btn.classList.toggle('selected', btn.dataset.emoji === current);
+        });
+    }
+    refreshSelection();
+
+    grid.querySelectorAll('.emoji-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+            localStorage.setItem(avatarStorageKey(user), btn.dataset.emoji);
+            applyAvatar(user);
+            refreshSelection();
+        });
+    });
+
+    document.getElementById('user-profile-btn').addEventListener('click', () => {
+        navItems.forEach(nav => nav.classList.remove('active'));
+        views.forEach(view => view.classList.remove('active'));
+        document.getElementById('view-profile').classList.add('active');
+    });
+
+    document.getElementById('back-from-profile-btn').addEventListener('click', () => {
+        views.forEach(view => view.classList.remove('active'));
+        document.getElementById('view-dashboard').classList.add('active');
+        document.querySelector('.nav-item[data-view="dashboard"]').classList.add('active');
+        refreshDashboard();
     });
 }

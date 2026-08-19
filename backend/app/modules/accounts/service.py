@@ -13,9 +13,11 @@ from app.modules.users.schemas import UserRead
 UNIQUE_VIOLATION = "23505"
 _IBAN_GENERATION_ATTEMPTS = 5
 
-# Every new account starts funded - there's no deposit/funding endpoint
-# anywhere else in this app (see design_decisions), so this is a deliberate
-# "welcome balance" rather than a real bank giving out free money.
+# Only users who registered with the referral code get a welcome balance
+# on every account they open (see auth/service.py::REFERRAL_CODE) - there's
+# no deposit/funding endpoint anywhere else in this app (see
+# design_decisions), so this is a deliberate "welcome balance" rather than
+# a real bank giving out free money, and it's gated so it isn't unlimited.
 OPENING_BALANCE_MINOR = 50_000
 
 
@@ -67,14 +69,15 @@ async def open_account(supabase: AsyncClient, user: UserRead, name: str, currenc
         metadata={"name": name, "currency": currency, "iban": account["iban"]},
     )
 
-    await ledger_service.grant_opening_balance(
-        supabase,
-        uuid.UUID(account["id"]),
-        OPENING_BALANCE_MINOR,
-        currency,
-        idempotency_key=f"opening-balance:{account['id']}",
-        actor_user_id=user.id,
-    )
+    if user.referral_bonus_eligible:
+        await ledger_service.grant_opening_balance(
+            supabase,
+            uuid.UUID(account["id"]),
+            OPENING_BALANCE_MINOR,
+            currency,
+            idempotency_key=f"opening-balance:{account['id']}",
+            actor_user_id=user.id,
+        )
     return account
 
 

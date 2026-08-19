@@ -48,8 +48,8 @@
                 </div>
                 <div class="user-actions">
                     <button class="notification-btn"><i data-lucide="bell" class="icon"></i><span class="badge"></span></button>
-                    <div class="user-profile">
-                        <img id="user-avatar" src="https://ui-avatars.com/api/?name=User&background=2DD4BF&color=fff" alt="" class="avatar">
+                    <div class="user-profile" id="user-profile-btn" title="Profilul meu">
+                        <div id="user-avatar" class="avatar"></div>
                         <span id="user-name"></span>
                     </div>
                     <button class="logout-btn" id="logout-btn" title="Log out"><i data-lucide="log-out" class="icon"></i></button>
@@ -251,6 +251,19 @@
                                 <div class="loading-state">Se încarcă...</div>
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                <!-- Profile view (avatar picker) -->
+                <section id="view-profile" class="view hidden">
+                    <button class="btn btn-secondary" id="back-from-profile-btn" style="margin-bottom: 24px;">
+                        <i data-lucide="arrow-left" class="icon"></i> Înapoi
+                    </button>
+                    <h2 class="view-title">Profilul meu</h2>
+                    <div class="profile-card">
+                        <div class="profile-avatar-preview" id="profile-avatar-preview">🏦</div>
+                        <p class="profile-subtitle">Alege o emoji pentru avatarul tău</p>
+                        <div class="emoji-grid" id="emoji-grid"></div>
                     </div>
                 </section>
             </div>

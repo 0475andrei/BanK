@@ -89,6 +89,17 @@ async def test_expired_session_is_rejected(client, user_factory, session_token_f
     assert resp.status_code == 401
 
 
+async def test_open_account_without_referral_bonus_starts_at_zero(
+    authed_client_factory, user_factory
+):
+    user = await user_factory(referral_bonus_eligible=False)
+    client, _user = await authed_client_factory(user)
+
+    resp = await client.post("/api/v1/accounts", json={"name": "Checking", "currency": "USD"})
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["balance_minor"] == 0
+
+
 async def test_cannot_see_another_users_account(authed_client, authed_client_factory):
     owner_client, _owner = authed_client
     resp = await owner_client.post("/api/v1/accounts", json={"name": "Private", "currency": "USD"})

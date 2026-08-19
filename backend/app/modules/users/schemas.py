@@ -17,6 +17,7 @@ class UserRead(BaseModel):
     date_of_birth: date | None
     phone: str | None
     address: str | None
+    referral_bonus_eligible: bool
     created_at: datetime
 
 

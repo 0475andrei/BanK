@@ -122,8 +122,15 @@ async def client(app) -> AsyncIterator[HTTPXAsyncClient]:
 @pytest.fixture
 def user_factory(supabase: AsyncClient) -> Callable[..., Awaitable[UserRead]]:
     async def _factory(
-        email: str | None = None, first_name: str = "Test", last_name: str = "User"
+        email: str | None = None,
+        first_name: str = "Test",
+        last_name: str = "User",
+        referral_bonus_eligible: bool = True,
     ) -> UserRead:
+        # Defaults to eligible so the many pre-existing tests that assume a
+        # funded account (via OPENING_BALANCE_MINOR) don't all need updating
+        # for a feature they aren't testing - pass False explicitly in tests
+        # that exercise the referral gating itself.
         email = email or f"user-{uuid.uuid4().hex[:8]}@example.com"
         resp = (
             await supabase.table("users")
@@ -133,6 +140,7 @@ def user_factory(supabase: AsyncClient) -> Callable[..., Awaitable[UserRead]]:
                     "password_hash": hash_password("password123"),
                     "first_name": first_name,
                     "last_name": last_name,
+                    "referral_bonus_eligible": referral_bonus_eligible,
                 }
             )
             .execute()
