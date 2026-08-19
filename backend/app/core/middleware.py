@@ -87,16 +87,21 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def handle_validation_error(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        # jsonable_encoder, not exc.errors() directly. Pydantic v2 can put
+        # non-serialisable objects in an error entry, and plain JSONResponse
+        # then blows up *inside this handler*, turning a client's 422 into a
+        # 500. Two ways in, both real and both fixed by the same call:
+        #   * a malformed body (e.g. missing/wrong Content-Type) puts the raw
+        #     request bytes in the error's "input" field - this is what
+        #     produced the browser's "Failed to fetch";
+        #   * a @field_validator that raises ValueError puts the exception
+        #     object itself in the error's "ctx".
         return JSONResponse(
             status_code=422,
             content={
                 "error": {
                     "code": "validation_error",
                     "message": "Invalid request.",
-                    # jsonable_encoder, not the raw list: for a validator that
-                    # raises ValueError, Pydantic v2 puts the exception object
-                    # itself in each error's `ctx`, which JSONResponse cannot
-                    # serialise - the 422 would become a 500.
                     "details": jsonable_encoder(exc.errors()),
                 }
             },
