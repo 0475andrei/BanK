@@ -7,6 +7,7 @@ Type 'exit' (or Ctrl-C / Ctrl-D) to quit.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 
@@ -15,20 +16,21 @@ from app.ai.providers.base import ProviderError
 from app.ai.schemas import Message
 from app.ai.service import AIService
 from app.config import ConfigurationError
+from app.db.supabase_client import get_client
 
 _EXIT_WORDS = {"exit", "quit", ":q"}
 
-BANNER = """Banking assistant (step 2: read-only, stub data).
+BANNER = """Banking assistant (read-only: balances come from the real ledger).
 Signed in as {user_id} (DEV identity — real auth is not wired up yet).
 Type 'exit' to quit.
 """
 
 
-def main() -> int:
+async def main() -> int:
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
 
     try:
-        service = AIService()  # real Azure provider
+        service = AIService(await get_client())  # real Azure provider
     except ConfigurationError as exc:
         print(f"Configuration error: {exc}", file=sys.stderr)
         return 2
@@ -37,10 +39,10 @@ def main() -> int:
         return 2
 
     # THE EDGE. Identity is established here, once, and threaded into every
-    # turn — the model never supplies it. This is dev-only: when Person A's
-    # `get_current_user` exists, this single line becomes
-    # `context = build_context(user.id, user.account_ids)` and nothing else in
-    # the AI layer changes.
+    # turn — the model never supplies it. The CLI has no session cookie, so it
+    # uses the dev identity; a real HTTP request builds its Context with
+    # `build_context_for_user(user, supabase)` instead. Nothing else in the AI
+    # layer changes between the two.
     context = dev_context()
 
     print(BANNER.format(user_id=context.user_id))
@@ -59,7 +61,7 @@ def main() -> int:
             return 0
 
         try:
-            reply, history = service.handle_message(history, user_input, context)
+            reply, history = await service.handle_message(history, user_input, context)
         except ProviderError as exc:
             # Keep the REPL alive; the history is unchanged so the user can retry.
             print(f"\nmodel error: {exc}\n", file=sys.stderr)
@@ -72,4 +74,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(asyncio.run(main()))

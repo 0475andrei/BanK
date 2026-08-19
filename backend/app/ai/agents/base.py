@@ -16,7 +16,7 @@ class Agent(ABC):
     name: str
 
     @abstractmethod
-    def run(self, messages: Sequence[Message], context: Context) -> str:
+    async def run(self, messages: Sequence[Message], context: Context) -> str:
         """Produce the final reply text. Must not mutate `messages`.
 
         `context` is the trusted identity the agent acts for; it is passed to
