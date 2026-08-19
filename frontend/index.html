@@ -98,41 +98,13 @@
                                 <span class="status">Conectat • poate citi soldurile conturilor tale</span>
                             </div>
                         </div>
+                        <!-- Empty state: one welcome turn. Everything after this
+                             is appended by appendChatBubble() in app.js, so the
+                             markup here matches what that function produces. -->
                         <div class="chat-messages" id="chat-messages">
                             <div class="message ai">
                                 <div class="avatar"><i data-lucide="sparkles"></i></div>
-                                <div class="bubble">Salut! Sunt asistentul tău AI. Cum te pot ajuta astăzi cu finanțele tale?</div>
-                            </div>
-                            <div class="message user">
-                                <div class="bubble">Dacă economisesc 200 RON pe lună, când îmi ating obiectivul de vacanță?</div>
-                            </div>
-                            <div class="message ai">
-                                <div class="avatar"><i data-lucide="sparkles"></i></div>
-                                <div class="bubble">
-                                    <p>Am analizat "Savings Pot: Vacanță". Ai deja 1,200 RON din obiectivul de 3,000 RON.</p>
-                                    <div class="projection-widget">
-                                        <div class="chart-placeholder">
-                                            <div class="progress-bar-bg"><div class="progress-bar-fill" style="width: 40%"></div></div>
-                                        </div>
-                                        <p class="projection-text">Dacă adaugi 200 RON lunar, vei atinge obiectivul în <strong>9 luni</strong>.</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="message ai">
-                                <div class="avatar"><i data-lucide="sparkles"></i></div>
-                                <div class="bubble">
-                                    <p>Vrei să configurez un transfer automat de 200 RON în fiecare lună?</p>
-                                    <div class="human-in-the-loop-card">
-                                        <div class="action-proposal">
-                                            <strong>AI Proposal</strong>
-                                            <p>Transfer automat recurent: 200 RON -> Savings Pot: Vacanță (în data de 1 a fiecărei luni)</p>
-                                        </div>
-                                        <div class="hitl-actions">
-                                            <button class="btn btn-primary" onclick="confirmAIAction(this)">Confirmă</button>
-                                            <button class="btn btn-secondary" onclick="cancelAIAction(this)">Anulează</button>
-                                        </div>
-                                    </div>
-                                </div>
+                                <div class="bubble">Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?</div>
                             </div>
                         </div>
                         <div class="chat-input-area">

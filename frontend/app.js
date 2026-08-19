@@ -109,9 +109,15 @@ async function sendMessage() {
     appendChatBubble('user', message);
     input.value = '';
 
+    // A real model call takes a few seconds; the label makes that wait read as
+    // deliberate rather than as the UI having stalled.
     const typingBubble = appendChatBubble('ai', '', {
         bubbleClass: 'typing',
-        html: '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>',
+        html:
+            '<div class="typing-label">Asistentul gândește...</div>' +
+            '<div class="typing-dots">' +
+            '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>' +
+            '</div>',
     });
     if (sendButton) sendButton.disabled = true;
 
