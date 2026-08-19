@@ -5,6 +5,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.beneficiaries.router import router as beneficiaries_router
 from app.modules.card_orders.router import router as card_orders_router
 from app.modules.cards.router import router as cards_router
+from app.modules.chat.router import router as chat_router
 from app.modules.payments.router import router as payments_router
 from app.modules.transactions.router import router as transactions_router
 from app.modules.transfers.router import router as transfers_router
@@ -21,3 +22,4 @@ api_router.include_router(card_orders_router, prefix="/card-orders", tags=["card
 api_router.include_router(payments_router, prefix="/payments", tags=["payments"])
 api_router.include_router(beneficiaries_router, prefix="/beneficiaries", tags=["beneficiaries"])
 api_router.include_router(users_router, prefix="/users", tags=["users"])
+api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
