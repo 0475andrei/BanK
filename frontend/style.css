@@ -515,6 +515,40 @@ body {
     border-bottom-right-radius: 4px;
 }
 
+/* Assistant is thinking: same bubble, three pulsing dots instead of text. */
+.message.ai .bubble.typing {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.typing-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: var(--text-muted);
+    animation: typing-pulse 1.2s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing-pulse {
+    0%, 60%, 100% { opacity: 0.3; }
+    30% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .typing-dot { animation: none; opacity: 0.6; }
+}
+
+/* A failed request reads as an assistant turn, but visibly not a real answer. */
+.message.ai .bubble.error {
+    background-color: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: var(--text-main);
+}
+
 /* Projection Widget inside AI chat */
 .projection-widget {
     margin-top: 16px;
@@ -596,6 +630,7 @@ body {
     transition: var(--transition);
 }
 .btn-send:hover { transform: scale(1.05); }
+.btn-send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 /* --- View 3: Cards Management --- */
 .cards-carousel {

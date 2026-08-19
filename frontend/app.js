@@ -39,38 +39,106 @@ document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
 });
 
+/* -------------------------------------------------------------------------
+ * AI chat - talks to POST /chat (see backend app/modules/chat/router.py).
+ * ------------------------------------------------------------------------- */
+
+// The conversation so far, as the backend returns it. Nothing is persisted
+// server-side yet, so this is what threads context across turns - it lives for
+// one page load only. Deliberately NOT in localStorage: these Message objects
+// carry tool calls and results, which have no business sitting in browser
+// storage.
+let chatHistory = [];
+
+const CHAT_ERRORS = {
+    unavailable: 'Asistentul AI nu este disponibil momentan. Încearcă din nou.',
+    invalid: 'Mesajul nu poate fi trimis. Verifică ce ai scris.',
+    generic: 'A apărut o problemă. Încearcă din nou.',
+};
+
+/** Builds a chat bubble matching the existing markup and appends it. */
+function appendChatBubble(role, text, options = {}) {
+    const chatMessages = document.getElementById('chat-messages');
+
+    const wrapper = document.createElement('div');
+    wrapper.className = `message ${role}`;
+
+    if (role === 'ai') {
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.innerHTML = '<i data-lucide="sparkles"></i>';
+        wrapper.appendChild(avatar);
+    }
+
+    const bubble = document.createElement('div');
+    bubble.className = options.bubbleClass ? `bubble ${options.bubbleClass}` : 'bubble';
+    if (options.html) {
+        bubble.innerHTML = options.html;
+    } else {
+        // textContent, not innerHTML: the reply is model-authored text and must
+        // never be interpreted as markup.
+        bubble.textContent = text;
+    }
+    wrapper.appendChild(bubble);
+
+    chatMessages.appendChild(wrapper);
+    if (window.lucide) lucide.createIcons();
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return wrapper;
+}
+
+function chatErrorMessage(err) {
+    // No status at all means the request never reached the API (backend down,
+    // DNS, CORS) - to the user that is the same thing as "AI unavailable".
+    if (!err.status || err.status === 502 || err.status === 503) {
+        return CHAT_ERRORS.unavailable;
+    }
+    if (err.status === 422) return CHAT_ERRORS.invalid;
+    return CHAT_ERRORS.generic;
+}
+
 // Function to send a message in the AI Chat view
-function sendMessage() {
+async function sendMessage() {
     const input = document.getElementById('chat-input');
+    const sendButton = document.querySelector('.btn-send');
     const message = input.value.trim();
 
-    if (message) {
-        const chatMessages = document.getElementById('chat-messages');
+    // Silent no-op: an accidental Enter on an empty box shouldn't do anything.
+    if (!message) return;
 
-        // Add User Message
-        const userMsgDiv = document.createElement('div');
-        userMsgDiv.className = 'message user';
-        userMsgDiv.innerHTML = `<div class="bubble">${escapeHTML(message)}</div>`;
-        chatMessages.appendChild(userMsgDiv);
+    appendChatBubble('user', message);
+    input.value = '';
 
-        // Clear input
-        input.value = '';
+    const typingBubble = appendChatBubble('ai', '', {
+        bubbleClass: 'typing',
+        html: '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>',
+    });
+    if (sendButton) sendButton.disabled = true;
 
-        // Scroll to bottom
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+    try {
+        // apiFetch already prefixes /api/v1 and sends the session cookie.
+        const response = await apiFetch('/chat', {
+            method: 'POST',
+            body: JSON.stringify({ message, history: chatHistory }),
+        });
 
-        // Simulate AI thinking and replying
-        setTimeout(() => {
-            const aiMsgDiv = document.createElement('div');
-            aiMsgDiv.className = 'message ai';
-            aiMsgDiv.innerHTML = `
-                <div class="avatar"><i data-lucide="sparkles"></i></div>
-                <div class="bubble">Analizez cererea ta... (Aceasta este o simulare a asistentului AI)</div>
-            `;
-            chatMessages.appendChild(aiMsgDiv);
-            if (window.lucide) lucide.createIcons();
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }, 800);
+        typingBubble.remove();
+        appendChatBubble('ai', response.reply);
+        // The server owns the transcript shape; take it back verbatim.
+        chatHistory = response.history;
+    } catch (err) {
+        typingBubble.remove();
+
+        if (err.status === 401) {
+            // Session expired mid-conversation - same redirect the rest of the
+            // app uses (see requireSession in api.js).
+            window.location.href = 'login.html';
+            return;
+        }
+
+        appendChatBubble('ai', chatErrorMessage(err), { bubbleClass: 'error' });
+    } finally {
+        if (sendButton) sendButton.disabled = false;
     }
 }
 
