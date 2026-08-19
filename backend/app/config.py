@@ -37,7 +37,11 @@ class Settings(BaseSettings):
 
     ENV: str = "development"
 
-    DATABASE_URL: str = "postgresql+asyncpg://bank:bank@localhost:5432/bank"
+    # Supabase REST (PostgREST) - no direct Postgres connection is used.
+    # SUPABASE_KEY must be the "service_role"/"secret" key: this backend is
+    # trusted server code, never exposed to a browser. Never the anon key.
+    SUPABASE_URL: str
+    SUPABASE_KEY: str
 
     # Server-side session cookie (see core/security.py, core/dependencies.py).
     SESSION_COOKIE_NAME: str = "session_token"

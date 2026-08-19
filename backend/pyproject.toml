@@ -6,9 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
-    "sqlalchemy>=2.0.35",
-    "asyncpg>=0.29",
-    "alembic>=1.13",
+    "supabase>=2.31.0",
     "pydantic[email]>=2.9",
     "pydantic-settings>=2.5",
     "bcrypt>=4.2",
@@ -42,9 +40,6 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-# Alembic-generated migrations are reviewed once, not hand-maintained -
-# don't hold them to the same lint bar as app/tests code.
-extend-exclude = ["app/db/migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

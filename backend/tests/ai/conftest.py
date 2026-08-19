@@ -22,12 +22,13 @@ from app.ai.tools.registry import ToolRegistry
 def clean_db():
     """Override the DB-truncating autouse fixture from tests/conftest.py.
 
-    [A]'s tests/conftest.py declares `clean_db` as autouse, so without this it
-    would apply to the whole tests/ tree - dragging a real Postgres (via the
-    session-scoped `test_engine`) into this suite, which is deliberately
-    offline and DB-free. pytest resolves fixtures by name from the closest
-    conftest, so defining it here shadows the parent's for tests/ai only;
-    [A]'s unit/ and integration/ suites still get the real one.
+    tests/conftest.py declares `clean_db` as autouse, so without this it
+    would apply to the whole tests/ tree - dragging the real Supabase
+    project (via the session-scoped `supabase` fixture) into this suite,
+    which is deliberately offline and DB-free. pytest resolves fixtures by
+    name from the closest conftest, so defining it here shadows the
+    parent's for tests/ai only; unit/ and integration/ still get the real
+    one.
     """
     return None
 

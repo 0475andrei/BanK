@@ -1,55 +1,57 @@
-"""get_db, get_current_user - the CONTRACT every other module builds on.
+"""get_supabase, get_current_user - the CONTRACT every other module builds on.
 
 get_current_user is the read side of the session mechanism: it trusts
 nothing but the hashed cookie value. It is deliberately independent of the
 login/logout/register endpoints (owned by the auth teammate, see
 docs/AUTH_HANDOFF.md) - anything that can insert a valid row into `sessions`
-(the teammate's login endpoint, or a test fixture) can authenticate a
-request. This module never writes to `sessions`, only reads.
+(the login endpoint, or a test fixture) can authenticate a request. This
+module never writes to `sessions`, only reads.
 """
 
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from fastapi import Depends, Request
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
 from app.config import settings
 from app.core.exceptions import UnauthorizedError
 from app.core.security import hash_session_token
-from app.db.session import session_scope
-from app.modules.auth.models import UserSession
-from app.modules.users.models import User
+from app.db.supabase_client import get_supabase
+from app.modules.users.schemas import UserRead
 
-
-async def get_db() -> AsyncIterator[AsyncSession]:
-    async with session_scope() as session:
-        yield session
+_USER_COLUMNS = (
+    "id, email, first_name, last_name, email_verified, "
+    "national_id, gender, date_of_birth, phone, address, created_at"
+)
 
 
 async def get_current_user(
     request: Request,
-    db: AsyncSession = Depends(get_db),
-) -> User:
+    supabase: AsyncClient = Depends(get_supabase),
+) -> UserRead:
     token = request.cookies.get(settings.SESSION_COOKIE_NAME)
     if not token:
         raise UnauthorizedError()
 
     token_hash = hash_session_token(token)
-    stmt = select(UserSession).where(UserSession.token_hash == token_hash)
-    user_session = (await db.execute(stmt)).scalar_one_or_none()
+    resp = (
+        await supabase.table("sessions")
+        .select(f"expires_at, user:users({_USER_COLUMNS})")
+        .eq("token_hash", token_hash)
+        .maybe_single()
+        .execute()
+    )
 
-    if user_session is None:
+    if resp is None or resp.data is None:
         raise UnauthorizedError()
 
-    now = datetime.now(UTC)
-    if user_session.expires_at <= now:
+    session_row = resp.data
+    expires_at = datetime.fromisoformat(session_row["expires_at"])
+    if expires_at <= datetime.now(UTC):
         raise UnauthorizedError("Session has expired.")
 
-    # user_session.user is eager-loaded (relationship(lazy="joined")), so
-    # this doesn't cost a second round trip.
-    if user_session.user is None:
+    user_row = session_row.get("user")
+    if user_row is None:
         raise UnauthorizedError()
 
-    return user_session.user
+    return UserRead.model_validate(user_row)

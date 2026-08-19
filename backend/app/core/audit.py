@@ -1,44 +1,33 @@
-"""Append-only audit log. Rows are never updated or deleted."""
+"""Append-only audit log. Rows are never updated or deleted.
+
+Writes here are each their own independent REST call - unlike the old
+SQLAlchemy version, they no longer share a transaction with the business
+write they document (accepted, documented limitation of the Supabase REST
+migration; see backend/supabase/migrations/0002_ledger_functions.sql's
+header for the one exception: the ledger's own audit insert happens inside
+the post_transaction/create_transfer Postgres functions, so it stays atomic
+with the money movement).
+"""
 
 import uuid
 from typing import Any
 
-from sqlalchemy import ForeignKey, String
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import Uuid
-
-from app.db.base import Base, CreatedAtMixin, UUIDPKMixin
-
-
-class AuditLog(UUIDPKMixin, CreatedAtMixin, Base):
-    __tablename__ = "audit_log"
-
-    # Nullable: a small number of audit events originate from system
-    # actions (e.g. the scheduled_transfers worker) with no acting user.
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    action: Mapped[str] = mapped_column(String(100), nullable=False)
-    entity: Mapped[str] = mapped_column(String(255), nullable=False)
-    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+from supabase import AsyncClient
 
 
 async def record_audit_event(
-    db: AsyncSession,
+    supabase: AsyncClient,
     *,
     user_id: uuid.UUID | None,
     action: str,
     entity: str,
     metadata: dict[str, Any] | None = None,
 ) -> None:
-    db.add(
-        AuditLog(
-            user_id=user_id,
-            action=action,
-            entity=entity,
-            metadata_json=metadata or {},
-        )
-    )
-    await db.flush()
+    await supabase.table("audit_log").insert(
+        {
+            "user_id": str(user_id) if user_id else None,
+            "action": action,
+            "entity": entity,
+            "metadata_json": metadata or {},
+        }
+    ).execute()
