@@ -17,6 +17,7 @@ class AccountRead(BaseModel):
     id: uuid.UUID
     name: str
     currency: str
+    iban: str | None
     status: AccountStatus
     balance_minor: int
     created_at: datetime

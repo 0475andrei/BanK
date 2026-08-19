@@ -40,6 +40,8 @@ _TABLES_IN_FK_ORDER = (
     "sessions",
     "login_attempts",
     "card_orders",
+    "payments",
+    "beneficiaries",
     "cards",
     "transfers",
     "ledger_entries",

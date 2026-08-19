@@ -137,6 +137,7 @@ async function initDashboard() {
     wireTransferModal();
     wireNewCardModal();
     wireCardOrderModal();
+    wirePaymentsForm();
 
     await refreshDashboard();
 }
@@ -145,6 +146,8 @@ async function refreshDashboard() {
     await loadAccounts();
     await loadTransactions();
     await loadCards();
+    await loadBeneficiaries();
+    await loadPayments();
 }
 
 async function loadAccounts() {
@@ -159,6 +162,7 @@ async function loadAccounts() {
     renderAccountsGrid();
     renderHeadlineBalance();
     populateTransferAccountSelects();
+    populatePaymentsAccountSelect();
 }
 
 function renderAccountsGrid() {
@@ -525,6 +529,142 @@ function wireCardOrderModal() {
             const formattedNumber = order.card.card_number.replace(/(.{4})/g, '$1 ').trim();
             alert(`Comanda a fost trimisă! Cardul tău: ${formattedNumber}`);
             await loadCards();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        }
+    });
+}
+
+/* --- Payments (IBAN-to-IBAN, cross-user) --- */
+
+function populatePaymentsAccountSelect() {
+    const select = document.getElementById('payments-account');
+    if (!select) return;
+    const active = currentAccounts.filter(a => a.status === 'active');
+    const previousValue = select.value;
+    select.innerHTML = active.length
+        ? active.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
+        : '<option value="" disabled selected>Creează mai întâi un cont</option>';
+    if (active.some(a => a.id === previousValue)) select.value = previousValue;
+    updateMyIbanDisplay();
+}
+
+function updateMyIbanDisplay() {
+    const select = document.getElementById('payments-account');
+    const iban = document.getElementById('payments-my-iban');
+    if (!select || !iban) return;
+    const account = currentAccounts.find(a => a.id === select.value);
+    iban.textContent = account ? account.iban : '—';
+}
+
+async function loadBeneficiaries() {
+    const list = document.getElementById('beneficiaries-list');
+    if (!list) return;
+    try {
+        const contacts = await apiFetch('/beneficiaries');
+        renderBeneficiariesList(contacts);
+    } catch (err) {
+        list.innerHTML = `<div class="empty-state">Nu s-au putut încărca contactele: ${escapeHTML(err.message)}</div>`;
+    }
+}
+
+function renderBeneficiariesList(contacts) {
+    const list = document.getElementById('beneficiaries-list');
+    if (contacts.length === 0) {
+        list.innerHTML = '<div class="empty-state">Niciun contact încă - apare automat după prima plată.</div>';
+        return;
+    }
+    list.innerHTML = contacts.map(c => `
+        <div class="contact-item" data-iban="${escapeHTML(c.iban)}" data-name="${escapeHTML(c.display_name)}">
+            <div>
+                <div class="name">${escapeHTML(c.display_name)}</div>
+                <div class="iban">${escapeHTML(c.iban)}</div>
+            </div>
+            <i data-lucide="chevron-right" class="icon"></i>
+        </div>
+    `).join('');
+    if (window.lucide) lucide.createIcons();
+
+    list.querySelectorAll('.contact-item').forEach(el => {
+        el.addEventListener('click', () => {
+            document.getElementById('payments-iban').value = el.dataset.iban;
+            document.getElementById('payments-beneficiary').value = el.dataset.name;
+        });
+    });
+}
+
+async function loadPayments() {
+    const list = document.getElementById('payments-list');
+    if (!list) return;
+    try {
+        const payments = await apiFetch('/payments');
+        renderPaymentsList(payments);
+    } catch (err) {
+        list.innerHTML = `<div class="empty-state">Nu s-a putut încărca istoricul: ${escapeHTML(err.message)}</div>`;
+    }
+}
+
+function renderPaymentsList(payments) {
+    const list = document.getElementById('payments-list');
+    if (payments.length === 0) {
+        list.innerHTML = '<div class="empty-state">Nicio plată încă.</div>';
+        return;
+    }
+    list.innerHTML = payments.map(p => `
+        <div class="payment-item">
+            <div>
+                <div class="name">${escapeHTML(p.to_iban)}</div>
+                <div class="meta">${new Date(p.created_at).toLocaleString('ro-RO')}</div>
+            </div>
+            <div class="amount">-${formatMoney(p.amount_minor, p.currency)}</div>
+        </div>
+    `).join('');
+}
+
+function wirePaymentsForm() {
+    const form = document.getElementById('payments-form');
+    const errorEl = document.getElementById('payments-error');
+    const successEl = document.getElementById('payments-success');
+    const accountSelect = document.getElementById('payments-account');
+
+    accountSelect.addEventListener('change', updateMyIbanDisplay);
+
+    document.getElementById('copy-my-iban-btn').addEventListener('click', async () => {
+        const iban = document.getElementById('payments-my-iban').textContent;
+        if (!iban || iban === '—') return;
+        try {
+            await navigator.clipboard.writeText(iban);
+        } catch {
+            // Clipboard API can be unavailable (e.g. insecure context) - not critical.
+        }
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorEl.hidden = true;
+        successEl.hidden = true;
+
+        const amountInput = document.getElementById('payments-amount').value;
+        const amountMinor = Math.round(parseFloat(amountInput) * 100);
+        const iban = document.getElementById('payments-iban').value.replace(/\s+/g, '').toUpperCase();
+
+        try {
+            await apiFetch('/payments', {
+                method: 'POST',
+                headers: { 'Idempotency-Key': crypto.randomUUID() },
+                body: JSON.stringify({
+                    from_account_id: accountSelect.value,
+                    to_iban: iban,
+                    beneficiary_name: document.getElementById('payments-beneficiary').value,
+                    amount_minor: amountMinor,
+                    description: document.getElementById('payments-description').value || undefined,
+                }),
+            });
+            successEl.textContent = 'Plata a fost trimisă cu succes!';
+            successEl.hidden = false;
+            form.reset();
+            await refreshDashboard();
         } catch (err) {
             errorEl.textContent = err.message;
             errorEl.hidden = false;

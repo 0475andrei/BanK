@@ -1,3 +1,4 @@
+from app.modules.accounts.service import OPENING_BALANCE_MINOR
 from app.modules.cards.card_numbers import luhn_is_valid
 
 
@@ -71,7 +72,24 @@ async def test_cancel_unknown_card_is_404(authed_client):
 async def test_issue_card_rejects_closed_account(authed_client):
     client, _user = authed_client
     account = await _open_account(client)
-    await client.post(f"/api/v1/accounts/{account['id']}/close")
+    sink = await _open_account(client, name="Sink")
+
+    # New accounts start with a welcome balance (see accounts/service.py),
+    # so it has to be drained before the account is empty enough to close.
+    drain = await client.post(
+        "/api/v1/transfers",
+        json={
+            "from_account_id": account["id"],
+            "to_account_id": sink["id"],
+            "amount_minor": OPENING_BALANCE_MINOR,
+            "currency": "USD",
+        },
+        headers={"Idempotency-Key": "drain-opening-balance"},
+    )
+    assert drain.status_code == 201, drain.text
+
+    close = await client.post(f"/api/v1/accounts/{account['id']}/close")
+    assert close.status_code == 200, close.text
 
     resp = await client.post("/api/v1/cards", json={"account_id": account["id"]})
     assert resp.status_code == 409
