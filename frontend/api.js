@@ -11,8 +11,8 @@ const API_BASE_URL = "http://localhost:8000/api/v1";
 async function apiFetch(path, options = {}) {
   const res = await fetch(API_BASE_URL + path, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
