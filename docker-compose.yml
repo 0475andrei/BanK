@@ -1,0 +1,32 @@
+# The whole app: API and frontend. The database is Supabase (hosted
+# Postgres, accessed over REST/HTTPS via supabase-py) - not run locally,
+# see backend/.env.example.
+#
+#   docker compose up -d --build     start everything
+#   docker compose down              stop everything
+#
+# (./run.sh and .\run.ps1 are thin wrappers around exactly this.)
+name: bank
+
+services:
+  backend:
+    build: ./backend
+    env_file:
+      # Optional so a fresh clone can `docker compose up` before anyone has
+      # made a .env; app/config.py has sensible defaults for everything
+      # except SUPABASE_URL/SUPABASE_KEY and the AI layer's Azure keys.
+      - path: ./backend/.env
+        required: false
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
+      - ./backend/scripts:/app/scripts
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend

@@ -256,3 +256,16 @@ For every task you (Claude Code) implement:
 
 **Git:** one branch per task (e.g. `feat/ledger-core`, `feat/auth-session`,
 `feat/ai-agent-loop`). Small, meaningful commits. Keep `main` green.
+
+---
+
+## 9. Frontend
+
+The frontend is a **separate project** at `frontend/` (sibling to
+`backend/`), consuming `backend/`'s JSON API — this spec above is backend
+only, per §1. `frontend/` is a plain HTML/CSS/JS app (no framework, no
+build step), served by nginx as its own container; the browser calls the
+backend directly, never through a server-side proxy. `./run.sh` (repo
+root) starts the whole stack - database, API, and frontend - in Docker.
+See `frontend/README.md` for the full API reference, the auth/cookie
+contract, and what's live vs. still a mockup.

@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BanK Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h2>BanK.</h2>
+            </div>
+            <nav class="nav-menu">
+                <button class="nav-item active" data-view="dashboard">
+                    <i data-lucide="layout-dashboard" class="icon"></i>
+                    <span>Prezentare Generală</span>
+                </button>
+                <button class="nav-item" data-view="chat">
+                    <i data-lucide="sparkles" class="icon"></i>
+                    <span>Asistent AI & Proiecții</span>
+                </button>
+                <button class="nav-item" data-view="cards">
+                    <i data-lucide="credit-card" class="icon"></i>
+                    <span>Cardurile Mele</span>
+                </button>
+                <button class="nav-item" data-view="analytics">
+                    <i data-lucide="trending-up" class="icon"></i>
+                    <span>Investiții & Bugetare</span>
+                </button>
+                <button class="nav-item" data-view="payments">
+                    <i data-lucide="landmark" class="icon"></i>
+                    <span>Plăți</span>
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="top-header">
+                <div class="search-bar">
+                    <i data-lucide="search" class="icon"></i>
+                    <input type="text" placeholder="Caută tranzacții, carduri, contacte...">
+                </div>
+                <div class="user-actions">
+                    <button class="notification-btn"><i data-lucide="bell" class="icon"></i><span class="badge"></span></button>
+                    <div class="user-profile">
+                        <img id="user-avatar" src="https://ui-avatars.com/api/?name=User&background=2DD4BF&color=fff" alt="" class="avatar">
+                        <span id="user-name"></span>
+                    </div>
+                    <button class="logout-btn" id="logout-btn" title="Log out"><i data-lucide="log-out" class="icon"></i></button>
+                </div>
+            </header>
+
+            <!-- Views Container -->
+            <div class="views-container">
+                <!-- Dashboard View -->
+                <section id="view-dashboard" class="view active">
+                    <div class="dashboard-header">
+                        <div class="total-balance-card">
+                            <span class="label">Total Balance</span>
+                            <h1 class="balance" id="total-balance">&hellip;</h1>
+                            <div class="actions">
+                                <button class="btn btn-primary" id="open-new-account-btn"><i data-lucide="plus" class="icon"></i> Cont nou</button>
+                                <button class="btn btn-secondary" id="open-transfer-btn"><i data-lucide="send" class="icon"></i> Transferă</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="accounts-section">
+                            <h2 class="section-title">Conturile mele</h2>
+                            <div class="accounts-grid" id="accounts-grid">
+                                <div class="loading-state">Se încarcă...</div>
+                            </div>
+                        </div>
+
+                        <div class="transactions-section">
+                            <h2 class="section-title">Tranzacții Recente</h2>
+                            <div class="transactions-list" id="transactions-list">
+                                <div class="loading-state">Se încarcă...</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- AI Chat View -->
+                <section id="view-chat" class="view hidden">
+                    <div class="chat-container">
+                        <div class="chat-header">
+                            <div class="ai-avatar"><i data-lucide="sparkles"></i></div>
+                            <div class="ai-info">
+                                <h2>BanK AI Assistant <span class="demo-badge">Demo</span></h2>
+                                <span class="status">Simulare locală • neconectat la backend</span>
+                            </div>
+                        </div>
+                        <div class="chat-messages" id="chat-messages">
+                            <div class="message ai">
+                                <div class="avatar"><i data-lucide="sparkles"></i></div>
+                                <div class="bubble">Salut! Sunt asistentul tău AI. Cum te pot ajuta astăzi cu finanțele tale?</div>
+                            </div>
+                            <div class="message user">
+                                <div class="bubble">Dacă economisesc 200 RON pe lună, când îmi ating obiectivul de vacanță?</div>
+                            </div>
+                            <div class="message ai">
+                                <div class="avatar"><i data-lucide="sparkles"></i></div>
+                                <div class="bubble">
+                                    <p>Am analizat "Savings Pot: Vacanță". Ai deja 1,200 RON din obiectivul de 3,000 RON.</p>
+                                    <div class="projection-widget">
+                                        <div class="chart-placeholder">
+                                            <div class="progress-bar-bg"><div class="progress-bar-fill" style="width: 40%"></div></div>
+                                        </div>
+                                        <p class="projection-text">Dacă adaugi 200 RON lunar, vei atinge obiectivul în <strong>9 luni</strong>.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="message ai">
+                                <div class="avatar"><i data-lucide="sparkles"></i></div>
+                                <div class="bubble">
+                                    <p>Vrei să configurez un transfer automat de 200 RON în fiecare lună?</p>
+                                    <div class="human-in-the-loop-card">
+                                        <div class="action-proposal">
+                                            <strong>AI Proposal</strong>
+                                            <p>Transfer automat recurent: 200 RON -> Savings Pot: Vacanță (în data de 1 a fiecărei luni)</p>
+                                        </div>
+                                        <div class="hitl-actions">
+                                            <button class="btn btn-primary" onclick="confirmAIAction(this)">Confirmă</button>
+                                            <button class="btn btn-secondary" onclick="cancelAIAction(this)">Anulează</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chat-input-area">
+                            <input type="text" placeholder="Întreabă asistentul AI..." class="chat-input" id="chat-input">
+                            <button class="btn-send" onclick="sendMessage()">➤</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Cards Management View -->
+                <section id="view-cards" class="view hidden">
+                    <h2 class="view-title">Cardurile Mele</h2>
+                    <div class="cards-carousel" id="cards-list">
+                        <div class="loading-state">Se încarcă...</div>
+                    </div>
+                    <div class="cards-actions">
+                        <button class="btn btn-primary" id="open-new-card-btn"><i data-lucide="sparkles" class="icon"></i> Generează Card Virtual</button>
+                        <button class="btn btn-secondary" id="open-card-order-btn"><i data-lucide="credit-card" class="icon"></i> Comandă Card Fizic</button>
+                    </div>
+                </section>
+
+                <!-- Analytics & Insights View -->
+                <section id="view-analytics" class="view hidden">
+                    <h2 class="view-title">Investiții & Bugetare <span class="demo-badge">Demo</span></h2>
+                    <div class="analytics-grid">
+                        <div class="chart-card">
+                            <h3>Cheltuieli pe Categorii (Luna curentă)</h3>
+                            <div class="donut-chart-container">
+                                <!-- Simple CSS visual representation -->
+                                <div class="css-donut"></div>
+                                <div class="legend">
+                                    <div class="legend-item"><span class="dot groceries"></span> Supermarket (40%)</div>
+                                    <div class="legend-item"><span class="dot bills"></span> Facturi (35%)</div>
+                                    <div class="legend-item"><span class="dot entertainment"></span> Divertisment (25%)</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pots-card">
+                            <h3>Bugetare (Pots)</h3>
+                            <div class="pots-list">
+                                <div class="pot-item">
+                                    <div class="pot-header">
+                                        <span class="pot-icon"><i data-lucide="plane"></i></span>
+                                        <div class="pot-name">Vacanță vară</div>
+                                        <div class="pot-amounts">1,200 / 3,000 RON</div>
+                                    </div>
+                                    <div class="progress-bg"><div class="progress-fill teal" style="width: 40%"></div></div>
+                                </div>
+                                <div class="pot-item">
+                                    <div class="pot-header">
+                                        <span class="pot-icon"><i data-lucide="car"></i></span>
+                                        <div class="pot-name">Avans Mașină</div>
+                                        <div class="pot-amounts">5,000 / 20,000 EUR</div>
+                                    </div>
+                                    <div class="progress-bg"><div class="progress-fill blue" style="width: 25%"></div></div>
+                                </div>
+                                <div class="pot-item">
+                                    <div class="pot-header">
+                                        <span class="pot-icon"><i data-lucide="shield-alert"></i></span>
+                                        <div class="pot-name">Fond de Urgență</div>
+                                        <div class="pot-amounts">10,000 / 10,000 RON</div>
+                                    </div>
+                                    <div class="progress-bg"><div class="progress-fill green" style="width: 100%"></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Payments (IBAN-to-IBAN, cross-user) View -->
+                <section id="view-payments" class="view hidden">
+                    <h2 class="view-title">Plăți</h2>
+                    <div class="analytics-grid">
+                        <div class="chart-card">
+                            <h3>Trimite bani printr-un IBAN</h3>
+
+                            <label class="field-label" for="payments-account">Din contul</label>
+                            <select class="field-input" id="payments-account"></select>
+
+                            <div class="my-iban-box">
+                                <span class="iban-value" id="payments-my-iban">—</span>
+                                <button type="button" class="card-eye-btn" id="copy-my-iban-btn" title="Copiază IBAN-ul"><i data-lucide="copy"></i></button>
+                            </div>
+
+                            <div class="auth-error" id="payments-error" hidden></div>
+                            <div class="auth-success" id="payments-success" hidden></div>
+
+                            <form id="payments-form">
+                                <label class="field-label" for="payments-iban">IBAN destinatar</label>
+                                <input class="field-input" type="text" id="payments-iban" required placeholder="RO49 BANK ...">
+
+                                <label class="field-label" for="payments-beneficiary">Nume beneficiar</label>
+                                <input class="field-input" type="text" id="payments-beneficiary" required>
+
+                                <label class="field-label" for="payments-amount">Sumă</label>
+                                <input class="field-input" type="number" id="payments-amount" min="0.01" step="0.01" required>
+
+                                <label class="field-label" for="payments-description">Descriere <span class="field-optional">(opțional)</span></label>
+                                <input class="field-input" type="text" id="payments-description">
+
+                                <div class="modal-actions">
+                                    <button type="submit" class="btn btn-primary">Trimite plata</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div class="pots-card">
+                            <h3>Contactele mele</h3>
+                            <div id="beneficiaries-list" class="pots-list">
+                                <div class="loading-state">Se încarcă...</div>
+                            </div>
+
+                            <h3 style="margin-top: 30px;">Istoric plăți</h3>
+                            <div id="payments-list" class="pots-list">
+                                <div class="loading-state">Se încarcă...</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- New account modal -->
+    <div class="modal-overlay" id="new-account-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Cont nou</h3>
+                <button class="modal-close" id="close-new-account-modal"><i data-lucide="x"></i></button>
+            </div>
+            <div class="auth-error" id="new-account-error" hidden></div>
+            <form id="new-account-form">
+                <label class="field-label" for="new-account-name">Nume cont</label>
+                <input class="field-input" type="text" id="new-account-name" required placeholder="ex. Cont Curent">
+
+                <label class="field-label" for="new-account-currency">Monedă</label>
+                <select class="field-input" id="new-account-currency">
+                    <option value="RON">RON</option>
+                    <option value="EUR">EUR</option>
+                    <option value="USD">USD</option>
+                </select>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-new-account">Anulează</button>
+                    <button type="submit" class="btn btn-primary">Creează</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Transfer modal -->
+    <div class="modal-overlay" id="transfer-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Transferă între conturile tale</h3>
+                <button class="modal-close" id="close-transfer-modal"><i data-lucide="x"></i></button>
+            </div>
+            <div class="auth-error" id="transfer-error" hidden></div>
+            <form id="transfer-form">
+                <label class="field-label" for="transfer-from">Din contul</label>
+                <select class="field-input" id="transfer-from" required></select>
+
+                <label class="field-label" for="transfer-to">În contul</label>
+                <select class="field-input" id="transfer-to" required></select>
+
+                <label class="field-label" for="transfer-amount">Sumă</label>
+                <input class="field-input" type="number" id="transfer-amount" min="0.01" step="0.01" required>
+
+                <label class="field-label" for="transfer-description">Descriere <span class="field-optional">(opțional)</span></label>
+                <input class="field-input" type="text" id="transfer-description">
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-transfer">Anulează</button>
+                    <button type="submit" class="btn btn-primary">Confirmă</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- New card modal -->
+    <div class="modal-overlay" id="new-card-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Card virtual nou</h3>
+                <button class="modal-close" id="close-new-card-modal"><i data-lucide="x"></i></button>
+            </div>
+            <div class="auth-error" id="new-card-error" hidden></div>
+            <form id="new-card-form">
+                <label class="field-label" for="new-card-account">Cont asociat</label>
+                <select class="field-input" id="new-card-account" required></select>
+
+                <label class="field-label" for="new-card-limit">Limită de cheltuieli <span class="field-optional">(opțional)</span></label>
+                <input class="field-input" type="number" id="new-card-limit" min="0.01" step="0.01">
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-new-card">Anulează</button>
+                    <button type="submit" class="btn btn-primary">Generează</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Card order modal -->
+    <div class="modal-overlay" id="card-order-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Comandă Card Fizic</h3>
+                <button class="modal-close" id="close-card-order-modal"><i data-lucide="x"></i></button>
+            </div>
+            <div class="auth-error" id="card-order-error" hidden></div>
+            <form id="card-order-form">
+                <label class="field-label" for="card-order-account">Cont asociat</label>
+                <select class="field-input" id="card-order-account" required></select>
+
+                <label class="field-label" for="card-order-name">Nume complet</label>
+                <input class="field-input" type="text" id="card-order-name" required placeholder="ex. Popescu Andrei">
+
+                <label class="field-label" for="card-order-phone">Telefon</label>
+                <input class="field-input" type="tel" id="card-order-phone" required placeholder="ex. 07xxxxxxxx">
+
+                <label class="field-label" for="card-order-address">Adresă</label>
+                <input class="field-input" type="text" id="card-order-address" required placeholder="Stradă, număr, bloc, apartament">
+
+                <label class="field-label" for="card-order-city">Oraș</label>
+                <input class="field-input" type="text" id="card-order-city" required>
+
+                <label class="field-label" for="card-order-postal">Cod poștal</label>
+                <input class="field-input" type="text" id="card-order-postal" required>
+
+                <label class="field-label" for="card-order-country">Țară</label>
+                <input class="field-input" type="text" id="card-order-country" required value="România">
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-card-order">Anulează</button>
+                    <button type="submit" class="btn btn-primary">Trimite comanda</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="api.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

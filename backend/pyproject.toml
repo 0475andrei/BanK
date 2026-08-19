@@ -1,0 +1,64 @@
+[project]
+name = "bank-backend"
+version = "0.1.0"
+description = "BanK backend API (banking core + AI agent layer)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "supabase>=2.31.0",
+    "pydantic[email]>=2.9",
+    "pydantic-settings>=2.5",
+    "bcrypt>=4.2",
+    # AI layer (app/ai): Azure OpenAI is reached through the OpenAI SDK.
+    "openai>=1.40",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+# A's banking tests are async; [B]'s AI tests under tests/ai are plain sync
+# functions, which "auto" leaves alone.
+asyncio_mode = "auto"
+# One testpath covers both: tests/unit, tests/integration and tests/ai.
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom is `param: X = Depends(get_x)` /
+# Header(...) / Query(...) / etc. - a function call in a default argument
+# is how it's meant to be used, not the mutable-default-argument footgun
+# B008 exists to catch.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Header",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Cookie",
+    "fastapi.Security",
+]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true

@@ -1,0 +1,56 @@
+from fastapi import APIRouter, Depends, Request, Response
+from supabase import AsyncClient
+
+from app.config import settings
+from app.core.dependencies import get_current_user
+from app.db.supabase_client import get_supabase
+from app.modules.auth import service
+from app.modules.auth.schemas import LoginRequest, RegisterRequest
+from app.modules.users.schemas import UserRead
+
+router = APIRouter()
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=settings.SESSION_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=settings.is_production,
+        max_age=settings.SESSION_TTL_SECONDS,
+    )
+
+
+@router.post("/register", response_model=UserRead, status_code=201)
+async def register(
+    payload: RegisterRequest,
+    response: Response,
+    supabase: AsyncClient = Depends(get_supabase),
+) -> UserRead:
+    user, token = await service.register_user(supabase, payload)
+    _set_session_cookie(response, token)
+    return user
+
+
+@router.post("/login", response_model=UserRead)
+async def login(
+    payload: LoginRequest,
+    response: Response,
+    supabase: AsyncClient = Depends(get_supabase),
+) -> UserRead:
+    user, token = await service.login_user(supabase, payload)
+    _set_session_cookie(response, token)
+    return user
+
+
+@router.post("/logout", status_code=204)
+async def logout(
+    request: Request,
+    response: Response,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> None:
+    token = request.cookies.get(settings.SESSION_COOKIE_NAME)
+    await service.logout_user(supabase, user, token)
+    response.delete_cookie(settings.SESSION_COOKIE_NAME)
