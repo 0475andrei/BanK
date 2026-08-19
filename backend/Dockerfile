@@ -4,7 +4,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-COPY pyproject.toml alembic.ini ./
+COPY pyproject.toml ./
 COPY app ./app
 
 RUN pip install --no-cache-dir ".[dev]" && rm -rf build *.egg-info
