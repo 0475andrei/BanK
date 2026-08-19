@@ -682,6 +682,36 @@ body {
 .detail .label { font-size: 10px; color: var(--text-muted); margin-bottom: 4px; }
 .detail span { font-size: 14px; }
 
+.card-secret {
+    font-family: monospace;
+    letter-spacing: 1px;
+}
+
+.card-eye-btn {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: var(--text-muted);
+    border-radius: 50%;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.card-eye-btn:hover {
+    color: #fff;
+    border-color: rgba(255,255,255,0.5);
+}
+
+.card-eye-btn i {
+    width: 14px;
+    height: 14px;
+}
+
 .status-indicator {
     padding: 4px 12px;
     border-radius: 12px;

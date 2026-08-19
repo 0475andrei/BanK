@@ -7,21 +7,26 @@ from app.core.audit import record_audit_event
 from app.core.exceptions import AccountClosedError, NotFoundError
 from app.modules.accounts import service as accounts_service
 from app.modules.accounts.models import Account, AccountStatus
-from app.modules.cards.card_numbers import generate_card_number
+from app.modules.cards.card_numbers import generate_card_number, generate_cvv, generate_expiry
 from app.modules.cards.models import Card, CardStatus
 from app.modules.cards.schemas import CardCreate
 from app.modules.users.models import User
 
 
-async def issue_card(db: AsyncSession, user: User, payload: CardCreate) -> tuple[Card, str]:
+async def issue_card(db: AsyncSession, user: User, payload: CardCreate) -> Card:
     account = await accounts_service.get_account(db, user, payload.account_id)
     if account.status != AccountStatus.ACTIVE:
         raise AccountClosedError("Cannot issue a card for a closed account.")
 
     card_number = generate_card_number()
+    expiry_month, expiry_year = generate_expiry()
     card = Card(
         account_id=account.id,
+        card_number=card_number,
         last4=card_number[-4:],
+        expiry_month=expiry_month,
+        expiry_year=expiry_year,
+        cvv=generate_cvv(),
         status=CardStatus.ACTIVE,
         spending_limit_minor=payload.spending_limit_minor,
     )
@@ -35,7 +40,7 @@ async def issue_card(db: AsyncSession, user: User, payload: CardCreate) -> tuple
         entity=f"cards:{card.id}",
         metadata={"account_id": str(account.id)},
     )
-    return card, card_number
+    return card
 
 
 async def list_cards(db: AsyncSession, user: User) -> list[Card]:

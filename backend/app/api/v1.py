@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.modules.accounts.router import router as accounts_router
 from app.modules.auth.router import router as auth_router
+from app.modules.card_orders.router import router as card_orders_router
 from app.modules.cards.router import router as cards_router
 from app.modules.transactions.router import router as transactions_router
 from app.modules.transfers.router import router as transfers_router
@@ -14,4 +15,5 @@ api_router.include_router(accounts_router, prefix="/accounts", tags=["accounts"]
 api_router.include_router(transactions_router, prefix="/accounts", tags=["transactions"])
 api_router.include_router(transfers_router, prefix="/transfers", tags=["transfers"])
 api_router.include_router(cards_router, prefix="/cards", tags=["cards"])
+api_router.include_router(card_orders_router, prefix="/card-orders", tags=["card-orders"])
 api_router.include_router(users_router, prefix="/users", tags=["users"])

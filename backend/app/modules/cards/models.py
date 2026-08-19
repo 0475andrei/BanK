@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import BigInteger, ForeignKey, String
+from sqlalchemy import BigInteger, ForeignKey, SmallInteger, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Enum as SAEnum
 from sqlalchemy.types import Uuid
@@ -16,11 +16,12 @@ class CardStatus(enum.StrEnum):
 
 
 class Card(UUIDPKMixin, CreatedAtMixin, Base):
-    """Only last4 is persisted - the full number (generated in
-    card_numbers.py) is returned once, at issue time, and never stored.
-    "Deleting" a card in the API is really cancelling it (status ->
-    cancelled) - rows are never hard-deleted, same append-only spirit as
-    the rest of the schema."""
+    """The full number, expiry, and CVV (generated in card_numbers.py) are
+    persisted and stay viewable from the cards list - see the docstring in
+    card_numbers.py for why that's a deliberate departure from real-world
+    PAN/CVV storage practice. "Deleting" a card in the API is really
+    cancelling it (status -> cancelled) - rows are never hard-deleted, same
+    append-only spirit as the rest of the schema."""
 
     __tablename__ = "cards"
 
@@ -30,7 +31,11 @@ class Card(UUIDPKMixin, CreatedAtMixin, Base):
         nullable=False,
         index=True,
     )
+    card_number: Mapped[str] = mapped_column(String(19), nullable=False)
     last4: Mapped[str] = mapped_column(String(4), nullable=False)
+    expiry_month: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    expiry_year: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    cvv: Mapped[str] = mapped_column(String(4), nullable=False)
     status: Mapped[CardStatus] = mapped_column(
         SAEnum(
             CardStatus,

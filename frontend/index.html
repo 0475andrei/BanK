@@ -31,6 +31,10 @@
                     <i data-lucide="trending-up" class="icon"></i>
                     <span>Investiții & Bugetare</span>
                 </button>
+                <button class="nav-item" data-view="payments">
+                    <i data-lucide="landmark" class="icon"></i>
+                    <span>Plăți</span>
+                </button>
             </nav>
         </aside>
 
@@ -146,7 +150,7 @@
                     </div>
                     <div class="cards-actions">
                         <button class="btn btn-primary" id="open-new-card-btn"><i data-lucide="sparkles" class="icon"></i> Generează Card Virtual</button>
-                        <button class="btn btn-secondary" disabled title="Emiterea de carduri fizice nu este disponibilă în acest demo"><i data-lucide="credit-card" class="icon"></i> Comandă Card Fizic</button>
+                        <button class="btn btn-secondary" id="open-card-order-btn"><i data-lucide="credit-card" class="icon"></i> Comandă Card Fizic</button>
                     </div>
                 </section>
 
@@ -196,6 +200,35 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                <!-- Payments (external IBAN transfers) View -->
+                <section id="view-payments" class="view hidden">
+                    <h2 class="view-title">Plăți <span class="demo-badge">În curând</span></h2>
+                    <div class="card-limits">
+                        <h3>Trimite către un cont IBAN</h3>
+                        <form id="payments-form">
+                            <label class="field-label" for="payments-account">Din contul</label>
+                            <select class="field-input" id="payments-account" disabled></select>
+
+                            <label class="field-label" for="payments-iban">IBAN destinatar</label>
+                            <input class="field-input" type="text" id="payments-iban" disabled placeholder="RO49 AAAA 1B31 0075 9384 0000">
+
+                            <label class="field-label" for="payments-beneficiary">Nume beneficiar</label>
+                            <input class="field-input" type="text" id="payments-beneficiary" disabled>
+
+                            <label class="field-label" for="payments-amount">Sumă</label>
+                            <input class="field-input" type="number" id="payments-amount" min="0.01" step="0.01" disabled>
+
+                            <label class="field-label" for="payments-description">Descriere <span class="field-optional">(opțional)</span></label>
+                            <input class="field-input" type="text" id="payments-description" disabled>
+
+                            <div class="modal-actions">
+                                <button type="submit" class="btn btn-primary" disabled title="Plățile către alte bănci vor fi disponibile după integrarea cu baza de date Supabase a colegului">Trimite plata</button>
+                            </div>
+                        </form>
+                        <p class="card-reveal-note">Această secțiune se va conecta la implementarea unui coleg pe Supabase, unde plățile ajung într-un cont identificat prin IBAN. Formularul e pregătit, dar trimiterea e dezactivată până când acea integrare e gata.</p>
                     </div>
                 </section>
             </div>
@@ -281,18 +314,41 @@
         </div>
     </div>
 
-    <!-- Card number reveal modal (shown once, right after issuing) -->
-    <div class="modal-overlay" id="card-reveal-modal" hidden>
+    <!-- Card order modal -->
+    <div class="modal-overlay" id="card-order-modal" hidden>
         <div class="modal">
             <div class="modal-header">
-                <h3>Cardul tău e gata</h3>
-                <button class="modal-close" id="close-card-reveal-modal"><i data-lucide="x"></i></button>
+                <h3>Comandă Card Fizic</h3>
+                <button class="modal-close" id="close-card-order-modal"><i data-lucide="x"></i></button>
             </div>
-            <div class="card-reveal-number" id="card-reveal-number"></div>
-            <p class="card-reveal-note">Acesta este singurul moment în care numărul complet este afișat - backend-ul nu îl salvează, doar ultimele 4 cifre.</p>
-            <div class="modal-actions">
-                <button type="button" class="btn btn-primary" id="close-card-reveal">Am notat numărul</button>
-            </div>
+            <div class="auth-error" id="card-order-error" hidden></div>
+            <form id="card-order-form">
+                <label class="field-label" for="card-order-account">Cont asociat</label>
+                <select class="field-input" id="card-order-account" required></select>
+
+                <label class="field-label" for="card-order-name">Nume complet</label>
+                <input class="field-input" type="text" id="card-order-name" required placeholder="ex. Popescu Andrei">
+
+                <label class="field-label" for="card-order-phone">Telefon</label>
+                <input class="field-input" type="tel" id="card-order-phone" required placeholder="ex. 07xxxxxxxx">
+
+                <label class="field-label" for="card-order-address">Adresă</label>
+                <input class="field-input" type="text" id="card-order-address" required placeholder="Stradă, număr, bloc, apartament">
+
+                <label class="field-label" for="card-order-city">Oraș</label>
+                <input class="field-input" type="text" id="card-order-city" required>
+
+                <label class="field-label" for="card-order-postal">Cod poștal</label>
+                <input class="field-input" type="text" id="card-order-postal" required>
+
+                <label class="field-label" for="card-order-country">Țară</label>
+                <input class="field-input" type="text" id="card-order-country" required value="România">
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-card-order">Anulează</button>
+                    <button type="submit" class="btn btn-primary">Trimite comanda</button>
+                </div>
+            </form>
         </div>
     </div>
 

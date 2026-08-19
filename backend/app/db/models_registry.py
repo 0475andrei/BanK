@@ -10,6 +10,7 @@ imported here too - otherwise Alembic won't see those tables.
 from app.core.audit import AuditLog  # noqa: F401
 from app.modules.accounts.models import Account  # noqa: F401
 from app.modules.auth.models import LoginAttempt, UserSession  # noqa: F401
+from app.modules.card_orders.models import CardOrder  # noqa: F401
 from app.modules.cards.models import Card  # noqa: F401
 from app.modules.ledger.models import JournalTransaction, LedgerEntry  # noqa: F401
 from app.modules.transfers.models import Transfer  # noqa: F401
