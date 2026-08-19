@@ -9,6 +9,7 @@ import uuid
 from collections import defaultdict, deque
 
 from fastapi import FastAPI, Request, Response
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -92,7 +93,11 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "error": {
                     "code": "validation_error",
                     "message": "Invalid request.",
-                    "details": exc.errors(),
+                    # jsonable_encoder, not the raw list: for a validator that
+                    # raises ValueError, Pydantic v2 puts the exception object
+                    # itself in each error's `ctx`, which JSONResponse cannot
+                    # serialise - the 422 would become a 500.
+                    "details": jsonable_encoder(exc.errors()),
                 }
             },
         )
