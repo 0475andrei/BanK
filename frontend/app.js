@@ -28,7 +28,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (item.dataset.view === 'dashboard') {
                 refreshDashboard();
             }
+            if (item.dataset.view === 'transactions') {
+                loadAllTransactions();
+            }
         });
+    });
+
+    document.getElementById('view-all-transactions-btn')?.addEventListener('click', () => {
+        document.querySelector('.nav-item[data-view="transactions"]')?.click();
     });
 
     // Chat Logic
@@ -292,17 +299,20 @@ async function loadTransactions() {
     }
 
     try {
+        // Fetch the 5 most recent per account, then re-sort/trim across
+        // accounts - this widget only ever shows the 5 most recent overall
+        // (see loadAllTransactions for the full, grouped-by-month history).
         const perAccount = await Promise.all(
             active.map(acc => apiFetch(`/accounts/${acc.id}/transactions?limit=5`))
         );
-        const entries = perAccount.flat().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        const entries = perAccount.flat().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
 
         if (entries.length === 0) {
             list.innerHTML = '<div class="empty-state">Fără activitate încă.</div>';
             return;
         }
 
-        list.innerHTML = entries.slice(0, 8).map(entry => `
+        list.innerHTML = entries.map(entry => `
             <div class="transaction-item">
                 <div class="tx-icon ${entry.direction === 'credit' ? 'income' : 'expense'}">
                     <i data-lucide="${entry.direction === 'credit' ? 'arrow-down-left' : 'arrow-up-right'}"></i>
@@ -320,6 +330,88 @@ async function loadTransactions() {
     } catch (err) {
         list.innerHTML = `<div class="empty-state">Nu s-au putut încărca tranzacțiile: ${escapeHTML(err.message)}</div>`;
     }
+}
+
+/* --- All transactions, grouped by month --- */
+
+async function loadAllTransactions() {
+    const container = document.getElementById('all-transactions-list');
+    if (!container) return;
+
+    const active = currentAccounts.filter(a => a.status === 'active');
+    if (active.length === 0) {
+        container.innerHTML = '<div class="empty-state">Fără activitate încă.</div>';
+        return;
+    }
+
+    container.innerHTML = '<div class="loading-state">Se încarcă...</div>';
+
+    try {
+        const accountById = Object.fromEntries(active.map(a => [a.id, a]));
+        // /transactions caps at 200 per request (see transactions/service.py::MAX_LIMIT) -
+        // fine for "all" in a demo-sized account; a real full history would need pagination.
+        const perAccount = await Promise.all(
+            active.map(acc => apiFetch(`/accounts/${acc.id}/transactions?limit=200`))
+        );
+        const entries = perAccount
+            .flat()
+            .map(entry => ({ ...entry, accountName: accountById[entry.account_id]?.name }))
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        if (entries.length === 0) {
+            container.innerHTML = '<div class="empty-state">Fără activitate încă.</div>';
+            return;
+        }
+
+        renderTransactionsByMonth(container, entries);
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state">Nu s-au putut încărca tranzacțiile: ${escapeHTML(err.message)}</div>`;
+    }
+}
+
+function monthGroupKey(isoString) {
+    const d = new Date(isoString);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthGroupLabel(isoString) {
+    const label = new Date(isoString).toLocaleDateString('ro-RO', { month: 'long', year: 'numeric' });
+    return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function renderTransactionsByMonth(container, entries) {
+    // Entries already sorted newest-first, so insertion order into the Map
+    // naturally puts the most recent month first too.
+    const groups = new Map();
+    for (const entry of entries) {
+        const key = monthGroupKey(entry.created_at);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(entry);
+    }
+
+    container.innerHTML = [...groups.values()].map(monthEntries => `
+        <div class="month-group">
+            <h3 class="month-header">${monthGroupLabel(monthEntries[0].created_at)}</h3>
+            <div class="transactions-list">
+                ${monthEntries.map(entry => `
+                    <div class="transaction-item">
+                        <div class="tx-icon ${entry.direction === 'credit' ? 'income' : 'expense'}">
+                            <i data-lucide="${entry.direction === 'credit' ? 'arrow-down-left' : 'arrow-up-right'}"></i>
+                        </div>
+                        <div class="tx-details">
+                            <h4>${escapeHTML(entry.description)}</h4>
+                            <span class="time">${formatDateTime(entry.created_at)}${entry.accountName ? ' · ' + escapeHTML(entry.accountName) : ''}</span>
+                        </div>
+                        <div class="tx-amount ${entry.direction === 'credit' ? 'positive' : 'negative'}">
+                            ${entry.direction === 'credit' ? '+' : '-'} ${formatMoney(entry.amount_minor, entry.currency)}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+
+    if (window.lucide) lucide.createIcons();
 }
 
 function formatDateTime(isoString) {

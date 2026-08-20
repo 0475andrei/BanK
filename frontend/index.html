@@ -23,6 +23,10 @@
                     <i data-lucide="sparkles" class="icon"></i>
                     <span>Asistent AI & Proiecții</span>
                 </button>
+                <button class="nav-item" data-view="transactions">
+                    <i data-lucide="history" class="icon"></i>
+                    <span>Toate Tranzacțiile</span>
+                </button>
                 <button class="nav-item" data-view="cards">
                     <i data-lucide="credit-card" class="icon"></i>
                     <span>Cardurile Mele</span>
@@ -80,11 +84,22 @@
                         </div>
 
                         <div class="transactions-section">
-                            <h2 class="section-title">Tranzacții Recente</h2>
+                            <div class="section-header-row">
+                                <h2 class="section-title">Tranzacții Recente</h2>
+                                <button class="link-btn" id="view-all-transactions-btn">Vezi toate</button>
+                            </div>
                             <div class="transactions-list" id="transactions-list">
                                 <div class="loading-state">Se încarcă...</div>
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                <!-- All Transactions View (grouped by month) -->
+                <section id="view-transactions" class="view hidden">
+                    <h2 class="view-title">Toate Tranzacțiile</h2>
+                    <div id="all-transactions-list">
+                        <div class="loading-state">Se încarcă...</div>
                     </div>
                 </section>
 
