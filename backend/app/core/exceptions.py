@@ -115,3 +115,35 @@ class LoginRateLimitedError(AppError):
     status_code = 429
     error_code = "login_rate_limited"
     default_message = "Too many failed login attempts. Try again later."
+
+
+class AIServiceUnavailableError(AppError):
+    """The AI layer could not be constructed - typically missing credentials.
+
+    Deliberately vague to the caller: which piece of configuration is absent is
+    an operator's concern, not something to advertise over HTTP.
+    """
+
+    status_code = 503
+    error_code = "ai_service_unavailable"
+    default_message = "AI service unavailable"
+
+
+class AIProviderError(AppError):
+    """The upstream model call failed (network, auth, quota, ...)."""
+
+    status_code = 502
+    error_code = "ai_provider_error"
+    default_message = "AI model request failed"
+
+
+class AIProviderMisconfiguredError(AppError):
+    """AI_PROVIDER names something the app has no implementation for.
+
+    A deployment mistake rather than a caller mistake, so it is a 500 - but the
+    message names the valid values, since only an operator will ever see it.
+    """
+
+    status_code = 500
+    error_code = "ai_provider_misconfigured"
+    default_message = "AI provider is misconfigured"

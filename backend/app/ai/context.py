@@ -8,17 +8,24 @@ and the Context is the only thing allowed to answer.
 `Context` is frozen: nothing downstream — agent, tool, or model-authored
 argument — can widen it mid-loop.
 
-Person A owns real auth. When `core/dependencies.get_current_user` exists, the
-only thing that changes is who builds this object (see `dev_context` below);
-agents and tools are untouched.
+Real auth exists now (`core/dependencies.get_current_user`), so the only thing
+that changes per caller is who builds this object: `build_context_for_user` for
+a real authenticated request, `dev_context` for the CLI. Agents and tools are
+untouched either way — they only ever see a `Context`.
 """
 
 from __future__ import annotations
 
 import os
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+if TYPE_CHECKING:
+    from supabase import AsyncClient
+
+    from app.modules.users.schemas import UserRead
 
 
 class IdentityError(Exception):
@@ -92,22 +99,22 @@ class Context(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# DEV ONLY — delete once real auth exists.
+# DEV ONLY — the CLI's identity source.
 # ---------------------------------------------------------------------------
-# There is no auth yet (Person A owns it), so the CLI supplies a fixed identity.
-# This is the ONE place that knows where identity comes from. Swapping it for
-# the real thing is a one-line change here:
-#
-#     def build_context(user = Depends(get_current_user)) -> Context:
-#         return Context(user_id=str(user.id), account_ids=user.account_ids)
-#
-# Nothing in agents/ or tools/ changes when that happens.
+# The CLI (`python -m app.ai.chat`) has no session cookie to authenticate with,
+# so it supplies a fixed identity instead. Real HTTP requests must not use this
+# — they go through `build_context_for_user` below, which verifies the accounts
+# against the database.
 _DEV_USER_ID = "dev-user-0001"
 _DEV_ACCOUNT_IDS = ("acc-checking-001", "acc-savings-002")
 
 
 def dev_context() -> Context:
     """A local identity for the CLI. NOT for production use.
+
+    DEV ONLY. Do not use inside an HTTP request handler. For real requests, use
+    `build_context_for_user(user, supabase)`, which derives the account
+    allowlist from the database rather than trusting whatever was exported.
 
     `scripts/seed_dev_user.py` creates a real user + funded account and prints
     their ids; exporting DEV_USER_ID / DEV_ACCOUNT_IDS (comma-separated) makes
@@ -129,6 +136,38 @@ def dev_context() -> Context:
 def build_context(user_id: str, account_ids: Sequence[str]) -> Context:
     """Explicit construction point for callers that already know the user.
 
-    The future `/chat` endpoint calls this with values from `get_current_user`.
+    Takes both values as given. Callers holding an authenticated user but no
+    account list should use `build_context_for_user` instead, which looks the
+    accounts up rather than trusting a caller-supplied list.
     """
     return Context(user_id=user_id, account_ids=tuple(account_ids))
+
+
+async def build_context_for_user(user: UserRead, supabase: AsyncClient) -> Context:
+    """Build a verified `Context` for an already-authenticated user.
+
+    THE trusted way to build a Context for a real HTTP request. `user` must
+    come from `core.dependencies.get_current_user` — i.e. it is the product of
+    a valid session cookie, never of anything the client (or the model) sent in
+    a request body.
+
+    Identity is taken from `user.id` and the ownership allowlist is derived
+    from the database, so `account_ids` reflects what this user actually owns
+    at this moment. Nothing here reads client input, and nothing here reads
+    model output.
+
+    A user with no accounts is a legitimate state (they just registered), so
+    this returns a valid Context with an empty `account_ids` rather than
+    raising. Tools that need an account then fail cleanly and specifically via
+    `NoAccountAvailableError` when they call `resolve_account`.
+    """
+    # Imported here, not at module scope, to keep `app.ai` importable without
+    # dragging in the banking modules and the Supabase SDK - the agent/tool
+    # tests rely on this module staying dependency-light.
+    from app.modules.accounts import service as accounts_service
+
+    accounts = await accounts_service.list_accounts(supabase, user)
+    return Context(
+        user_id=str(user.id),
+        account_ids=tuple(str(account["id"]) for account in accounts),
+    )

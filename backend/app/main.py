@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -13,6 +14,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    # uvicorn's --log-level only configures its own loggers. Everything the app
+    # logs via logging.getLogger(__name__) propagates to the root logger, which
+    # otherwise has no handler and sits at WARNING - silently dropping the
+    # agent's INFO tool-loop trace. This is the one place that fixes that.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+
     app = FastAPI(title="BanK API", lifespan=lifespan)
 
     configure_middleware(app)

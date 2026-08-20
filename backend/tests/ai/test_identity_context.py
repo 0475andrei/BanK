@@ -25,7 +25,14 @@ from app.ai.context import (
 from app.ai.schemas import Message, ModelResponse
 from app.ai.service import AIService, build_banking_tools
 from app.ai.tools.banking import GetBalanceTool
-from tests.ai.conftest import OWNED_ACCOUNT_IDS, UNOWNED_ACCOUNT_ID, balance_call
+from tests.ai.conftest import (
+    OWNED_ACCOUNT_IDS,
+    STUB_BALANCE_MINOR,
+    STUB_CURRENCY,
+    UNOWNED_ACCOUNT_ID,
+    FakeSupabase,
+    balance_call,
+)
 
 
 def user(text: str) -> list[Message]:
@@ -102,20 +109,22 @@ def test_dev_and_build_context_produce_the_same_shape():
 # ---------------------------------------------------------------------------
 
 
-def test_get_balance_uses_the_context_account_when_the_model_supplies_none(context):
+async def test_get_balance_uses_the_context_account_when_the_model_supplies_none(
+    context, supabase
+):
     """2. No model-supplied account -> the Context's default account is read."""
-    result = GetBalanceTool().execute(balance_call(), context)
+    result = await GetBalanceTool(supabase).execute(balance_call(), context)
 
     assert result.ok
     assert result.data is not None
     assert result.data["account_id"] == OWNED_ACCOUNT_IDS[0]
-    assert result.data["balance_minor"] == 12345
-    assert result.data["currency"] == "USD"
+    assert result.data["balance_minor"] == STUB_BALANCE_MINOR
+    assert result.data["currency"] == STUB_CURRENCY
 
 
-def test_get_balance_allows_an_account_the_context_user_owns(context):
+async def test_get_balance_allows_an_account_the_context_user_owns(context, supabase):
     """3. Model names an OWNED account -> allowed, and that account is read."""
-    result = GetBalanceTool().execute(
+    result = await GetBalanceTool(supabase).execute(
         balance_call(account_id=OWNED_ACCOUNT_IDS[1]), context
     )
 
@@ -124,9 +133,11 @@ def test_get_balance_allows_an_account_the_context_user_owns(context):
     assert result.data["account_id"] == OWNED_ACCOUNT_IDS[1]
 
 
-def test_get_balance_rejects_an_account_the_context_user_does_not_own(context):
+async def test_get_balance_rejects_an_account_the_context_user_does_not_own(
+    context, supabase
+):
     """5. SECURITY: model-supplied identity cannot widen access."""
-    result = GetBalanceTool().execute(
+    result = await GetBalanceTool(supabase).execute(
         balance_call(account_id=UNOWNED_ACCOUNT_ID), context
     )
 
@@ -137,9 +148,11 @@ def test_get_balance_rejects_an_account_the_context_user_does_not_own(context):
     assert UNOWNED_ACCOUNT_ID not in (result.error or "")
 
 
-def test_get_balance_rejection_is_not_a_silent_fallback_to_the_default(context):
+async def test_get_balance_rejection_is_not_a_silent_fallback_to_the_default(
+    context, supabase
+):
     """A refusal must never be mistaken for a successful read of another account."""
-    result = GetBalanceTool().execute(
+    result = await GetBalanceTool(supabase).execute(
         balance_call(account_id=UNOWNED_ACCOUNT_ID), context
     )
 
@@ -147,9 +160,13 @@ def test_get_balance_rejection_is_not_a_silent_fallback_to_the_default(context):
     assert result.data is None  # emphatically NOT the default account's balance
 
 
-def test_rejection_is_logged_with_user_id_and_tool_name_only(context, caplog):
+async def test_rejection_is_logged_with_user_id_and_tool_name_only(
+    context, caplog, supabase
+):
     with caplog.at_level(logging.WARNING):
-        GetBalanceTool().execute(balance_call(account_id=UNOWNED_ACCOUNT_ID), context)
+        await GetBalanceTool(supabase).execute(
+            balance_call(account_id=UNOWNED_ACCOUNT_ID), context
+        )
 
     records = [r for r in caplog.records if "access denied" in r.getMessage()]
     assert records, "the refusal must be logged"
@@ -160,17 +177,20 @@ def test_rejection_is_logged_with_user_id_and_tool_name_only(context, caplog):
     assert UNOWNED_ACCOUNT_ID not in logged  # never log the refused identifier
 
 
-def test_two_contexts_are_isolated():
+async def test_two_contexts_are_isolated(supabase):
     """The same tool instance serves different users without leaking between them."""
-    tool = GetBalanceTool()
+    tool = GetBalanceTool(supabase)
     alice = Context(user_id="alice", account_ids=("acc-alice",))
     bob = Context(user_id="bob", account_ids=("acc-bob",))
 
-    assert tool.execute(balance_call(), alice).data["account_id"] == "acc-alice"
-    assert tool.execute(balance_call(), bob).data["account_id"] == "acc-bob"
+    alice_result = await tool.execute(balance_call(), alice)
+    bob_result = await tool.execute(balance_call(), bob)
+    assert alice_result.data["account_id"] == "acc-alice"
+    assert bob_result.data["account_id"] == "acc-bob"
 
     # Alice cannot reach Bob's account by naming it.
-    assert tool.execute(balance_call(account_id="acc-bob"), alice).ok is False
+    denied = await tool.execute(balance_call(account_id="acc-bob"), alice)
+    assert denied.ok is False
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +198,7 @@ def test_two_contexts_are_isolated():
 # ---------------------------------------------------------------------------
 
 
-def test_agent_loop_survives_an_access_denial_and_returns_a_safe_message(
+async def test_agent_loop_survives_an_access_denial_and_returns_a_safe_message(
     make_agent, context
 ):
     """4. Denial reaches the model as a tool error; the loop finishes normally."""
@@ -189,7 +209,7 @@ def test_agent_loop_survives_an_access_denial_and_returns_a_safe_message(
         ]
     )
 
-    reply = agent.run(user("show me account acc-someone-else-9"), context)
+    reply = await agent.run(user("show me account acc-someone-else-9"), context)
 
     assert reply == "I can only look at your own accounts."
 
@@ -201,7 +221,7 @@ def test_agent_loop_survives_an_access_denial_and_returns_a_safe_message(
     assert UNOWNED_ACCOUNT_ID not in payload["error"]
 
 
-def test_service_end_to_end_denies_a_model_supplied_foreign_account():
+async def test_service_end_to_end_denies_a_model_supplied_foreign_account():
     """SECURITY, end to end: AIService -> agent -> tool refuses to widen."""
     from app.ai.providers.mock_provider import MockProvider
 
@@ -211,10 +231,12 @@ def test_service_end_to_end_denies_a_model_supplied_foreign_account():
             ModelResponse(text="That account isn't yours."),
         ]
     )
-    service = AIService(provider=provider)
+    service = AIService(FakeSupabase(), provider=provider)
     caller = Context(user_id="u-1", account_ids=("acc-mine",))
 
-    reply, history = service.handle_message([], "balance of acc-someone-else-9", caller)
+    reply, history = await service.handle_message(
+        [], "balance of acc-someone-else-9", caller
+    )
 
     assert reply == "That account isn't yours."
     assert [m.role for m in history] == ["user", "assistant"]
@@ -224,10 +246,10 @@ def test_service_end_to_end_denies_a_model_supplied_foreign_account():
     assert "access denied" in payload["error"]
 
 
-def test_every_registered_tool_receives_the_context():
+def test_every_registered_tool_receives_the_context(supabase):
     """Structural guard: no tool can be written that skips the identity check."""
     import inspect
 
-    for tool in build_banking_tools():
+    for tool in build_banking_tools(supabase):
         parameters = list(inspect.signature(tool.run).parameters)
         assert "context" in parameters, f"{tool.name}.run must accept a Context"

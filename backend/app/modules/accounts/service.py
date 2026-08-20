@@ -81,12 +81,20 @@ async def open_account(supabase: AsyncClient, user: UserRead, name: str, currenc
     return account
 
 
-async def _get_owned_account(supabase: AsyncClient, user: UserRead, account_id: uuid.UUID) -> dict:
+async def get_account_for_owner(
+    supabase: AsyncClient, user_id: uuid.UUID | str, account_id: uuid.UUID | str
+) -> dict:
+    """Ownership-checked account read for callers holding a bare user id.
+
+    The AI layer's `Context` carries a user id string, not a `UserRead`, so it
+    needs this entry point. `_get_owned_account` is the same check for the
+    banking modules, which do have the full user.
+    """
     resp = (
         await supabase.table("accounts")
         .select("*")
         .eq("id", str(account_id))
-        .eq("user_id", str(user.id))
+        .eq("user_id", str(user_id))
         .maybe_single()
         .execute()
     )
@@ -96,6 +104,10 @@ async def _get_owned_account(supabase: AsyncClient, user: UserRead, account_id: 
         # caller's - don't leak which one it is.
         raise AccountNotFoundError()
     return account
+
+
+async def _get_owned_account(supabase: AsyncClient, user: UserRead, account_id: uuid.UUID) -> dict:
+    return await get_account_for_owner(supabase, user.id, account_id)
 
 
 async def get_account(supabase: AsyncClient, user: UserRead, account_id: uuid.UUID) -> dict:

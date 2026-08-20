@@ -32,7 +32,7 @@ class Tool(ABC):
     read_only: ClassVar[bool] = True
 
     @abstractmethod
-    def run(self, validated_input: BaseModel, context: Context) -> ToolResult:
+    async def run(self, validated_input: BaseModel, context: Context) -> ToolResult:
         """Do the work.
 
         `validated_input` has passed `input_schema` but is still model-authored
@@ -41,7 +41,7 @@ class Tool(ABC):
         """
         raise NotImplementedError
 
-    def execute(self, call: ToolCall, context: Context) -> ToolResult:
+    async def execute(self, call: ToolCall, context: Context) -> ToolResult:
         """Validate the model's arguments, then run. Never raises."""
         try:
             validated = self.input_schema.model_validate(call.arguments)
@@ -53,7 +53,7 @@ class Tool(ABC):
             )
 
         try:
-            result = self.run(validated, context)
+            result = await self.run(validated, context)
         except IdentityError as exc:
             # Caught before the generic handler below so the model gets a clear,
             # actionable refusal instead of "tool execution failed". The message

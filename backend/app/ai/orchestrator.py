@@ -57,7 +57,7 @@ class Orchestrator:
             raise RuntimeError("Orchestrator has no agents registered")
         return self._agents[self._default]
 
-    def dispatch(
+    async def dispatch(
         self,
         messages: Sequence[Message],
         user_message: str,
@@ -69,4 +69,4 @@ class Orchestrator:
         `Context`, so there is no way to reach a tool without one.
         """
         agent = self.route(user_message, context)
-        return agent.run(messages, context)
+        return await agent.run(messages, context)

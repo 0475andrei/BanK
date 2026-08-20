@@ -7,6 +7,7 @@ calls `handle_message` and nothing else.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from app.ai.agents.banking_agent import BankingAgent
 from app.ai.context import Context
@@ -16,13 +17,17 @@ from app.ai.schemas import Message
 from app.ai.tools.banking import GetBalanceTool
 from app.ai.tools.registry import ToolRegistry
 
+if TYPE_CHECKING:
+    from supabase import AsyncClient
 
-def build_banking_tools() -> ToolRegistry:
+
+def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
     """The read-only tools the banking agent is allowed to call.
 
-    STUB tools only for now — see `tools/banking/get_balance.py`.
+    `supabase` is handed to every tool that reads data; the tools hold it for
+    their lifetime (the client is a stateless HTTP client, safe to share).
     """
-    return ToolRegistry([GetBalanceTool()])
+    return ToolRegistry([GetBalanceTool(supabase)])
 
 
 class AIService:
@@ -30,6 +35,7 @@ class AIService:
 
     def __init__(
         self,
+        supabase: AsyncClient,
         provider: ModelProvider | None = None,
         orchestrator: Orchestrator | None = None,
     ) -> None:
@@ -40,14 +46,14 @@ class AIService:
             provider = AzureOpenAIProvider()
         self._provider = provider
         self._orchestrator = orchestrator or Orchestrator(
-            [BankingAgent(provider, build_banking_tools())]
+            [BankingAgent(provider, build_banking_tools(supabase))]
         )
 
     @property
     def orchestrator(self) -> Orchestrator:
         return self._orchestrator
 
-    def handle_message(
+    async def handle_message(
         self,
         history: Sequence[Message],
         user_message: str,
@@ -63,5 +69,5 @@ class AIService:
         persistence to the `conversations` / `messages` tables comes later.
         """
         conversation = [*history, Message(role="user", content=user_message)]
-        reply = self._orchestrator.dispatch(conversation, user_message, context)
+        reply = await self._orchestrator.dispatch(conversation, user_message, context)
         return reply, [*conversation, Message(role="assistant", content=reply)]
