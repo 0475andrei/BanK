@@ -18,34 +18,37 @@ def _service(script: list[ModelResponse]) -> tuple[AIService, MockProvider]:
 
 
 def test_route_always_returns_the_banking_agent(context):
-    """5a. Routing is trivial for now and must resolve to the banking agent."""
+    """5a. With one agent registered, every message resolves to it - whether a
+    rule matched it or not."""
     provider = MockProvider([ModelResponse(text="ok")])
     agent = BankingAgent(provider, build_banking_tools(FakeSupabase()))
     orchestrator = Orchestrator([agent])
 
     for message in ["what's my balance?", "hello", ""]:
-        routed = orchestrator.route(message, context)
-        assert routed is agent
-        assert routed.name == "banking"
+        decision = orchestrator.route(message, context)
+        assert decision.agent_name == "banking"
+        assert orchestrator.get(decision.agent_name) is agent
 
 
 def test_service_wires_a_default_orchestrator_with_the_banking_agent(context):
     service, _ = _service([ModelResponse(text="ok")])
 
     assert service.orchestrator.names() == ["banking"]
-    assert isinstance(service.orchestrator.route("anything", context), BankingAgent)
+    decision = service.orchestrator.route("anything", context)
+    assert isinstance(service.orchestrator.get(decision.agent_name), BankingAgent)
 
 
 async def test_dispatch_routes_and_runs_with_the_context(context):
     provider = MockProvider([ModelResponse(text="routed")])
     orchestrator = Orchestrator([BankingAgent(provider, build_banking_tools(FakeSupabase()))])
 
-    reply, trace = await orchestrator.dispatch(
+    reply, trace, routing = await orchestrator.dispatch(
         [Message(role="user", content="hi")], "hi", context
     )
 
     assert reply == "routed"
     assert trace == []
+    assert routing.agent_name == "banking"
 
 
 async def test_service_handle_message_end_to_end_with_tool_call(context):
@@ -57,7 +60,7 @@ async def test_service_handle_message_end_to_end_with_tool_call(context):
         ]
     )
 
-    reply, history = await service.handle_message([], "what's my balance?", context)
+    reply, history, _ = await service.handle_message([], "what's my balance?", context)
 
     assert reply == "You have $123.45."
     assert provider.call_count == 2
@@ -95,8 +98,8 @@ async def test_service_threads_history_across_turns(context):
         [ModelResponse(text="first"), ModelResponse(text="second")]
     )
 
-    _, history = await service.handle_message([], "one", context)
-    reply, history = await service.handle_message(history, "two", context)
+    _, history, _ = await service.handle_message([], "one", context)
+    reply, history, _ = await service.handle_message(history, "two", context)
 
     assert reply == "second"
     assert [m.role for m in history] == ["user", "assistant", "user", "assistant"]

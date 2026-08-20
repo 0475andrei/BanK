@@ -93,17 +93,28 @@ async def chat(
 
     service = AIService(supabase, provider=provider)
     try:
-        reply, updated_history = await service.handle_message(history, payload.message, context)
+        reply, updated_history, routing = await service.handle_message(
+            history, payload.message, context
+        )
     except ProviderError as exc:
         raise AIProviderError() from exc
 
     # handle_message returns `history` unchanged plus every new turn (the user
     # message, any tool-call/tool-result trace, the final reply) appended in
     # order - everything already in `history` is already stored.
-    for message in updated_history[len(history) :]:
-        await conversations_service.append_message(supabase, conversation_id, message)
+    new_messages = updated_history[len(history) :]
+    for message in new_messages:
+        # The routing decision describes the turn the agent produced, so it is
+        # attached to that final assistant message and to nothing else.
+        is_final_reply = message is new_messages[-1]
+        await conversations_service.append_message(
+            supabase,
+            conversation_id,
+            message,
+            routing=routing if is_final_reply else None,
+        )
 
-    return ChatResponse(reply=reply, conversation_id=conversation_id)
+    return ChatResponse(reply=reply, conversation_id=conversation_id, routing=routing)
 
 
 @router.get("/conversations", response_model=list[ConversationRead])
