@@ -10,6 +10,7 @@ from app.modules.auth.schemas import (
     LoginRequest,
     RegisterRequest,
     ResetPasswordRequest,
+    VerifyResetCodeRequest,
 )
 from app.modules.users.schemas import UserRead
 
@@ -55,6 +56,14 @@ async def forgot_password(
     supabase: AsyncClient = Depends(get_supabase),
 ) -> None:
     await service.request_password_reset(supabase, payload.email)
+
+
+@router.post("/verify-reset-code", status_code=204)
+async def verify_reset_code(
+    payload: VerifyResetCodeRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+) -> None:
+    await service.verify_password_reset_code(supabase, payload.email, payload.code)
 
 
 @router.post("/reset-password", status_code=204)
