@@ -209,7 +209,7 @@ async def test_agent_loop_survives_an_access_denial_and_returns_a_safe_message(
         ]
     )
 
-    reply = await agent.run(user("show me account acc-someone-else-9"), context)
+    reply, _ = await agent.run(user("show me account acc-someone-else-9"), context)
 
     assert reply == "I can only look at your own accounts."
 
@@ -239,7 +239,7 @@ async def test_service_end_to_end_denies_a_model_supplied_foreign_account():
     )
 
     assert reply == "That account isn't yours."
-    assert [m.role for m in history] == ["user", "assistant"]
+    assert [m.role for m in history] == ["user", "assistant", "tool", "assistant"]
 
     payload = tool_payload(provider.calls[1])
     assert payload["ok"] is False

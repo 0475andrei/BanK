@@ -61,23 +61,25 @@ class BankingAgent(Agent):
         self._system_prompt = system_prompt
         self._max_iterations = max_iterations
 
-    async def run(self, messages: Sequence[Message], context: Context) -> str:
+    async def run(self, messages: Sequence[Message], context: Context) -> tuple[str, list[Message]]:
         # `context` is threaded straight to the tools and is never rendered into
         # the prompt — the model must not be able to read or restate identity.
         #
-        # Local working copy: the caller's history is never mutated, and the
-        # intermediate tool traffic stays inside this call.
+        # Local working copy: the caller's history is never mutated. Everything
+        # appended after the system prompt + caller's messages is the trace this
+        # call hands back, so the caller can persist it.
         working: list[Message] = [
             Message(role="system", content=self._system_prompt),
             *messages,
         ]
+        trace_start = len(working)
         specs = self._tools.list_specs()
 
         for iteration in range(1, self._max_iterations + 1):
             response = self._provider.complete(working, specs)
 
             if not response.wants_tools:
-                return response.text or ""
+                return response.text or "", working[trace_start:]
 
             working.append(response.to_assistant_message())
             for call in response.tool_calls:
@@ -96,7 +98,7 @@ class BankingAgent(Agent):
             self.name,
             self._max_iterations,
         )
-        return FALLBACK_REPLY
+        return FALLBACK_REPLY, working[trace_start:]
 
     async def _execute(self, call: ToolCall, context: Context) -> ToolResult:
         tool = self._tools.get(call.name)

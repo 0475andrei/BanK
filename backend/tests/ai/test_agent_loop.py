@@ -30,7 +30,8 @@ async def test_plain_text_response_is_returned_unchanged(make_agent, context):
     """1. Model answers directly, no tool call -> agent returns that text."""
     agent, provider = make_agent([ModelResponse(text="Hello, how can I help?")])
 
-    reply = await agent.run(user("hi"), context)
+    reply, trace = await agent.run(user("hi"), context)
+    assert trace == []
 
     assert reply == "Hello, how can I help?"
     assert provider.call_count == 1
@@ -45,7 +46,7 @@ async def test_tool_call_then_final_text(make_agent, context):
         ]
     )
 
-    reply = await agent.run(user("what's my balance?"), context)
+    reply, trace = await agent.run(user("what's my balance?"), context)
 
     assert reply == "Your balance is $123.45."
     assert provider.call_count == 2
@@ -69,6 +70,11 @@ async def test_tool_call_then_final_text(make_agent, context):
     # The assistant turn carrying the tool call is preserved before the result.
     assistant_turns = [m for m in second_turn if m.role == "assistant"]
     assert assistant_turns[-1].tool_calls[0].name == "get_balance"
+
+    # And the caller gets that same round trip back as a trace to persist.
+    assert [m.role for m in trace] == ["assistant", "tool"]
+    assert trace[0].tool_calls[0].name == "get_balance"
+    assert trace[1].name == "get_balance"
 
 
 async def test_tools_are_advertised_to_the_provider(make_agent, context):
@@ -103,7 +109,7 @@ async def test_invalid_tool_input_is_reported_not_raised(make_agent, context, ar
         ]
     )
 
-    reply = await agent.run(user("balance?"), context)
+    reply, _ = await agent.run(user("balance?"), context)
 
     assert reply == "I couldn't read that account."
 
@@ -120,7 +126,7 @@ async def test_unknown_tool_is_reported_not_raised(make_agent, context):
         ]
     )
 
-    reply = await agent.run(user("send money"), context)
+    reply, _ = await agent.run(user("send money"), context)
 
     assert reply == "I can't do that."
     payload = tool_payload(provider.calls[1])
@@ -136,7 +142,7 @@ async def test_max_iterations_guard_returns_fallback(make_agent, context):
         max_iterations=5,
     )
 
-    reply = await agent.run(user("loop forever"), context)
+    reply, _ = await agent.run(user("loop forever"), context)
 
     assert reply == FALLBACK_REPLY
     assert provider.call_count == 5  # stopped exactly at the cap
