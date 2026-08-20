@@ -43,3 +43,16 @@ def generate_session_token() -> str:
 def hash_session_token(token: str) -> str:
     """Deterministic hash used both to store and to look up sessions."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def generate_otp_code() -> str:
+    """A random 6-digit password-reset code, zero-padded (e.g. "004821")."""
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def hash_otp_code(code: str) -> str:
+    """Same store-a-hash-not-the-secret pattern as hash_session_token. Unlike
+    a session token, a 6-digit code has only 1e6 possibilities, so this is
+    hygiene (a DB dump doesn't hand out usable codes), not real brute-force
+    resistance - expires_at + attempts on password_reset_codes do that job."""
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()

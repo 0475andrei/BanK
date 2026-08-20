@@ -543,6 +543,39 @@ body {
 .tx-amount.positive { color: var(--income-green); }
 .tx-amount.negative { color: var(--text-main); } /* Revolut usually keeps it white/black for expense */
 
+/* --- View: All Transactions (grouped by month) --- */
+.section-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.section-header-row .section-title { margin-bottom: 0; }
+
+.link-btn {
+    background: none;
+    border: none;
+    color: var(--primary-teal);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+}
+
+.link-btn:hover { text-decoration: underline; }
+
+.month-group { margin-bottom: 30px; }
+
+.month-header {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
 /* --- View 2: AI Chat --- */
 .chat-container {
     display: flex;
@@ -1134,6 +1167,58 @@ body {
     font-size: 12px;
     color: var(--text-muted);
     margin-top: 5px;
+}
+
+.field-hint.ocr-success { color: var(--income-green); }
+.field-hint.ocr-warning { color: var(--expense-red); }
+
+.ocr-upload-box { margin-bottom: 20px; }
+
+.file-dropzone {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background-color: rgba(255, 255, 255, 0.02);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--border-radius-sm);
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.file-dropzone:hover,
+.file-dropzone:focus-visible {
+    border-color: var(--primary-teal);
+    background-color: rgba(45, 212, 191, 0.06);
+    outline: none;
+}
+
+.file-dropzone.dragover {
+    border-color: var(--primary-teal);
+    background-color: rgba(45, 212, 191, 0.1);
+}
+
+.file-dropzone-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    transform: rotate(-10deg);
+}
+
+.file-dropzone-text {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.file-dropzone-filename {
+    font-size: 13px;
+    color: var(--text-main);
+    font-weight: 500;
+}
+
+.file-dropzone-link {
+    color: var(--primary-teal);
+    font-weight: 500;
+    text-decoration: underline;
 }
 
 .field-row {

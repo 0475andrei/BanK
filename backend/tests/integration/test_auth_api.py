@@ -63,7 +63,13 @@ async def test_register_with_wrong_referral_code_is_not_bonus_eligible(client):
 
 
 async def test_register_rejects_invalid_national_id(client):
-    resp = await client.post("/api/v1/auth/register", json=_register_payload(national_id="1" * 13))
+    # 13 digits (passes the schema's length check) but month=13, which
+    # validate_national_id still rejects - the check digit alone is NOT
+    # enforced (see validate_national_id's docstring), so this can't just
+    # be a bad checksum or it would wrongly pass.
+    resp = await client.post(
+        "/api/v1/auth/register", json=_register_payload(national_id="1991301010000")
+    )
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "validation_error"
 

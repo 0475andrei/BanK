@@ -5,7 +5,13 @@ from app.config import settings
 from app.core.dependencies import get_current_user
 from app.db.supabase_client import get_supabase
 from app.modules.auth import service
-from app.modules.auth.schemas import LoginRequest, RegisterRequest
+from app.modules.auth.schemas import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    VerifyResetCodeRequest,
+)
 from app.modules.users.schemas import UserRead
 
 router = APIRouter()
@@ -42,6 +48,30 @@ async def login(
     user, token = await service.login_user(supabase, payload)
     _set_session_cookie(response, token)
     return user
+
+
+@router.post("/forgot-password", status_code=204)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+) -> None:
+    await service.request_password_reset(supabase, payload.email)
+
+
+@router.post("/verify-reset-code", status_code=204)
+async def verify_reset_code(
+    payload: VerifyResetCodeRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+) -> None:
+    await service.verify_password_reset_code(supabase, payload.email, payload.code)
+
+
+@router.post("/reset-password", status_code=204)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+) -> None:
+    await service.reset_password(supabase, payload)
 
 
 @router.post("/logout", status_code=204)

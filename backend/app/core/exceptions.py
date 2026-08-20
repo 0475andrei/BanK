@@ -39,6 +39,11 @@ class IbanNotFoundError(NotFoundError):
     default_message = "No account was found for that IBAN."
 
 
+class ConversationNotFoundError(NotFoundError):
+    error_code = "conversation_not_found"
+    default_message = "Conversation not found."
+
+
 class AccountClosedError(AppError):
     status_code = 409
     error_code = "account_closed"
@@ -115,6 +120,12 @@ class LoginRateLimitedError(AppError):
     status_code = 429
     error_code = "login_rate_limited"
     default_message = "Too many failed login attempts. Try again later."
+
+
+class InvalidResetCodeError(AppError):
+    status_code = 400
+    error_code = "invalid_reset_code"
+    default_message = "Invalid or expired reset code."
 
 
 class AIServiceUnavailableError(AppError):
