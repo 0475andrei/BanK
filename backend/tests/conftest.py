@@ -30,10 +30,12 @@ from httpx import ASGITransport
 from httpx import AsyncClient as HTTPXAsyncClient
 from supabase import AsyncClient, acreate_client
 
+from app.ai.providers.mock_provider import MockProvider
 from app.config import settings
 from app.core.security import generate_session_token, hash_password, hash_session_token
 from app.db.supabase_client import get_supabase
 from app.main import create_app
+from app.modules.chat.router import get_model_provider
 from app.modules.users.schemas import UserRead
 
 # Children-before-parents, respects the ON DELETE RESTRICT constraints.
@@ -48,6 +50,8 @@ _TABLES_IN_FK_ORDER = (
     "ledger_entries",
     "journal_transactions",
     "audit_log",
+    "messages",
+    "conversations",
     "accounts",
     "users",
 )
@@ -185,6 +189,41 @@ def account_factory(supabase: AsyncClient) -> Callable[..., Awaitable[dict]]:
         return resp.data[0]
 
     return _factory
+
+
+@pytest.fixture
+def conversation_factory(supabase: AsyncClient) -> Callable[..., Awaitable[dict]]:
+    """Inserts a bare conversation row with no messages - the only way to get
+    one via the DB directly, since the /chat endpoint always writes at least
+    one message alongside the conversation it creates."""
+
+    async def _factory(user: UserRead, title: str | None = None) -> dict:
+        resp = (
+            await supabase.table("conversations")
+            .insert({"user_id": str(user.id), "title": title})
+            .execute()
+        )
+        return resp.data[0]
+
+    return _factory
+
+
+@pytest.fixture
+def scripted_provider(app):
+    """Override the AI endpoints' provider with a script the test controls.
+
+    Shared by test_chat_api.py and test_conversations_api.py; returns a
+    callable so a test can install its own script, and hands back the
+    provider instance for assertions about what the model was shown.
+    """
+
+    def _install(*responses) -> MockProvider:
+        provider = MockProvider(list(responses), repeat_last=True)
+        app.dependency_overrides[get_model_provider] = lambda: provider
+        return provider
+
+    yield _install
+    app.dependency_overrides.pop(get_model_provider, None)
 
 
 @pytest.fixture

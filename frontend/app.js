@@ -28,7 +28,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (item.dataset.view === 'dashboard') {
                 refreshDashboard();
             }
+            if (item.dataset.view === 'transactions') {
+                loadAllTransactions();
+            }
         });
+    });
+
+    document.getElementById('view-all-transactions-btn')?.addEventListener('click', () => {
+        document.querySelector('.nav-item[data-view="transactions"]')?.click();
     });
 
     // Chat Logic
@@ -43,19 +50,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const newConversationBtn = document.getElementById('new-conversation-btn');
+    if (newConversationBtn) {
+        newConversationBtn.addEventListener('click', startNewConversation);
+    }
+
     initDashboard();
 });
 
 /* -------------------------------------------------------------------------
  * AI chat - talks to POST /chat (see backend app/modules/chat/router.py).
+ * History now lives server-side (conversations/messages tables) - the client
+ * only holds the id of the conversation in progress, so it survives a reload.
  * ------------------------------------------------------------------------- */
 
-// The conversation so far, as the backend returns it. Nothing is persisted
-// server-side yet, so this is what threads context across turns - it lives for
-// one page load only. Deliberately NOT in localStorage: these Message objects
-// carry tool calls and results, which have no business sitting in browser
-// storage.
-let chatHistory = [];
+let currentConversationId = null;
+// Guards against re-fetching conversation history every time the chat nav
+// item is clicked - it's loaded once per page load, same as the dashboard.
+let conversationHistoryLoaded = false;
+
+const CHAT_WELCOME_TEXT =
+    'Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?';
 
 const CHAT_ERRORS = {
     unavailable: 'Asistentul AI nu este disponibil momentan. Încearcă din nou.',
@@ -132,13 +147,12 @@ async function sendMessage() {
         // apiFetch already prefixes /api/v1 and sends the session cookie.
         const response = await apiFetch('/chat', {
             method: 'POST',
-            body: JSON.stringify({ message, history: chatHistory }),
+            body: JSON.stringify({ message, conversation_id: currentConversationId }),
         });
 
         typingBubble.remove();
         appendChatBubble('ai', response.reply);
-        // The server owns the transcript shape; take it back verbatim.
-        chatHistory = response.history;
+        currentConversationId = response.conversation_id;
     } catch (err) {
         typingBubble.remove();
 
@@ -152,6 +166,45 @@ async function sendMessage() {
         appendChatBubble('ai', chatErrorMessage(err), { bubbleClass: 'error' });
     } finally {
         if (sendButton) sendButton.disabled = false;
+    }
+}
+
+/** Clears the chat panel back to the empty-state welcome bubble and detaches
+ * from the current conversation - the next message starts a new one. */
+function startNewConversation() {
+    currentConversationId = null;
+    const chatMessages = document.getElementById('chat-messages');
+    chatMessages.innerHTML = '';
+    appendChatBubble('ai', CHAT_WELCOME_TEXT);
+}
+
+/** Restores the most recent conversation's transcript on page load, so a
+ * refresh doesn't lose the chat. No-ops past the first call and swallows
+ * failures - a user who never chatted, or is offline, just sees the normal
+ * empty state instead of an error. */
+async function loadLatestConversationIfAny() {
+    if (conversationHistoryLoaded) return;
+    conversationHistoryLoaded = true;
+
+    try {
+        const conversations = await apiFetch('/chat/conversations');
+        if (!conversations.length) return;
+
+        const latest = conversations[0]; // ordered by created_at desc
+        const messages = await apiFetch(`/chat/conversations/${latest.id}/messages`);
+        // Only turns with real text render as a bubble - an assistant turn that
+        // only carried tool_calls (content is null) has nothing to show.
+        const dialogue = messages.filter(
+            m => (m.role === 'user' || m.role === 'assistant') && m.content
+        );
+        if (!dialogue.length) return;
+
+        currentConversationId = latest.id;
+        const chatMessages = document.getElementById('chat-messages');
+        chatMessages.innerHTML = '';
+        dialogue.forEach(m => appendChatBubble(m.role === 'user' ? 'user' : 'ai', m.content || ''));
+    } catch {
+        // Non-fatal: chat just starts fresh, same as before this feature existed.
     }
 }
 
@@ -221,6 +274,7 @@ async function initDashboard() {
     wireProfileView(user);
 
     await refreshDashboard();
+    await loadLatestConversationIfAny();
 }
 
 async function refreshDashboard() {
@@ -292,17 +346,20 @@ async function loadTransactions() {
     }
 
     try {
+        // Fetch the 5 most recent per account, then re-sort/trim across
+        // accounts - this widget only ever shows the 5 most recent overall
+        // (see loadAllTransactions for the full, grouped-by-month history).
         const perAccount = await Promise.all(
             active.map(acc => apiFetch(`/accounts/${acc.id}/transactions?limit=5`))
         );
-        const entries = perAccount.flat().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        const entries = perAccount.flat().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
 
         if (entries.length === 0) {
             list.innerHTML = '<div class="empty-state">Fără activitate încă.</div>';
             return;
         }
 
-        list.innerHTML = entries.slice(0, 8).map(entry => `
+        list.innerHTML = entries.map(entry => `
             <div class="transaction-item">
                 <div class="tx-icon ${entry.direction === 'credit' ? 'income' : 'expense'}">
                     <i data-lucide="${entry.direction === 'credit' ? 'arrow-down-left' : 'arrow-up-right'}"></i>
@@ -320,6 +377,88 @@ async function loadTransactions() {
     } catch (err) {
         list.innerHTML = `<div class="empty-state">Nu s-au putut încărca tranzacțiile: ${escapeHTML(err.message)}</div>`;
     }
+}
+
+/* --- All transactions, grouped by month --- */
+
+async function loadAllTransactions() {
+    const container = document.getElementById('all-transactions-list');
+    if (!container) return;
+
+    const active = currentAccounts.filter(a => a.status === 'active');
+    if (active.length === 0) {
+        container.innerHTML = '<div class="empty-state">Fără activitate încă.</div>';
+        return;
+    }
+
+    container.innerHTML = '<div class="loading-state">Se încarcă...</div>';
+
+    try {
+        const accountById = Object.fromEntries(active.map(a => [a.id, a]));
+        // /transactions caps at 200 per request (see transactions/service.py::MAX_LIMIT) -
+        // fine for "all" in a demo-sized account; a real full history would need pagination.
+        const perAccount = await Promise.all(
+            active.map(acc => apiFetch(`/accounts/${acc.id}/transactions?limit=200`))
+        );
+        const entries = perAccount
+            .flat()
+            .map(entry => ({ ...entry, accountName: accountById[entry.account_id]?.name }))
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        if (entries.length === 0) {
+            container.innerHTML = '<div class="empty-state">Fără activitate încă.</div>';
+            return;
+        }
+
+        renderTransactionsByMonth(container, entries);
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state">Nu s-au putut încărca tranzacțiile: ${escapeHTML(err.message)}</div>`;
+    }
+}
+
+function monthGroupKey(isoString) {
+    const d = new Date(isoString);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthGroupLabel(isoString) {
+    const label = new Date(isoString).toLocaleDateString('ro-RO', { month: 'long', year: 'numeric' });
+    return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function renderTransactionsByMonth(container, entries) {
+    // Entries already sorted newest-first, so insertion order into the Map
+    // naturally puts the most recent month first too.
+    const groups = new Map();
+    for (const entry of entries) {
+        const key = monthGroupKey(entry.created_at);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(entry);
+    }
+
+    container.innerHTML = [...groups.values()].map(monthEntries => `
+        <div class="month-group">
+            <h3 class="month-header">${monthGroupLabel(monthEntries[0].created_at)}</h3>
+            <div class="transactions-list">
+                ${monthEntries.map(entry => `
+                    <div class="transaction-item">
+                        <div class="tx-icon ${entry.direction === 'credit' ? 'income' : 'expense'}">
+                            <i data-lucide="${entry.direction === 'credit' ? 'arrow-down-left' : 'arrow-up-right'}"></i>
+                        </div>
+                        <div class="tx-details">
+                            <h4>${escapeHTML(entry.description)}</h4>
+                            <span class="time">${formatDateTime(entry.created_at)}${entry.accountName ? ' · ' + escapeHTML(entry.accountName) : ''}</span>
+                        </div>
+                        <div class="tx-amount ${entry.direction === 'credit' ? 'positive' : 'negative'}">
+                            ${entry.direction === 'credit' ? '+' : '-'} ${formatMoney(entry.amount_minor, entry.currency)}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+
+    if (window.lucide) lucide.createIcons();
 }
 
 function formatDateTime(isoString) {

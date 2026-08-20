@@ -62,11 +62,12 @@ class Orchestrator:
         messages: Sequence[Message],
         user_message: str,
         context: Context,
-    ) -> str:
+    ) -> tuple[str, list[Message]]:
         """Route, then run the chosen agent with the trusted context.
 
         Single funnel: every path from the service to an agent carries a
-        `Context`, so there is no way to reach a tool without one.
+        `Context`, so there is no way to reach a tool without one. Returns
+        `(reply, trace)` exactly as the agent produced it - see `Agent.run`.
         """
         agent = self.route(user_message, context)
         return await agent.run(messages, context)

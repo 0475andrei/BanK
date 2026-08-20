@@ -40,11 +40,12 @@ async def test_dispatch_routes_and_runs_with_the_context(context):
     provider = MockProvider([ModelResponse(text="routed")])
     orchestrator = Orchestrator([BankingAgent(provider, build_banking_tools(FakeSupabase()))])
 
-    reply = await orchestrator.dispatch(
+    reply, trace = await orchestrator.dispatch(
         [Message(role="user", content="hi")], "hi", context
     )
 
     assert reply == "routed"
+    assert trace == []
 
 
 async def test_service_handle_message_end_to_end_with_tool_call(context):
@@ -61,11 +62,14 @@ async def test_service_handle_message_end_to_end_with_tool_call(context):
     assert reply == "You have $123.45."
     assert provider.call_count == 2
 
-    # Returned history is the user turn + the final assistant reply. The
-    # intermediate tool traffic stays inside the agent.
-    assert [m.role for m in history] == ["user", "assistant"]
+    # Returned history now carries the whole round trip: the user turn, the
+    # assistant's tool-call request, the tool result, and the final reply -
+    # everything a caller needs to persist and replay the transcript.
+    assert [m.role for m in history] == ["user", "assistant", "tool", "assistant"]
     assert history[0].content == "what's my balance?"
-    assert history[1].content == "You have $123.45."
+    assert history[1].tool_calls[0].name == "get_balance"
+    assert history[2].name == "get_balance"
+    assert history[-1].content == "You have $123.45."
 
 
 async def test_service_reads_the_context_account_end_to_end(context):
