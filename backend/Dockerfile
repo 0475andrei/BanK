@@ -4,6 +4,13 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# tesseract-ocr-ron: Romanian language pack, for app/modules/id_ocr - ID
+# cards are printed in Romanian. OCR runs fully offline/in-container, so
+# no ID photo ever leaves this machine.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr tesseract-ocr-ron \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml ./
 COPY app ./app
 
