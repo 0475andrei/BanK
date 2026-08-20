@@ -1184,9 +1184,24 @@ body {
 }
 
 .file-dropzone-icon {
-    font-size: 20px;
+    display: flex;
+    align-items: center;
     flex-shrink: 0;
-    transform: rotate(-10deg);
+    color: var(--text-muted);
+}
+
+.file-dropzone-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 1.75;
+}
+
+.mode-tab .icon,
+.attachment-icon svg {
+    width: 14px;
+    height: 14px;
+    stroke-width: 2;
+    vertical-align: -2px;
 }
 
 .file-dropzone-text {
