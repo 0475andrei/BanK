@@ -14,7 +14,13 @@ from app.ai.context import Context
 from app.ai.orchestrator import Orchestrator
 from app.ai.providers.base import ModelProvider
 from app.ai.schemas import Message
-from app.ai.tools.banking import GetBalanceTool
+from app.ai.tools.banking import (
+    GetBalanceTool,
+    ListAccountsTool,
+    ListCardsTool,
+    ListTransactionsTool,
+    ListTransfersTool,
+)
 from app.ai.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
@@ -27,7 +33,15 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
     `supabase` is handed to every tool that reads data; the tools hold it for
     their lifetime (the client is a stateless HTTP client, safe to share).
     """
-    return ToolRegistry([GetBalanceTool(supabase)])
+    return ToolRegistry(
+        [
+            GetBalanceTool(supabase),
+            ListAccountsTool(supabase),
+            ListTransactionsTool(supabase),
+            ListCardsTool(supabase),
+            ListTransfersTool(supabase),
+        ]
+    )
 
 
 class AIService:

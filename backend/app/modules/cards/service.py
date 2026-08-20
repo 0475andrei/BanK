@@ -47,11 +47,14 @@ async def issue_card(supabase: AsyncClient, user: UserRead, payload: CardCreate)
     return card
 
 
-async def list_cards(supabase: AsyncClient, user: UserRead) -> list[dict]:
+async def list_cards_for_owner(supabase: AsyncClient, user_id: uuid.UUID | str) -> list[dict]:
+    """Card list for callers holding a bare user id (the AI layer's `Context`),
+    mirroring `accounts_service.get_account_for_owner`. `list_cards` below is
+    the same read for the banking modules, which have a full `UserRead`."""
     # Safe two-call fallback instead of relying on PostgREST's embedded-
     # filter syntax (unstable across versions) - not a hot/concurrent path.
     accounts_resp = (
-        await supabase.table("accounts").select("id").eq("user_id", str(user.id)).execute()
+        await supabase.table("accounts").select("id").eq("user_id", str(user_id)).execute()
     )
     account_ids = [row["id"] for row in accounts_resp.data]
     if not account_ids:
@@ -65,6 +68,10 @@ async def list_cards(supabase: AsyncClient, user: UserRead) -> list[dict]:
         .execute()
     )
     return resp.data
+
+
+async def list_cards(supabase: AsyncClient, user: UserRead) -> list[dict]:
+    return await list_cards_for_owner(supabase, user.id)
 
 
 async def cancel_card(supabase: AsyncClient, user: UserRead, card_id: uuid.UUID) -> dict:
