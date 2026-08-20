@@ -6,6 +6,7 @@ from app.core.dependencies import get_current_user
 from app.db.supabase_client import get_supabase
 from app.modules.auth import service
 from app.modules.auth.schemas import (
+    ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
     RegisterRequest,
@@ -72,6 +73,17 @@ async def reset_password(
     supabase: AsyncClient = Depends(get_supabase),
 ) -> None:
     await service.reset_password(supabase, payload)
+
+
+@router.post("/change-password", status_code=204)
+async def change_password(
+    payload: ChangePasswordRequest,
+    request: Request,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> None:
+    token = request.cookies.get(settings.SESSION_COOKIE_NAME)
+    await service.change_password(supabase, user, token, payload)
 
 
 @router.post("/logout", status_code=204)

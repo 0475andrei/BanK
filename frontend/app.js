@@ -271,7 +271,8 @@ async function initDashboard() {
     wireNewCardModal();
     wireCardOrderModal();
     wirePaymentsForm();
-    wireProfileView(user);
+    wireProfilePanel(user);
+    wireNotificationsPanel();
 
     await refreshDashboard();
     await loadLatestConversationIfAny();
@@ -915,11 +916,18 @@ function applyAvatar(user) {
     }
 }
 
-function wireProfileView(user) {
+/** Sets up the auto-hide profile menu: opens on click of the header
+ * name/avatar, closes on an outside click or Escape. Each item redirects to
+ * its own dedicated view (view-avatar / view-referral / view-change-password)
+ * rather than showing anything inline in the menu itself. */
+function wireProfilePanel(user) {
+    const panel = document.getElementById('profile-panel');
+    const trigger = document.getElementById('user-profile-btn');
     const grid = document.getElementById('emoji-grid');
     const preview = document.getElementById('profile-avatar-preview');
-    const navItems = document.querySelectorAll('.nav-item');
-    const views = document.querySelectorAll('.view');
+
+    document.getElementById('profile-panel-name').textContent = `${user.first_name} ${user.last_name}`;
+    document.getElementById('profile-panel-email').textContent = user.email;
 
     grid.innerHTML = EMOJI_AVATAR_OPTIONS.map(emoji =>
         `<button type="button" class="emoji-option" data-emoji="${emoji}">${emoji}</button>`
@@ -942,16 +950,192 @@ function wireProfileView(user) {
         });
     });
 
-    document.getElementById('user-profile-btn').addEventListener('click', () => {
-        navItems.forEach(nav => nav.classList.remove('active'));
-        views.forEach(view => view.classList.remove('active'));
-        document.getElementById('view-profile').classList.add('active');
+    function openPanel() { panel.hidden = false; }
+    function closePanel() { panel.hidden = true; }
+
+    trigger.addEventListener('click', (event) => {
+        // Stops this same click from immediately reaching the document
+        // listener below and closing the panel it just opened.
+        event.stopPropagation();
+        document.getElementById('notifications-panel').hidden = true;
+        if (panel.hidden) openPanel(); else closePanel();
+    });
+    panel.addEventListener('click', (event) => event.stopPropagation());
+    document.addEventListener('click', () => {
+        if (!panel.hidden) closePanel();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !panel.hidden) closePanel();
     });
 
-    document.getElementById('back-from-profile-btn').addEventListener('click', () => {
-        views.forEach(view => view.classList.remove('active'));
-        document.getElementById('view-dashboard').classList.add('active');
-        document.querySelector('.nav-item[data-view="dashboard"]').classList.add('active');
-        refreshDashboard();
+    panel.querySelectorAll('.profile-menu-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            closePanel();
+            goToProfileView(btn.dataset.target);
+        });
+    });
+
+    document.querySelectorAll('.back-to-dashboard-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
+            document.getElementById('view-dashboard').classList.add('active');
+            document.querySelector('.nav-item[data-view="dashboard"]').classList.add('active');
+            refreshDashboard();
+        });
+    });
+
+    wireReferralCode();
+    wireChangePasswordForm();
+}
+
+/** Switches to one of the profile menu's own views - not a sidebar nav item,
+ * so this deactivates the sidebar explicitly rather than reusing its click
+ * handler. */
+function goToProfileView(target) {
+    document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
+    document.getElementById(`view-${target}`).classList.add('active');
+
+    if (target === 'referral') loadReferralCode();
+}
+
+/* --- Notifications dropdown (bell icon) --- */
+
+async function refreshNotificationsBadge() {
+    const badge = document.getElementById('notifications-badge');
+    try {
+        const { count } = await apiFetch('/notifications/unread-count');
+        badge.hidden = count === 0;
+    } catch {
+        badge.hidden = true;
+    }
+}
+
+function renderNotifications(notifications) {
+    const list = document.getElementById('notifications-list');
+    if (notifications.length === 0) {
+        list.innerHTML = '<div class="empty-state">Nicio notificare încă.</div>';
+        return;
+    }
+    list.innerHTML = notifications.map(n => `
+        <div class="notification-item ${n.read_at ? '' : 'unread'}">
+            <div class="notification-dot"></div>
+            <div>
+                <div class="notification-title">${escapeHTML(n.title)}</div>
+                <div class="notification-body">${escapeHTML(n.body)}</div>
+                <div class="notification-time">${formatDateTime(n.created_at)}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadNotifications() {
+    const list = document.getElementById('notifications-list');
+    try {
+        const notifications = await apiFetch('/notifications');
+        renderNotifications(notifications);
+        if (notifications.some(n => !n.read_at)) {
+            await apiFetch('/notifications/mark-read', { method: 'POST' });
+            document.getElementById('notifications-badge').hidden = true;
+        }
+    } catch (err) {
+        list.innerHTML = `<div class="empty-state">Nu s-au putut încărca notificările: ${escapeHTML(err.message)}</div>`;
+    }
+}
+
+/** Sets up the auto-hide notifications dropdown: opens on click of the
+ * header bell, closes on an outside click or Escape. Loads the list and
+ * marks everything read (clearing the badge) each time it's opened. */
+function wireNotificationsPanel() {
+    const panel = document.getElementById('notifications-panel');
+    const trigger = document.getElementById('notifications-btn');
+
+    function openPanel() {
+        panel.hidden = false;
+        loadNotifications();
+    }
+    function closePanel() { panel.hidden = true; }
+
+    trigger.addEventListener('click', (event) => {
+        event.stopPropagation();
+        document.getElementById('profile-panel').hidden = true;
+        if (panel.hidden) openPanel(); else closePanel();
+    });
+    panel.addEventListener('click', (event) => event.stopPropagation());
+    document.addEventListener('click', () => {
+        if (!panel.hidden) closePanel();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !panel.hidden) closePanel();
+    });
+
+    refreshNotificationsBadge();
+}
+
+/* --- Referral code (panel section 2) --- */
+
+// Fetched once per page load - the code never changes once generated, and
+// the panel can be opened/closed freely without re-fetching every time.
+let referralCodeLoaded = false;
+
+async function loadReferralCode() {
+    if (referralCodeLoaded) return;
+    referralCodeLoaded = true;
+    const el = document.getElementById('referral-code-value');
+    try {
+        const { code } = await apiFetch('/users/me/referral-code');
+        el.textContent = code;
+    } catch {
+        el.textContent = '—';
+        referralCodeLoaded = false; // allow a retry next time the panel opens
+    }
+}
+
+function wireReferralCode() {
+    document.getElementById('copy-referral-code-btn').addEventListener('click', async () => {
+        const code = document.getElementById('referral-code-value').textContent;
+        if (!code || code === '…' || code === '—') return;
+        try {
+            await navigator.clipboard.writeText(code);
+        } catch {
+            // Clipboard API can be unavailable (e.g. insecure context) - not critical.
+        }
+    });
+}
+
+/* --- Change password (panel section 3) --- */
+
+function wireChangePasswordForm() {
+    const form = document.getElementById('change-password-form');
+    const errorEl = document.getElementById('change-password-error');
+    const successEl = document.getElementById('change-password-success');
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorEl.hidden = true;
+        successEl.hidden = true;
+
+        const currentPassword = document.getElementById('current-password').value;
+        const newPassword = document.getElementById('new-password-profile').value;
+        const confirmPassword = document.getElementById('new-password-profile-confirm').value;
+
+        if (newPassword !== confirmPassword) {
+            errorEl.textContent = 'Parolele nu coincid.';
+            errorEl.hidden = false;
+            return;
+        }
+
+        try {
+            await apiFetch('/auth/change-password', {
+                method: 'POST',
+                body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+            });
+            successEl.textContent = 'Parola a fost schimbată.';
+            successEl.hidden = false;
+            form.reset();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        }
     });
 }

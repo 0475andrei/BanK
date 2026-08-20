@@ -18,6 +18,8 @@ class UserRead(BaseModel):
     phone: str | None
     address: str | None
     referral_bonus_eligible: bool
+    referral_code: str | None = None
+    referred_by_user_id: uuid.UUID | None = None
     created_at: datetime
 
 
@@ -26,3 +28,7 @@ class UserUpdate(BaseModel):
     last_name: str | None = Field(default=None, min_length=1, max_length=100)
     phone: str | None = Field(default=None, max_length=20)
     address: str | None = Field(default=None, max_length=255)
+
+
+class ReferralCodeRead(BaseModel):
+    code: str
