@@ -7,6 +7,7 @@ from app.modules.card_orders.router import router as card_orders_router
 from app.modules.cards.router import router as cards_router
 from app.modules.chat.router import router as chat_router
 from app.modules.id_ocr.router import router as id_ocr_router
+from app.modules.onboarding.router import router as onboarding_router
 from app.modules.payments.router import router as payments_router
 from app.modules.transactions.router import router as transactions_router
 from app.modules.transfers.router import router as transfers_router
@@ -25,3 +26,4 @@ api_router.include_router(beneficiaries_router, prefix="/beneficiaries", tags=["
 api_router.include_router(users_router, prefix="/users", tags=["users"])
 api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
 api_router.include_router(id_ocr_router, prefix="/id-ocr", tags=["id-ocr"])
+api_router.include_router(onboarding_router, prefix="/onboarding", tags=["onboarding"])

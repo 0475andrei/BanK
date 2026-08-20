@@ -1203,6 +1203,41 @@ body {
 }
 
 .auth-card-wide { max-width: 480px; }
+.auth-card-comodul-active { max-width: 640px; }
+
+.onboarding-mode-switch {
+    display: flex;
+    gap: 8px;
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 4px;
+    margin-bottom: 24px;
+}
+
+.mode-tab {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-radius: 999px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.mode-tab:hover { color: var(--text-main); }
+
+.mode-tab.active {
+    background-color: var(--primary-teal);
+    color: #000;
+}
+
+.comodul-chat-container { height: 480px; }
+
+.comodul-upload-box { padding: 0 20px; margin-bottom: 16px; }
 
 .auth-card .logo {
     margin-bottom: 12px;
