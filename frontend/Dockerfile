@@ -8,5 +8,5 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 WORKDIR /usr/share/nginx/html
 # Only the static app - deliberately explicit rather than `COPY . .`, so
 # stray files in this directory never end up published by the web server.
-COPY index.html login.html register.html ./
+COPY index.html login.html register.html forgot-password.html ./
 COPY api.js app.js style.css ./
