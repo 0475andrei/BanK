@@ -556,6 +556,7 @@ body {
 .chat-header .ai-avatar {
     width: 48px;
     height: 48px;
+    flex-shrink: 0;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--primary-teal), #3b82f6);
     display: flex;
@@ -589,6 +590,7 @@ body {
 .message .avatar {
     width: 32px;
     height: 32px;
+    flex-shrink: 0;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--primary-teal), #3b82f6);
     display: flex;

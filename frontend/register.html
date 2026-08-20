@@ -372,29 +372,53 @@
             });
         }
 
-        /** Comodul's fallback when registration hits an existing account:
-         * offers a way into the already-built forgot-password flow instead
-         * of just showing a dead-end error. Reuses that page's own 3-step
+        /** Shared by both places Comodul can discover an existing account:
+         * the early check_existing_account tool call (ideal path - before
+         * the interview even continues) and the late 409 on final submit
+         * (defense in depth, e.g. if the email changed after the early
+         * check). Offers a way into the already-built forgot-password flow
+         * instead of a dead-end error - reuses that page's own 3-step
          * OTP-over-Teams flow rather than reimplementing it here. */
-        function showExistingAccountFallback(card, fields, errorCode) {
-            const reason = errorCode === "email_already_registered"
-                ? "Există deja un cont cu acest email."
-                : "Acest CNP este deja asociat unui cont existent.";
-
-            card.innerHTML = `
+        function accountConflictCardHTML(reason, email) {
+            return `
                 <div class="action-proposal">
                     <strong>Cont existent</strong>
                     <p>${escapeHTML(reason)} Dacă e contul tău, te pot ajuta să-ți resetezi parola ca să te poți autentifica.</p>
                 </div>
                 <div class="hitl-actions">
-                    <a class="btn btn-primary" href="forgot-password.html?email=${encodeURIComponent(fields.email)}">Resetează parola</a>
-                    <button class="btn btn-secondary" id="comodul-fallback-retry-btn">Corectez datele</button>
+                    <a class="btn btn-primary" href="forgot-password.html?email=${encodeURIComponent(email)}">Resetează parola</a>
+                    <button type="button" class="btn btn-secondary conflict-retry-btn">Corectez datele</button>
                 </div>
             `;
-            card.querySelector("#comodul-fallback-retry-btn").addEventListener("click", () => {
-                card.closest(".message").remove();
+        }
+
+        function wireConflictRetry(container) {
+            container.querySelector(".conflict-retry-btn").addEventListener("click", () => {
+                container.closest(".message").remove();
                 appendComodulBubble("ai", "Sigur - spune-mi ce vrei să corectez.");
             });
+        }
+
+        /** Late path: registration was actually attempted and rejected. */
+        function showExistingAccountFallback(card, fields, errorCode) {
+            const reason = errorCode === "email_already_registered"
+                ? "Există deja un cont cu acest email."
+                : "Acest CNP este deja asociat unui cont existent.";
+            card.innerHTML = accountConflictCardHTML(reason, fields.email);
+            wireConflictRetry(card);
+        }
+
+        /** Early path: check_existing_account caught it before the rest of
+         * the interview even happened - a brand new bubble, not editing an
+         * existing confirmation card (there isn't one yet). */
+        function renderAccountConflictBubble(conflict) {
+            const reason = conflict.matched_field === "email"
+                ? "Există deja un cont cu acest email."
+                : "Acest CNP este deja asociat unui cont existent.";
+            const wrapper = appendComodulBubble("ai", "", {
+                html: `<div class="human-in-the-loop-card">${accountConflictCardHTML(reason, conflict.email)}</div>`,
+            });
+            wireConflictRetry(wrapper);
         }
 
         function escapeHTML(str) {
@@ -427,7 +451,9 @@
                 appendComodulBubble("ai", response.reply);
                 comodulHistory = response.history;
 
-                if (response.collected_fields) {
+                if (response.account_conflict) {
+                    renderAccountConflictBubble(response.account_conflict);
+                } else if (response.collected_fields) {
                     renderConfirmationCard(response.collected_fields);
                 }
             } catch (err) {

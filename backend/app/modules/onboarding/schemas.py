@@ -26,3 +26,7 @@ class OnboardingChatResponse(BaseModel):
     #: payload the frontend should POST to /auth/register once the user
     #: confirms. None until then.
     collected_fields: dict | None = None
+    #: Set once check_existing_account found a match ({exists, matched_field,
+    #: email}) - lets the frontend short-circuit straight to the
+    #: password-reset offer instead of waiting for a later 409 on submit.
+    account_conflict: dict | None = None

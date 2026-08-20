@@ -129,6 +129,34 @@ async def _count_recent_failed_attempts(supabase: AsyncClient, email: str) -> in
     return resp.count or 0
 
 
+async def check_existing_account(supabase: AsyncClient, email: str, national_id: str) -> dict:
+    """Read-only pre-check for the onboarding assistant (see
+    app/modules/onboarding/tool.py) - lets it short-circuit as soon as it
+    has an email + CNP, instead of only discovering a duplicate at the
+    final /auth/register call after a full interview. Reveals nothing
+    register_user's 409 doesn't already: same two fields, same
+    disclosure, just earlier.
+    """
+    email = email.lower()
+    email_resp = (
+        await supabase.table("users").select("id").eq("email", email).maybe_single().execute()
+    )
+    if email_resp is not None and email_resp.data is not None:
+        return {"exists": True, "matched_field": "email"}
+
+    national_id_resp = (
+        await supabase.table("users")
+        .select("id")
+        .eq("national_id", national_id)
+        .maybe_single()
+        .execute()
+    )
+    if national_id_resp is not None and national_id_resp.data is not None:
+        return {"exists": True, "matched_field": "national_id"}
+
+    return {"exists": False, "matched_field": None}
+
+
 async def login_user(supabase: AsyncClient, payload: LoginRequest) -> tuple[UserRead, str]:
     email = payload.email.lower()
 
