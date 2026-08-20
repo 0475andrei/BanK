@@ -83,11 +83,23 @@ async def test_tools_are_advertised_to_the_provider(make_agent, context):
     await agent.run(user("hi"), context)
 
     specs = provider.tool_specs_seen[0]
-    assert [spec["function"]["name"] for spec in specs] == ["get_balance"]
+    assert [spec["function"]["name"] for spec in specs] == [
+        "get_balance",
+        "list_accounts",
+        "list_transactions",
+        "list_cards",
+        "list_transfers",
+    ]
+
     params = specs[0]["function"]["parameters"]
     assert "account_id" in params["properties"]
     # account_id is optional now — the model is not asked to supply identity.
     assert not params.get("required")
+
+    # Nothing the model is shown is ever mandatory: identity is supplied by the
+    # application, so it never has to produce (or guess) an identifier.
+    for spec in specs:
+        assert not spec["function"]["parameters"].get("required"), spec["function"]["name"]
 
 
 @pytest.mark.parametrize(

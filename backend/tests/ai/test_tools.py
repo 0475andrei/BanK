@@ -12,10 +12,26 @@ from pydantic import BaseModel
 
 from app.ai.context import Context
 from app.ai.schemas import ToolCall, ToolResult
-from app.ai.tools.banking import GetBalanceTool
+from app.ai.tools.banking import (
+    GetBalanceTool,
+    ListAccountsTool,
+    ListCardsTool,
+    ListTransactionsTool,
+    ListTransfersTool,
+)
 from app.ai.tools.base import Tool
 from app.ai.tools.registry import ToolRegistry
 from tests.ai.conftest import OWNED_ACCOUNT_IDS, STUB_BALANCE_MINOR, STUB_CURRENCY
+
+#: Every tool the banking agent exposes, in the order build_banking_tools
+#: registers them.
+ALL_TOOL_CLASSES = (
+    GetBalanceTool,
+    ListAccountsTool,
+    ListTransactionsTool,
+    ListCardsTool,
+    ListTransfersTool,
+)
 
 
 async def test_get_balance_returns_the_ledger_figures(context, supabase):
@@ -81,6 +97,99 @@ def test_registry_specs_and_lookup(supabase):
     assert spec["type"] == "function"
     assert spec["function"]["name"] == "get_balance"
     assert "account_id" in spec["function"]["parameters"]["properties"]
+
+
+# ---------------------------------------------------------------------------
+# The read tools added in Step 6, as the model is shown them.
+# ---------------------------------------------------------------------------
+
+
+def _spec_for(registry: ToolRegistry, name: str) -> dict:
+    return next(s for s in registry.list_specs() if s["function"]["name"] == name)
+
+
+def test_all_banking_tools_are_registered(supabase):
+    from app.ai.service import build_banking_tools
+
+    assert build_banking_tools(supabase).names() == [
+        "get_balance",
+        "list_accounts",
+        "list_transactions",
+        "list_cards",
+        "list_transfers",
+    ]
+
+
+def test_every_tool_advertises_a_usable_spec(supabase):
+    """Structural guard: whatever a tool is, the model must see a named
+    function with a described JSON-Schema parameter object."""
+    registry = ToolRegistry([cls(supabase) for cls in ALL_TOOL_CLASSES])
+
+    for spec in registry.list_specs():
+        assert spec["type"] == "function"
+        assert spec["function"]["name"]
+        assert spec["function"]["description"]
+        assert spec["function"]["parameters"]["type"] == "object"
+
+
+def test_list_accounts_spec_takes_no_arguments(supabase):
+    registry = ToolRegistry([ListAccountsTool(supabase)])
+    params = _spec_for(registry, "list_accounts")["function"]["parameters"]
+
+    # Nothing to supply, so nothing to guess or widen.
+    assert params.get("properties", {}) == {}
+    assert not params.get("required")
+
+
+def test_list_transactions_spec_advertises_its_bounded_arguments(supabase):
+    registry = ToolRegistry([ListTransactionsTool(supabase)])
+    params = _spec_for(registry, "list_transactions")["function"]["parameters"]
+    properties = params["properties"]
+
+    assert set(properties) == {"account_id", "days_back", "limit"}
+    # All optional - the model never has to know an account id.
+    assert not params.get("required")
+    assert properties["days_back"]["default"] == 30
+    assert properties["days_back"]["maximum"] == 365
+    assert properties["limit"]["default"] == 50
+    assert properties["limit"]["maximum"] == 200
+
+
+def test_list_cards_spec_takes_no_arguments(supabase):
+    registry = ToolRegistry([ListCardsTool(supabase)])
+    params = _spec_for(registry, "list_cards")["function"]["parameters"]
+
+    assert params.get("properties", {}) == {}
+    assert not params.get("required")
+
+
+def test_list_transfers_spec_advertises_a_bounded_limit(supabase):
+    registry = ToolRegistry([ListTransfersTool(supabase)])
+    params = _spec_for(registry, "list_transfers")["function"]["parameters"]
+    properties = params["properties"]
+
+    assert set(properties) == {"limit"}
+    assert not params.get("required")
+    assert properties["limit"]["default"] == 20
+    assert properties["limit"]["maximum"] == 100
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [{"days_back": 0}, {"days_back": 400}, {"limit": 0}, {"limit": 500}],
+    ids=["days-too-small", "days-too-large", "limit-too-small", "limit-too-large"],
+)
+async def test_list_transactions_rejects_out_of_range_arguments(
+    context, supabase, arguments
+):
+    """Bounds live in the schema, so an out-of-range value is a clean,
+    correctable validation failure rather than an unbounded query."""
+    result = await ListTransactionsTool(supabase).execute(
+        ToolCall(id="c1", name="list_transactions", arguments=arguments), context
+    )
+
+    assert result.ok is False
+    assert "invalid input" in (result.error or "")
 
 
 def test_registry_rejects_duplicates(supabase):
