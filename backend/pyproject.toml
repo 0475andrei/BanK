@@ -12,6 +12,12 @@ dependencies = [
     "bcrypt>=4.2",
     # AI layer (app/ai): Azure OpenAI is reached through the OpenAI SDK.
     "openai>=1.40",
+    # id_ocr module: wraps the system tesseract-ocr binary (installed in
+    # the Dockerfile, apt package tesseract-ocr + tesseract-ocr-ron).
+    "pytesseract>=0.3.10",
+    "Pillow>=10.4",
+    # Required by FastAPI's UploadFile/File(...) to parse multipart/form-data.
+    "python-multipart>=0.0.12",
 ]
 
 [project.optional-dependencies]
@@ -57,6 +63,7 @@ extend-immutable-calls = [
     "fastapi.Body",
     "fastapi.Cookie",
     "fastapi.Security",
+    "fastapi.File",
 ]
 
 [tool.mypy]

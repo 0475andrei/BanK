@@ -51,13 +51,17 @@ def test_bad_county_rejected():
     assert "county" in reason
 
 
-def test_bad_check_digit_rejected():
+def test_wrong_check_digit_is_still_accepted():
+    # Deliberate: the official MOD-11 checksum is NOT enforced (see
+    # validate_national_id's docstring) - this app never goes to
+    # production, and a specimen/placeholder CNP (the checksum digit is
+    # the only "wrong" part) should still work for testing.
     valid = generate_test_national_id(1995, 6, 15, gender="M")
     last_digit = "0" if valid[-1] != "0" else "1"
     tampered = valid[:-1] + last_digit
     is_valid, reason = validate_national_id(tampered)
-    assert is_valid is False
-    assert "check digit" in reason
+    assert is_valid is True
+    assert reason == ""
 
 
 def test_extract_gender():

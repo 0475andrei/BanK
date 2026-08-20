@@ -22,7 +22,16 @@ _DAYS_IN_MONTH = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
 
 def validate_national_id(national_id: str) -> tuple[bool, str]:
-    """Validates the structure and check digit of a Romanian CNP.
+    """Validates the structure of a Romanian CNP - shape and the parts that
+    feed extract_date_of_birth/extract_gender (first digit, month, day,
+    county), NOT the official MOD-11 check digit.
+
+    This app never goes to production and nobody testing it should have to
+    go find a real person's CNP (or hand-compute a checksum) just to
+    register - see generate_test_national_id below for the one place a
+    real checksum still gets computed, purely so its own output is
+    internally consistent. A card with a placeholder/specimen CNP (the
+    checksum digit is the only part that's "wrong") should still work here.
     Returns (True, "") if valid, otherwise (False, reason)."""
     if not national_id or not isinstance(national_id, str):
         return False, "National ID is required"
@@ -45,11 +54,6 @@ def validate_national_id(national_id: str) -> tuple[bool, str]:
     county = int(national_id[7:9])
     if county < _COUNTY_CODE_MIN or county > _COUNTY_CODE_MAX:
         return False, "National ID's county code is invalid"
-
-    computed_check_digit = _compute_check_digit(national_id)
-    received_check_digit = int(national_id[12])
-    if computed_check_digit != received_check_digit:
-        return False, "National ID's check digit is invalid"
 
     return True, ""
 

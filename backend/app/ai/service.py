@@ -65,9 +65,12 @@ class AIService:
         an identity must be an error, never a silent fallback to some ambient
         one. Callers build it at the edge (see `app.ai.context`).
 
-        Returns the reply plus the updated history. History is in-memory only —
-        persistence to the `conversations` / `messages` tables comes later.
+        Returns the reply plus the updated history: `history` with the new
+        user turn, any tool-call/tool-result trace the agent produced, and the
+        final assistant reply appended, in that order. Callers persist this
+        (see `app.modules.chat.conversations_service`) so a reload replays the
+        same transcript the model actually saw.
         """
         conversation = [*history, Message(role="user", content=user_message)]
-        reply = await self._orchestrator.dispatch(conversation, user_message, context)
-        return reply, [*conversation, Message(role="assistant", content=reply)]
+        reply, trace = await self._orchestrator.dispatch(conversation, user_message, context)
+        return reply, [*conversation, *trace, Message(role="assistant", content=reply)]

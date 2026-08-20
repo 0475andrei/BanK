@@ -1,13 +1,15 @@
-"""POST /chat - the AI layer's only HTTP surface.
+"""/chat - the AI layer's HTTP surface.
 
 Identity is established here, at the edge: the session cookie resolves to a
 `UserRead` via `get_current_user`, and `build_context_for_user` turns that into
 the trusted `Context` every tool resolves accounts against. Nothing the client
 sends contributes to identity.
 
-No persistence yet - `history` round-trips through the client, and the server
-keeps nothing between requests.
+The server owns conversation history (see `conversations_service`): the client
+only ever holds a `conversation_id`, so the transcript survives a page reload.
 """
+
+import uuid
 
 from fastapi import APIRouter, Depends
 from supabase import AsyncClient
@@ -15,7 +17,7 @@ from supabase import AsyncClient
 from app.ai.context import build_context_for_user
 from app.ai.providers.base import ModelProvider, ProviderError
 from app.ai.providers.mock_provider import MockProvider
-from app.ai.schemas import ModelResponse
+from app.ai.schemas import Message, ModelResponse
 from app.ai.service import AIService
 from app.config import ConfigurationError, Settings, get_settings
 from app.core.dependencies import get_current_user
@@ -25,7 +27,8 @@ from app.core.exceptions import (
     AIServiceUnavailableError,
 )
 from app.db.supabase_client import get_supabase
-from app.modules.chat.schemas import ChatRequest, ChatResponse
+from app.modules.chat import conversations_service
+from app.modules.chat.schemas import ChatRequest, ChatResponse, ConversationRead
 from app.modules.users.schemas import UserRead
 
 router = APIRouter()
@@ -76,13 +79,46 @@ async def chat(
     # THE EDGE. Built from the authenticated session, never from the payload.
     context = await build_context_for_user(user, supabase)
 
-    service = AIService(supabase, provider=provider)
-
-    try:
-        reply, history = await service.handle_message(
-            payload.history, payload.message, context
+    if payload.conversation_id is None:
+        conversation = await conversations_service.create_conversation(supabase, user)
+    else:
+        # Ownership-checked: raises ConversationNotFoundError for a foreign or
+        # nonexistent id, never leaking which one it was.
+        conversation = await conversations_service.get_conversation(
+            supabase, user, payload.conversation_id
         )
+    conversation_id = uuid.UUID(conversation["id"])
+
+    history = await conversations_service.load_messages(supabase, conversation_id)
+
+    service = AIService(supabase, provider=provider)
+    try:
+        reply, updated_history = await service.handle_message(history, payload.message, context)
     except ProviderError as exc:
         raise AIProviderError() from exc
 
-    return ChatResponse(reply=reply, history=history)
+    # handle_message returns `history` unchanged plus every new turn (the user
+    # message, any tool-call/tool-result trace, the final reply) appended in
+    # order - everything already in `history` is already stored.
+    for message in updated_history[len(history) :]:
+        await conversations_service.append_message(supabase, conversation_id, message)
+
+    return ChatResponse(reply=reply, conversation_id=conversation_id)
+
+
+@router.get("/conversations", response_model=list[ConversationRead])
+async def list_conversations(
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> list[ConversationRead]:
+    return await conversations_service.list_conversations(supabase, user)
+
+
+@router.get("/conversations/{conversation_id}/messages", response_model=list[Message])
+async def get_conversation_messages(
+    conversation_id: uuid.UUID,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> list[Message]:
+    await conversations_service.get_conversation(supabase, user, conversation_id)
+    return await conversations_service.load_messages(supabase, conversation_id)

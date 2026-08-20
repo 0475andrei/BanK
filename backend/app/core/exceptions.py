@@ -39,6 +39,11 @@ class IbanNotFoundError(NotFoundError):
     default_message = "No account was found for that IBAN."
 
 
+class ConversationNotFoundError(NotFoundError):
+    error_code = "conversation_not_found"
+    default_message = "Conversation not found."
+
+
 class AccountClosedError(AppError):
     status_code = 409
     error_code = "account_closed"
