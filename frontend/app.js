@@ -50,19 +50,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const newConversationBtn = document.getElementById('new-conversation-btn');
+    if (newConversationBtn) {
+        newConversationBtn.addEventListener('click', startNewConversation);
+    }
+
     initDashboard();
 });
 
 /* -------------------------------------------------------------------------
  * AI chat - talks to POST /chat (see backend app/modules/chat/router.py).
+ * History now lives server-side (conversations/messages tables) - the client
+ * only holds the id of the conversation in progress, so it survives a reload.
  * ------------------------------------------------------------------------- */
 
-// The conversation so far, as the backend returns it. Nothing is persisted
-// server-side yet, so this is what threads context across turns - it lives for
-// one page load only. Deliberately NOT in localStorage: these Message objects
-// carry tool calls and results, which have no business sitting in browser
-// storage.
-let chatHistory = [];
+let currentConversationId = null;
+// Guards against re-fetching conversation history every time the chat nav
+// item is clicked - it's loaded once per page load, same as the dashboard.
+let conversationHistoryLoaded = false;
+
+const CHAT_WELCOME_TEXT =
+    'Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?';
 
 const CHAT_ERRORS = {
     unavailable: 'Asistentul AI nu este disponibil momentan. Încearcă din nou.',
@@ -139,13 +147,12 @@ async function sendMessage() {
         // apiFetch already prefixes /api/v1 and sends the session cookie.
         const response = await apiFetch('/chat', {
             method: 'POST',
-            body: JSON.stringify({ message, history: chatHistory }),
+            body: JSON.stringify({ message, conversation_id: currentConversationId }),
         });
 
         typingBubble.remove();
         appendChatBubble('ai', response.reply);
-        // The server owns the transcript shape; take it back verbatim.
-        chatHistory = response.history;
+        currentConversationId = response.conversation_id;
     } catch (err) {
         typingBubble.remove();
 
@@ -159,6 +166,45 @@ async function sendMessage() {
         appendChatBubble('ai', chatErrorMessage(err), { bubbleClass: 'error' });
     } finally {
         if (sendButton) sendButton.disabled = false;
+    }
+}
+
+/** Clears the chat panel back to the empty-state welcome bubble and detaches
+ * from the current conversation - the next message starts a new one. */
+function startNewConversation() {
+    currentConversationId = null;
+    const chatMessages = document.getElementById('chat-messages');
+    chatMessages.innerHTML = '';
+    appendChatBubble('ai', CHAT_WELCOME_TEXT);
+}
+
+/** Restores the most recent conversation's transcript on page load, so a
+ * refresh doesn't lose the chat. No-ops past the first call and swallows
+ * failures - a user who never chatted, or is offline, just sees the normal
+ * empty state instead of an error. */
+async function loadLatestConversationIfAny() {
+    if (conversationHistoryLoaded) return;
+    conversationHistoryLoaded = true;
+
+    try {
+        const conversations = await apiFetch('/chat/conversations');
+        if (!conversations.length) return;
+
+        const latest = conversations[0]; // ordered by created_at desc
+        const messages = await apiFetch(`/chat/conversations/${latest.id}/messages`);
+        // Only turns with real text render as a bubble - an assistant turn that
+        // only carried tool_calls (content is null) has nothing to show.
+        const dialogue = messages.filter(
+            m => (m.role === 'user' || m.role === 'assistant') && m.content
+        );
+        if (!dialogue.length) return;
+
+        currentConversationId = latest.id;
+        const chatMessages = document.getElementById('chat-messages');
+        chatMessages.innerHTML = '';
+        dialogue.forEach(m => appendChatBubble(m.role === 'user' ? 'user' : 'ai', m.content || ''));
+    } catch {
+        // Non-fatal: chat just starts fresh, same as before this feature existed.
     }
 }
 
@@ -228,6 +274,7 @@ async function initDashboard() {
     wireProfileView(user);
 
     await refreshDashboard();
+    await loadLatestConversationIfAny();
 }
 
 async function refreshDashboard() {
