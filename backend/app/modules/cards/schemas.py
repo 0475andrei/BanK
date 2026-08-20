@@ -16,14 +16,11 @@ class CardRead(BaseModel):
 
     id: uuid.UUID
     account_id: uuid.UUID
+    card_number: str
     last4: str
+    expiry_month: int
+    expiry_year: int
+    cvv: str
     status: CardStatus
     spending_limit_minor: int | None
     created_at: datetime
-
-
-class CardIssued(CardRead):
-    """Returned only by POST /cards - the one moment the full card number
-    is ever visible. Not persisted anywhere; the caller must save it now."""
-
-    card_number: str

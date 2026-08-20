@@ -21,6 +21,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // Show the corresponding view
             const viewId = `view-${item.dataset.view}`;
             document.getElementById(viewId).classList.add('active');
+
+            // Re-fetch balances/transactions whenever the dashboard is opened,
+            // so money received while the user was on another tab shows up
+            // without needing a full page reload.
+            if (item.dataset.view === 'dashboard') {
+                refreshDashboard();
+            }
         });
     });
 
@@ -122,8 +129,7 @@ async function initDashboard() {
     if (!user) return; // requireSession already redirected to login.html
 
     document.getElementById('user-name').textContent = `${user.first_name} ${user.last_name}`;
-    document.getElementById('user-avatar').src =
-        `https://ui-avatars.com/api/?name=${encodeURIComponent(user.first_name + ' ' + user.last_name)}&background=2DD4BF&color=fff`;
+    applyAvatar(user);
 
     document.getElementById('logout-btn').addEventListener('click', async () => {
         try {
@@ -136,6 +142,9 @@ async function initDashboard() {
     wireNewAccountModal();
     wireTransferModal();
     wireNewCardModal();
+    wireCardOrderModal();
+    wirePaymentsForm();
+    wireProfileView(user);
 
     await refreshDashboard();
 }
@@ -144,6 +153,8 @@ async function refreshDashboard() {
     await loadAccounts();
     await loadTransactions();
     await loadCards();
+    await loadBeneficiaries();
+    await loadPayments();
 }
 
 async function loadAccounts() {
@@ -158,6 +169,7 @@ async function loadAccounts() {
     renderAccountsGrid();
     renderHeadlineBalance();
     populateTransferAccountSelects();
+    populatePaymentsAccountSelect();
 }
 
 function renderAccountsGrid() {
@@ -381,21 +393,32 @@ function renderCardsList(cards) {
     list.innerHTML = cards.map(card => {
         const account = accountById[card.account_id];
         const isCancelled = card.status === 'cancelled';
+        const formattedNumber = card.card_number.replace(/(.{4})/g, '$1 ').trim();
+        const expiry = `${String(card.expiry_month).padStart(2, '0')}/${String(card.expiry_year).slice(-2)}`;
         return `
         <div class="credit-card virtual ${isCancelled ? 'cancelled' : ''}">
             <div class="card-header">
-                <span class="card-type">Card Virtual${account ? ' &middot; ' + escapeHTML(account.name) : ''}</span>
+                <span class="card-type">Card${account ? ' &middot; ' + escapeHTML(account.name) : ''}</span>
                 <span class="card-logo">VISA</span>
             </div>
-            <div class="card-number">**** **** **** ${escapeHTML(card.last4)}</div>
+            <div class="card-number">${escapeHTML(formattedNumber)}</div>
             <div class="card-footer">
                 <div class="card-details">
+                    <div class="detail">
+                        <span class="label">Expiră</span>
+                        <span class="card-secret" data-reveal="expiry" data-value="${escapeHTML(expiry)}">••/••</span>
+                    </div>
+                    <div class="detail">
+                        <span class="label">CVV</span>
+                        <span class="card-secret" data-reveal="cvv" data-value="${escapeHTML(card.cvv)}">•••</span>
+                    </div>
                     ${card.spending_limit_minor != null ? `
                         <div class="detail">
                             <span class="label">Limită</span>
                             <span>${formatMoney(card.spending_limit_minor, account ? account.currency : 'RON')}</span>
                         </div>
                     ` : ''}
+                    <button class="card-eye-btn" title="Arată expirare și CVV" aria-label="Arată expirare și CVV"><i data-lucide="eye"></i></button>
                 </div>
                 <div class="status-indicator ${card.status}">${CARD_STATUS_LABELS[card.status] || card.status}</div>
             </div>
@@ -403,6 +426,20 @@ function renderCardsList(cards) {
         </div>
         `;
     }).join('');
+
+    if (window.lucide) lucide.createIcons();
+
+    list.querySelectorAll('.card-eye-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const card = btn.closest('.credit-card');
+            const secrets = card.querySelectorAll('.card-secret');
+            const revealing = secrets[0].textContent !== secrets[0].dataset.value;
+            secrets.forEach(el => { el.textContent = revealing ? el.dataset.value : (el.dataset.reveal === 'cvv' ? '•••' : '••/••'); });
+            btn.innerHTML = `<i data-lucide="${revealing ? 'eye-off' : 'eye'}"></i>`;
+            btn.title = revealing ? 'Ascunde expirare și CVV' : 'Arată expirare și CVV';
+            if (window.lucide) lucide.createIcons();
+        });
+    });
 
     list.querySelectorAll('.card-cancel-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -443,7 +480,7 @@ function wireNewCardModal() {
         const limitMinor = limitInput ? Math.round(parseFloat(limitInput) * 100) : null;
 
         try {
-            const issued = await apiFetch('/cards', {
+            await apiFetch('/cards', {
                 method: 'POST',
                 body: JSON.stringify({
                     account_id: accountSelect.value,
@@ -451,24 +488,257 @@ function wireNewCardModal() {
                 }),
             });
             modal.hidden = true;
-            showCardReveal(issued.card_number);
             await loadCards();
         } catch (err) {
             errorEl.textContent = err.message;
             errorEl.hidden = false;
         }
     });
-
-    document.getElementById('close-card-reveal-modal').addEventListener('click', hideCardReveal);
-    document.getElementById('close-card-reveal').addEventListener('click', hideCardReveal);
 }
 
-function showCardReveal(cardNumber) {
-    const formatted = cardNumber.replace(/(\d{4})(?=\d)/g, '$1 ');
-    document.getElementById('card-reveal-number').textContent = formatted;
-    document.getElementById('card-reveal-modal').hidden = false;
+function wireCardOrderModal() {
+    const modal = document.getElementById('card-order-modal');
+    const form = document.getElementById('card-order-form');
+    const errorEl = document.getElementById('card-order-error');
+    const accountSelect = document.getElementById('card-order-account');
+
+    document.getElementById('open-card-order-btn').addEventListener('click', () => {
+        errorEl.hidden = true;
+        form.reset();
+        document.getElementById('card-order-country').value = 'România';
+        const active = currentAccounts.filter(a => a.status === 'active');
+        accountSelect.innerHTML = active.length
+            ? active.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
+            : '<option value="" disabled selected>Creează mai întâi un cont</option>';
+        modal.hidden = false;
+    });
+    document.getElementById('close-card-order-modal').addEventListener('click', () => { modal.hidden = true; });
+    document.getElementById('cancel-card-order').addEventListener('click', () => { modal.hidden = true; });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorEl.hidden = true;
+
+        try {
+            const order = await apiFetch('/card-orders', {
+                method: 'POST',
+                body: JSON.stringify({
+                    account_id: accountSelect.value,
+                    full_name: document.getElementById('card-order-name').value,
+                    phone: document.getElementById('card-order-phone').value,
+                    address: document.getElementById('card-order-address').value,
+                    city: document.getElementById('card-order-city').value,
+                    postal_code: document.getElementById('card-order-postal').value,
+                    country: document.getElementById('card-order-country').value,
+                }),
+            });
+            modal.hidden = true;
+            const formattedNumber = order.card.card_number.replace(/(.{4})/g, '$1 ').trim();
+            alert(`Comanda a fost trimisă! Cardul tău: ${formattedNumber}`);
+            await loadCards();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        }
+    });
 }
 
-function hideCardReveal() {
-    document.getElementById('card-reveal-modal').hidden = true;
+/* --- Payments (IBAN-to-IBAN, cross-user) --- */
+
+function populatePaymentsAccountSelect() {
+    const select = document.getElementById('payments-account');
+    if (!select) return;
+    const active = currentAccounts.filter(a => a.status === 'active');
+    const previousValue = select.value;
+    select.innerHTML = active.length
+        ? active.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
+        : '<option value="" disabled selected>Creează mai întâi un cont</option>';
+    if (active.some(a => a.id === previousValue)) select.value = previousValue;
+    updateMyIbanDisplay();
+}
+
+function updateMyIbanDisplay() {
+    const select = document.getElementById('payments-account');
+    const iban = document.getElementById('payments-my-iban');
+    if (!select || !iban) return;
+    const account = currentAccounts.find(a => a.id === select.value);
+    iban.textContent = account ? account.iban : '—';
+}
+
+async function loadBeneficiaries() {
+    const list = document.getElementById('beneficiaries-list');
+    if (!list) return;
+    try {
+        const contacts = await apiFetch('/beneficiaries');
+        renderBeneficiariesList(contacts);
+    } catch (err) {
+        list.innerHTML = `<div class="empty-state">Nu s-au putut încărca contactele: ${escapeHTML(err.message)}</div>`;
+    }
+}
+
+function renderBeneficiariesList(contacts) {
+    const list = document.getElementById('beneficiaries-list');
+    if (contacts.length === 0) {
+        list.innerHTML = '<div class="empty-state">Niciun contact încă - apare automat după prima plată.</div>';
+        return;
+    }
+    list.innerHTML = contacts.map(c => `
+        <div class="contact-item" data-iban="${escapeHTML(c.iban)}" data-name="${escapeHTML(c.display_name)}">
+            <div>
+                <div class="name">${escapeHTML(c.display_name)}</div>
+                <div class="iban">${escapeHTML(c.iban)}</div>
+            </div>
+            <i data-lucide="chevron-right" class="icon"></i>
+        </div>
+    `).join('');
+    if (window.lucide) lucide.createIcons();
+
+    list.querySelectorAll('.contact-item').forEach(el => {
+        el.addEventListener('click', () => {
+            document.getElementById('payments-iban').value = el.dataset.iban;
+            document.getElementById('payments-beneficiary').value = el.dataset.name;
+        });
+    });
+}
+
+async function loadPayments() {
+    const list = document.getElementById('payments-list');
+    if (!list) return;
+    try {
+        const payments = await apiFetch('/payments');
+        renderPaymentsList(payments);
+    } catch (err) {
+        list.innerHTML = `<div class="empty-state">Nu s-a putut încărca istoricul: ${escapeHTML(err.message)}</div>`;
+    }
+}
+
+function renderPaymentsList(payments) {
+    const list = document.getElementById('payments-list');
+    if (payments.length === 0) {
+        list.innerHTML = '<div class="empty-state">Nicio plată încă.</div>';
+        return;
+    }
+    list.innerHTML = payments.map(p => `
+        <div class="payment-item">
+            <div>
+                <div class="name">${escapeHTML(p.to_iban)}</div>
+                <div class="meta">${new Date(p.created_at).toLocaleString('ro-RO')}</div>
+            </div>
+            <div class="amount">-${formatMoney(p.amount_minor, p.currency)}</div>
+        </div>
+    `).join('');
+}
+
+function wirePaymentsForm() {
+    const form = document.getElementById('payments-form');
+    const errorEl = document.getElementById('payments-error');
+    const successEl = document.getElementById('payments-success');
+    const accountSelect = document.getElementById('payments-account');
+
+    accountSelect.addEventListener('change', updateMyIbanDisplay);
+
+    document.getElementById('copy-my-iban-btn').addEventListener('click', async () => {
+        const iban = document.getElementById('payments-my-iban').textContent;
+        if (!iban || iban === '—') return;
+        try {
+            await navigator.clipboard.writeText(iban);
+        } catch {
+            // Clipboard API can be unavailable (e.g. insecure context) - not critical.
+        }
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorEl.hidden = true;
+        successEl.hidden = true;
+
+        const amountInput = document.getElementById('payments-amount').value;
+        const amountMinor = Math.round(parseFloat(amountInput) * 100);
+        const iban = document.getElementById('payments-iban').value.replace(/\s+/g, '').toUpperCase();
+
+        try {
+            await apiFetch('/payments', {
+                method: 'POST',
+                headers: { 'Idempotency-Key': crypto.randomUUID() },
+                body: JSON.stringify({
+                    from_account_id: accountSelect.value,
+                    to_iban: iban,
+                    beneficiary_name: document.getElementById('payments-beneficiary').value,
+                    amount_minor: amountMinor,
+                    description: document.getElementById('payments-description').value || undefined,
+                }),
+            });
+            successEl.textContent = 'Plata a fost trimisă cu succes!';
+            successEl.hidden = false;
+            form.reset();
+            await refreshDashboard();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        }
+    });
+}
+
+/* --- Profile view (bank-themed emoji avatar picker) --- */
+
+const EMOJI_AVATAR_OPTIONS = [
+    '🏦', '💰', '💳', '💵', '💴', '💶', '💷', '🪙', '📈', '📉',
+    '💹', '🔒', '🔐', '🛡️', '👛', '💎', '🧾', '🐷', '🤑', '🏧',
+];
+
+function avatarStorageKey(user) {
+    return `bank_avatar_emoji:${user.id}`;
+}
+
+function applyAvatar(user) {
+    const avatarEl = document.getElementById('user-avatar');
+    const emoji = localStorage.getItem(avatarStorageKey(user));
+    if (emoji) {
+        avatarEl.classList.add('avatar-emoji');
+        avatarEl.textContent = emoji;
+    } else {
+        avatarEl.classList.remove('avatar-emoji');
+        avatarEl.innerHTML = `<img src="https://ui-avatars.com/api/?name=${encodeURIComponent(user.first_name + ' ' + user.last_name)}&background=2DD4BF&color=fff" alt="">`;
+    }
+}
+
+function wireProfileView(user) {
+    const grid = document.getElementById('emoji-grid');
+    const preview = document.getElementById('profile-avatar-preview');
+    const navItems = document.querySelectorAll('.nav-item');
+    const views = document.querySelectorAll('.view');
+
+    grid.innerHTML = EMOJI_AVATAR_OPTIONS.map(emoji =>
+        `<button type="button" class="emoji-option" data-emoji="${emoji}">${emoji}</button>`
+    ).join('');
+
+    function refreshSelection() {
+        const current = localStorage.getItem(avatarStorageKey(user)) || '🏦';
+        preview.textContent = current;
+        grid.querySelectorAll('.emoji-option').forEach(btn => {
+            btn.classList.toggle('selected', btn.dataset.emoji === current);
+        });
+    }
+    refreshSelection();
+
+    grid.querySelectorAll('.emoji-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+            localStorage.setItem(avatarStorageKey(user), btn.dataset.emoji);
+            applyAvatar(user);
+            refreshSelection();
+        });
+    });
+
+    document.getElementById('user-profile-btn').addEventListener('click', () => {
+        navItems.forEach(nav => nav.classList.remove('active'));
+        views.forEach(view => view.classList.remove('active'));
+        document.getElementById('view-profile').classList.add('active');
+    });
+
+    document.getElementById('back-from-profile-btn').addEventListener('click', () => {
+        views.forEach(view => view.classList.remove('active'));
+        document.getElementById('view-dashboard').classList.add('active');
+        document.querySelector('.nav-item[data-view="dashboard"]').classList.add('active');
+        refreshDashboard();
+    });
 }

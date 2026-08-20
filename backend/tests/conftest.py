@@ -19,6 +19,7 @@ core/dependencies.py define - proving those primitives are a self-contained
 contract that doesn't require going through the login endpoint.
 """
 
+import os
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -39,6 +40,9 @@ from app.modules.users.schemas import UserRead
 _TABLES_IN_FK_ORDER = (
     "sessions",
     "login_attempts",
+    "card_orders",
+    "payments",
+    "beneficiaries",
     "cards",
     "transfers",
     "ledger_entries",
@@ -53,19 +57,47 @@ _TABLES_IN_FK_ORDER = (
 _NIL_UUID = "00000000-0000-0000-0000-000000000000"
 
 
+# Optional, separate Supabase project reserved for tests (see
+# backend/.env.example). When set, clean_db's wipe is provably scoped to
+# disposable test data instead of whatever the app's own SUPABASE_URL points
+# at - this is what actually happened once already: an ordinary `pytest` run
+# wiped the shared dev project because no separate test project existed yet.
+_TEST_SUPABASE_URL = os.environ.get("TEST_SUPABASE_URL")
+_TEST_SUPABASE_KEY = os.environ.get("TEST_SUPABASE_KEY")
+
+
 @pytest_asyncio.fixture
 async def supabase() -> AsyncIterator[AsyncClient]:
     """Function-scoped (not session-scoped): pytest-asyncio gives each test
     function its own event loop by default, and an AsyncClient created
     against one loop breaks ("Event loop is closed") once reused from a
     later test's different loop. A fresh client per test avoids that."""
-    client = await acreate_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+    url = _TEST_SUPABASE_URL or settings.SUPABASE_URL
+    key = _TEST_SUPABASE_KEY or settings.SUPABASE_KEY
+    client = await acreate_client(url, key)
     yield client
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def clean_db(supabase: AsyncClient) -> None:
-    """Runs before every test: empties every table (child tables first)."""
+    """Runs before every test: empties every table (child tables first).
+
+    If TEST_SUPABASE_URL isn't configured, this is the ONLY thing standing
+    between a routine test run and wiping every row in the DEV project - so
+    require an explicit opt-in env var in that case, to make sure that can
+    never happen again by accident (e.g. an IDE auto-running tests, or a CI
+    job with the wrong .env wired in).
+    """
+    if not _TEST_SUPABASE_URL and os.environ.get("ALLOW_TEST_DB_WIPE") != "1":
+        pytest.fail(
+            "Refusing to run: no TEST_SUPABASE_URL/TEST_SUPABASE_KEY configured "
+            "(see backend/.env.example), so this suite would wipe every row in "
+            f"the DEV project at {settings.SUPABASE_URL!r} before each test (see "
+            "clean_db in conftest.py). Set up a separate Supabase project for "
+            "tests, or set ALLOW_TEST_DB_WIPE=1 only if you are sure that "
+            "project's data is disposable.",
+            pytrace=False,
+        )
     for table in _TABLES_IN_FK_ORDER:
         await supabase.table(table).delete().neq("id", _NIL_UUID).execute()
 
@@ -90,8 +122,15 @@ async def client(app) -> AsyncIterator[HTTPXAsyncClient]:
 @pytest.fixture
 def user_factory(supabase: AsyncClient) -> Callable[..., Awaitable[UserRead]]:
     async def _factory(
-        email: str | None = None, first_name: str = "Test", last_name: str = "User"
+        email: str | None = None,
+        first_name: str = "Test",
+        last_name: str = "User",
+        referral_bonus_eligible: bool = True,
     ) -> UserRead:
+        # Defaults to eligible so the many pre-existing tests that assume a
+        # funded account (via OPENING_BALANCE_MINOR) don't all need updating
+        # for a feature they aren't testing - pass False explicitly in tests
+        # that exercise the referral gating itself.
         email = email or f"user-{uuid.uuid4().hex[:8]}@example.com"
         resp = (
             await supabase.table("users")
@@ -101,6 +140,7 @@ def user_factory(supabase: AsyncClient) -> Callable[..., Awaitable[UserRead]]:
                     "password_hash": hash_password("password123"),
                     "first_name": first_name,
                     "last_name": last_name,
+                    "referral_bonus_eligible": referral_bonus_eligible,
                 }
             )
             .execute()

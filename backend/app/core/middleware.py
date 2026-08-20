@@ -9,6 +9,7 @@ import uuid
 from collections import defaultdict, deque
 
 from fastapi import FastAPI, Request, Response
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -86,13 +87,19 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def handle_validation_error(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        # jsonable_encoder, not exc.errors() directly: a malformed body (e.g.
+        # missing/wrong Content-Type) puts the raw request bytes in an
+        # error's "input" field, which plain JSONResponse can't serialize -
+        # that would turn a client's 422 into a 500 (and, worse, crash this
+        # handler itself mid-response, which is what actually produced the
+        # browser's "Failed to fetch").
         return JSONResponse(
             status_code=422,
             content={
                 "error": {
                     "code": "validation_error",
                     "message": "Invalid request.",
-                    "details": exc.errors(),
+                    "details": jsonable_encoder(exc.errors()),
                 }
             },
         )

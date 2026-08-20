@@ -8,11 +8,26 @@ ledger/service.py is exercised against real Postgres, not simulated.
 
 import asyncio
 
+from app.modules.accounts.service import OPENING_BALANCE_MINOR
+
 
 async def _open_account(client, name: str, currency: str = "USD") -> dict:
     resp = await client.post("/api/v1/accounts", json={"name": name, "currency": currency})
     assert resp.status_code == 201, resp.text
     return resp.json()
+
+
+async def _open_account_with_zero_balance(client, name: str, currency: str = "USD") -> dict:
+    """New accounts start with a welcome balance (see accounts/service.py) -
+    drain it to a disposable sink account so tests that need a precise,
+    known starting balance can still reason about exact amounts."""
+    account = await _open_account(client, name, currency)
+    sink = await _open_account(client, f"{name}-sink", currency)
+    resp = await _transfer(
+        client, account["id"], sink["id"], OPENING_BALANCE_MINOR, f"drain-{account['id']}", currency
+    )
+    assert resp.status_code == 201, resp.text
+    return account
 
 
 async def _transfer(client, from_id, to_id, amount_minor, idem_key, currency="USD"):
@@ -47,9 +62,13 @@ async def test_concurrent_transfers_conserve_total_balance(authed_client, seed_b
     a_after = (await client.get(f"/api/v1/accounts/{a['id']}")).json()
     b_after = (await client.get(f"/api/v1/accounts/{b['id']}")).json()
 
-    assert a_after["balance_minor"] == 100_000 - n * amount
-    assert b_after["balance_minor"] == n * amount
-    assert a_after["balance_minor"] + b_after["balance_minor"] == 100_000
+    # Every new account starts with a welcome balance (see accounts/service.py).
+    assert a_after["balance_minor"] == OPENING_BALANCE_MINOR + 100_000 - n * amount
+    assert b_after["balance_minor"] == OPENING_BALANCE_MINOR + n * amount
+    assert (
+        a_after["balance_minor"] + b_after["balance_minor"]
+        == 2 * OPENING_BALANCE_MINOR + 100_000
+    )
 
 
 async def test_concurrent_transfers_cannot_overdraw(authed_client, seed_balance_factory):
@@ -60,7 +79,7 @@ async def test_concurrent_transfers_cannot_overdraw(authed_client, seed_balance_
     serializes concurrent debits instead of letting them race past the
     balance check."""
     client, _user = authed_client
-    a = await _open_account(client, "A")
+    a = await _open_account_with_zero_balance(client, "A")
     b = await _open_account(client, "B")
 
     amount = 1_000
@@ -84,8 +103,9 @@ async def test_concurrent_transfers_cannot_overdraw(authed_client, seed_balance_
     b_after = (await client.get(f"/api/v1/accounts/{b['id']}")).json()
 
     assert a_after["balance_minor"] == 0  # drained exactly, never negative
-    assert b_after["balance_minor"] == amount * affordable
-    assert a_after["balance_minor"] + b_after["balance_minor"] == amount * affordable
+    # b started from _open_account (not the zero-balance helper), so it
+    # still carries its own welcome balance on top of what it received.
+    assert b_after["balance_minor"] == OPENING_BALANCE_MINOR + amount * affordable
 
 
 async def test_concurrent_bidirectional_transfers_do_not_deadlock(
@@ -116,8 +136,12 @@ async def test_concurrent_bidirectional_transfers_do_not_deadlock(
     a_after = (await client.get(f"/api/v1/accounts/{a['id']}")).json()
     b_after = (await client.get(f"/api/v1/accounts/{b['id']}")).json()
 
-    # Equal amounts flowed both ways, so both balances are unchanged, and
-    # the total is conserved.
-    assert a_after["balance_minor"] == 50_000
-    assert b_after["balance_minor"] == 50_000
-    assert a_after["balance_minor"] + b_after["balance_minor"] == 100_000
+    # Equal amounts flowed both ways, so both balances are unchanged (still
+    # their welcome balance + the 50_000 each was seeded with), and the
+    # total is conserved.
+    assert a_after["balance_minor"] == OPENING_BALANCE_MINOR + 50_000
+    assert b_after["balance_minor"] == OPENING_BALANCE_MINOR + 50_000
+    assert (
+        a_after["balance_minor"] + b_after["balance_minor"]
+        == 2 * OPENING_BALANCE_MINOR + 100_000
+    )

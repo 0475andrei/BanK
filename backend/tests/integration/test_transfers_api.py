@@ -1,3 +1,6 @@
+from app.modules.accounts.service import OPENING_BALANCE_MINOR
+
+
 async def test_create_transfer_moves_balance(authed_client, seed_balance_factory):
     client, _user = authed_client
     a = (await client.post("/api/v1/accounts", json={"name": "A", "currency": "USD"})).json()
@@ -19,10 +22,11 @@ async def test_create_transfer_moves_balance(authed_client, seed_balance_factory
     assert body["amount_minor"] == 2_500
     assert body["status"] == "completed"
 
+    # Every new account starts with a welcome balance (see accounts/service.py).
     a_after = (await client.get(f"/api/v1/accounts/{a['id']}")).json()
     b_after = (await client.get(f"/api/v1/accounts/{b['id']}")).json()
-    assert a_after["balance_minor"] == 7_500
-    assert b_after["balance_minor"] == 2_500
+    assert a_after["balance_minor"] == OPENING_BALANCE_MINOR + 10_000 - 2_500
+    assert b_after["balance_minor"] == OPENING_BALANCE_MINOR + 2_500
 
 
 async def test_transfer_requires_idempotency_key(authed_client, seed_balance_factory):
@@ -48,12 +52,14 @@ async def test_transfer_insufficient_funds(authed_client):
     a = (await client.post("/api/v1/accounts", json={"name": "A", "currency": "USD"})).json()
     b = (await client.post("/api/v1/accounts", json={"name": "B", "currency": "USD"})).json()
 
+    # Every new account starts with a welcome balance (see
+    # accounts/service.py), so the request has to exceed that too.
     resp = await client.post(
         "/api/v1/transfers",
         json={
             "from_account_id": a["id"],
             "to_account_id": b["id"],
-            "amount_minor": 100,
+            "amount_minor": OPENING_BALANCE_MINOR + 100,
             "currency": "USD",
         },
         headers={"Idempotency-Key": "k1"},
@@ -126,7 +132,7 @@ async def test_repeated_idempotency_key_returns_same_transfer(authed_client, see
     assert first.json()["id"] == second.json()["id"]
 
     a_after = (await client.get(f"/api/v1/accounts/{a['id']}")).json()
-    assert a_after["balance_minor"] == 9_000  # only debited once
+    assert a_after["balance_minor"] == OPENING_BALANCE_MINOR + 9_000  # only debited once
 
 
 async def test_get_and_list_transfers(authed_client, seed_balance_factory):

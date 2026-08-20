@@ -37,6 +37,15 @@ LOGIN_LOCKOUT_WINDOW_MINUTES = 15
 
 UNIQUE_VIOLATION = "23505"
 
+# Optional at registration - entering it is what unlocks the welcome
+# balance on accounts (see accounts/service.py::OPENING_BALANCE_MINOR).
+# Case-insensitive so "bankTHA"/"BANKTHA"/etc all count.
+REFERRAL_CODE = "BanKTHA"
+
+
+def _is_referral_code_valid(referral_code: str | None) -> bool:
+    return referral_code is not None and referral_code.strip().lower() == REFERRAL_CODE.lower()
+
 
 async def start_session(supabase: AsyncClient, user: UserRead) -> str:
     """Creates a session row and returns the raw token to put in the
@@ -79,6 +88,7 @@ async def register_user(supabase: AsyncClient, payload: RegisterRequest) -> tupl
                     "date_of_birth": extract_date_of_birth(payload.national_id).isoformat(),
                     "phone": payload.phone,
                     "address": payload.address,
+                    "referral_bonus_eligible": _is_referral_code_valid(payload.referral_code),
                 }
             )
             .execute()

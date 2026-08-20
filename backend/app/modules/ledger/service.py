@@ -55,6 +55,41 @@ async def get_balance(supabase: AsyncClient, account_id: uuid.UUID) -> int:
     return resp.data
 
 
+async def grant_opening_balance(
+    supabase: AsyncClient,
+    account_id: uuid.UUID,
+    amount_minor: int,
+    currency: str,
+    idempotency_key: str,
+    *,
+    actor_user_id: uuid.UUID | None = None,
+) -> dict:
+    """The one deliberate exception to post_transaction() being the only
+    money-writer: a new account's opening balance doesn't come from another
+    account, it comes "from the bank" - there is no funding/deposit concept
+    anywhere else in this app (see design_decisions), so a single-sided
+    credit is the only way money enters the system at all. Same
+    locking/idempotency pattern as post_transaction, via its own RPC
+    function (see backend/supabase/migrations/0004_...sql)."""
+    params = {
+        "p_account_id": str(account_id),
+        "p_amount_minor": amount_minor,
+        "p_currency": currency.upper(),
+        "p_idempotency_key": idempotency_key,
+        "p_actor_user_id": str(actor_user_id) if actor_user_id else None,
+    }
+
+    try:
+        resp = await supabase.rpc("grant_opening_balance", params).execute()
+    except APIError as exc:
+        mapped = map_postgrest_error(exc)
+        if mapped is not None:
+            raise mapped from exc
+        raise
+
+    return resp.data
+
+
 async def post_transaction(
     supabase: AsyncClient,
     legs: Sequence[LedgerLeg],

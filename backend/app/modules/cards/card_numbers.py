@@ -1,15 +1,20 @@
-"""Fictitious card number generation. These never correspond to a real
-payment card - there's no real card network involved anywhere in this app
-- but they're structurally valid: 16 digits, correct Luhn check digit, so
-they behave like real PANs for anything that validates the shape.
+"""Fictitious card number/expiry/CVV generation. These never correspond to
+a real payment card - there's no real card network involved anywhere in
+this app - but the number is structurally valid: 16 digits, correct Luhn
+check digit, so it behaves like a real PAN for anything that validates the
+shape.
 
-The full number is only ever returned once, at issue time (see
-modules/cards/service.py::issue_card) - only its last 4 digits are
-persisted (modules/cards/models.py::Card.last4), matching flow.md's schema
-and the general practice of never storing a full PAN at rest.
+The full number, expiry, and CVV are persisted on the Card row (see
+modules/cards/models.py) and stay viewable from the cards list - a
+deliberate departure from real-world practice (which never stores a CVV
+and never re-shows a full PAN after issuance), made because these are
+fake numbers with no real card network behind them.
 """
 
+import datetime
 import secrets
+
+EXPIRY_YEARS_VALID = 4
 
 # A Visa-like prefix, purely cosmetic (matches the "VISA" branding already
 # in the frontend mockup) - doesn't correspond to a real BIN range.
@@ -54,3 +59,13 @@ def generate_card_number(*, prefix: str = DEFAULT_PREFIX, length: int = DEFAULT_
     body = "".join(str(secrets.randbelow(10)) for _ in range(body_length))
     partial = prefix + body
     return partial + str(_luhn_check_digit(partial))
+
+
+def generate_expiry(*, today: datetime.date | None = None) -> tuple[int, int]:
+    """Returns (month, year), EXPIRY_YEARS_VALID years out from today."""
+    today = today or datetime.date.today()
+    return today.month, today.year + EXPIRY_YEARS_VALID
+
+
+def generate_cvv() -> str:
+    return "".join(str(secrets.randbelow(10)) for _ in range(3))

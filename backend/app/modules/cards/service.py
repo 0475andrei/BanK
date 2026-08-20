@@ -6,24 +6,29 @@ from app.core.audit import record_audit_event
 from app.core.exceptions import AccountClosedError, NotFoundError
 from app.modules.accounts import service as accounts_service
 from app.modules.accounts.models import AccountStatus
-from app.modules.cards.card_numbers import generate_card_number
+from app.modules.cards.card_numbers import generate_card_number, generate_cvv, generate_expiry
 from app.modules.cards.models import CardStatus
 from app.modules.cards.schemas import CardCreate
 from app.modules.users.schemas import UserRead
 
 
-async def issue_card(supabase: AsyncClient, user: UserRead, payload: CardCreate) -> tuple[dict, str]:
+async def issue_card(supabase: AsyncClient, user: UserRead, payload: CardCreate) -> dict:
     account = await accounts_service.get_account(supabase, user, payload.account_id)
     if account["status"] != AccountStatus.ACTIVE.value:
         raise AccountClosedError("Cannot issue a card for a closed account.")
 
     card_number = generate_card_number()
+    expiry_month, expiry_year = generate_expiry()
     resp = (
         await supabase.table("cards")
         .insert(
             {
                 "account_id": str(account["id"]),
+                "card_number": card_number,
                 "last4": card_number[-4:],
+                "expiry_month": expiry_month,
+                "expiry_year": expiry_year,
+                "cvv": generate_cvv(),
                 "status": CardStatus.ACTIVE.value,
                 "spending_limit_minor": payload.spending_limit_minor,
             }
@@ -39,7 +44,7 @@ async def issue_card(supabase: AsyncClient, user: UserRead, payload: CardCreate)
         entity=f"cards:{card['id']}",
         metadata={"account_id": str(account["id"])},
     )
-    return card, card_number
+    return card
 
 
 async def list_cards(supabase: AsyncClient, user: UserRead) -> list[dict]:

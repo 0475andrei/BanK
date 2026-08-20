@@ -32,6 +32,36 @@ async def test_register_creates_user_and_starts_session(client):
     assert resp.json()["email"] == "jane.doe@example.com"
 
 
+async def test_register_without_referral_code_is_not_bonus_eligible(client):
+    resp = await client.post("/api/v1/auth/register", json=_register_payload())
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["referral_bonus_eligible"] is False
+
+
+async def test_register_with_correct_referral_code_is_bonus_eligible(client):
+    resp = await client.post(
+        "/api/v1/auth/register", json=_register_payload(referral_code="BanKTHA")
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["referral_bonus_eligible"] is True
+
+
+async def test_register_referral_code_is_case_insensitive(client):
+    resp = await client.post(
+        "/api/v1/auth/register", json=_register_payload(referral_code="banktha")
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["referral_bonus_eligible"] is True
+
+
+async def test_register_with_wrong_referral_code_is_not_bonus_eligible(client):
+    resp = await client.post(
+        "/api/v1/auth/register", json=_register_payload(referral_code="WRONGCODE")
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["referral_bonus_eligible"] is False
+
+
 async def test_register_rejects_invalid_national_id(client):
     resp = await client.post("/api/v1/auth/register", json=_register_payload(national_id="1" * 13))
     assert resp.status_code == 422

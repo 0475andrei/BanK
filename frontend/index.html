@@ -31,6 +31,10 @@
                     <i data-lucide="trending-up" class="icon"></i>
                     <span>Investiții & Bugetare</span>
                 </button>
+                <button class="nav-item" data-view="payments">
+                    <i data-lucide="landmark" class="icon"></i>
+                    <span>Plăți</span>
+                </button>
             </nav>
         </aside>
 
@@ -44,8 +48,8 @@
                 </div>
                 <div class="user-actions">
                     <button class="notification-btn"><i data-lucide="bell" class="icon"></i><span class="badge"></span></button>
-                    <div class="user-profile">
-                        <img id="user-avatar" src="https://ui-avatars.com/api/?name=User&background=2DD4BF&color=fff" alt="" class="avatar">
+                    <div class="user-profile" id="user-profile-btn" title="Profilul meu">
+                        <div id="user-avatar" class="avatar"></div>
                         <span id="user-name"></span>
                     </div>
                     <button class="logout-btn" id="logout-btn" title="Log out"><i data-lucide="log-out" class="icon"></i></button>
@@ -146,7 +150,7 @@
                     </div>
                     <div class="cards-actions">
                         <button class="btn btn-primary" id="open-new-card-btn"><i data-lucide="sparkles" class="icon"></i> Generează Card Virtual</button>
-                        <button class="btn btn-secondary" disabled title="Emiterea de carduri fizice nu este disponibilă în acest demo"><i data-lucide="credit-card" class="icon"></i> Comandă Card Fizic</button>
+                        <button class="btn btn-secondary" id="open-card-order-btn"><i data-lucide="credit-card" class="icon"></i> Comandă Card Fizic</button>
                     </div>
                 </section>
 
@@ -196,6 +200,70 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                <!-- Payments (IBAN-to-IBAN, cross-user) View -->
+                <section id="view-payments" class="view hidden">
+                    <h2 class="view-title">Plăți</h2>
+                    <div class="analytics-grid">
+                        <div class="chart-card">
+                            <h3>Trimite bani printr-un IBAN</h3>
+
+                            <label class="field-label" for="payments-account">Din contul</label>
+                            <select class="field-input" id="payments-account"></select>
+
+                            <div class="my-iban-box">
+                                <span class="iban-value" id="payments-my-iban">—</span>
+                                <button type="button" class="card-eye-btn" id="copy-my-iban-btn" title="Copiază IBAN-ul"><i data-lucide="copy"></i></button>
+                            </div>
+
+                            <div class="auth-error" id="payments-error" hidden></div>
+                            <div class="auth-success" id="payments-success" hidden></div>
+
+                            <form id="payments-form">
+                                <label class="field-label" for="payments-iban">IBAN destinatar</label>
+                                <input class="field-input" type="text" id="payments-iban" required placeholder="RO49 BANK ...">
+
+                                <label class="field-label" for="payments-beneficiary">Nume beneficiar</label>
+                                <input class="field-input" type="text" id="payments-beneficiary" required>
+
+                                <label class="field-label" for="payments-amount">Sumă</label>
+                                <input class="field-input" type="number" id="payments-amount" min="0.01" step="0.01" required>
+
+                                <label class="field-label" for="payments-description">Descriere <span class="field-optional">(opțional)</span></label>
+                                <input class="field-input" type="text" id="payments-description">
+
+                                <div class="modal-actions">
+                                    <button type="submit" class="btn btn-primary">Trimite plata</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <div class="pots-card">
+                            <h3>Contactele mele</h3>
+                            <div id="beneficiaries-list" class="pots-list">
+                                <div class="loading-state">Se încarcă...</div>
+                            </div>
+
+                            <h3 style="margin-top: 30px;">Istoric plăți</h3>
+                            <div id="payments-list" class="pots-list">
+                                <div class="loading-state">Se încarcă...</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Profile view (avatar picker) -->
+                <section id="view-profile" class="view hidden">
+                    <button class="btn btn-secondary" id="back-from-profile-btn" style="margin-bottom: 24px;">
+                        <i data-lucide="arrow-left" class="icon"></i> Înapoi
+                    </button>
+                    <h2 class="view-title">Profilul meu</h2>
+                    <div class="profile-card">
+                        <div class="profile-avatar-preview" id="profile-avatar-preview">🏦</div>
+                        <p class="profile-subtitle">Alege o emoji pentru avatarul tău</p>
+                        <div class="emoji-grid" id="emoji-grid"></div>
                     </div>
                 </section>
             </div>
@@ -281,18 +349,41 @@
         </div>
     </div>
 
-    <!-- Card number reveal modal (shown once, right after issuing) -->
-    <div class="modal-overlay" id="card-reveal-modal" hidden>
+    <!-- Card order modal -->
+    <div class="modal-overlay" id="card-order-modal" hidden>
         <div class="modal">
             <div class="modal-header">
-                <h3>Cardul tău e gata</h3>
-                <button class="modal-close" id="close-card-reveal-modal"><i data-lucide="x"></i></button>
+                <h3>Comandă Card Fizic</h3>
+                <button class="modal-close" id="close-card-order-modal"><i data-lucide="x"></i></button>
             </div>
-            <div class="card-reveal-number" id="card-reveal-number"></div>
-            <p class="card-reveal-note">Acesta este singurul moment în care numărul complet este afișat - backend-ul nu îl salvează, doar ultimele 4 cifre.</p>
-            <div class="modal-actions">
-                <button type="button" class="btn btn-primary" id="close-card-reveal">Am notat numărul</button>
-            </div>
+            <div class="auth-error" id="card-order-error" hidden></div>
+            <form id="card-order-form">
+                <label class="field-label" for="card-order-account">Cont asociat</label>
+                <select class="field-input" id="card-order-account" required></select>
+
+                <label class="field-label" for="card-order-name">Nume complet</label>
+                <input class="field-input" type="text" id="card-order-name" required placeholder="ex. Popescu Andrei">
+
+                <label class="field-label" for="card-order-phone">Telefon</label>
+                <input class="field-input" type="tel" id="card-order-phone" required placeholder="ex. 07xxxxxxxx">
+
+                <label class="field-label" for="card-order-address">Adresă</label>
+                <input class="field-input" type="text" id="card-order-address" required placeholder="Stradă, număr, bloc, apartament">
+
+                <label class="field-label" for="card-order-city">Oraș</label>
+                <input class="field-input" type="text" id="card-order-city" required>
+
+                <label class="field-label" for="card-order-postal">Cod poștal</label>
+                <input class="field-input" type="text" id="card-order-postal" required>
+
+                <label class="field-label" for="card-order-country">Țară</label>
+                <input class="field-input" type="text" id="card-order-country" required value="România">
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-card-order">Anulează</button>
+                    <button type="submit" class="btn btn-primary">Trimite comanda</button>
+                </div>
+            </form>
         </div>
     </div>
 
