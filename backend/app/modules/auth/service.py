@@ -4,6 +4,7 @@ docs/AUTH_HANDOFF.md - this module is the producer side: it's the only
 code that ever writes to `sessions`.
 """
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from postgrest.exceptions import APIError
@@ -13,18 +14,22 @@ from app.config import settings
 from app.core.audit import record_audit_event
 from app.core.exceptions import (
     EmailAlreadyRegisteredError,
+    InvalidResetCodeError,
     LoginRateLimitedError,
     NationalIdAlreadyRegisteredError,
     UnauthorizedError,
     ValidationError,
 )
 from app.core.security import (
+    generate_otp_code,
     generate_session_token,
+    hash_otp_code,
     hash_password,
     hash_session_token,
     verify_password,
 )
-from app.modules.auth.schemas import LoginRequest, RegisterRequest
+from app.core.teams import send_teams_message
+from app.modules.auth.schemas import LoginRequest, RegisterRequest, ResetPasswordRequest
 from app.modules.auth.validation import (
     extract_date_of_birth,
     extract_gender,
@@ -34,6 +39,9 @@ from app.modules.users.schemas import UserRead
 
 LOGIN_MAX_FAILED_ATTEMPTS = 5
 LOGIN_LOCKOUT_WINDOW_MINUTES = 15
+
+RESET_CODE_TTL_MINUTES = 10
+RESET_CODE_MAX_ATTEMPTS = 5
 
 UNIQUE_VIOLATION = "23505"
 
@@ -149,6 +157,104 @@ async def login_user(supabase: AsyncClient, payload: LoginRequest) -> tuple[User
 
     token = await start_session(supabase, user)
     return user, token
+
+
+async def request_password_reset(supabase: AsyncClient, email: str) -> None:
+    """Always completes normally, whether or not the email is registered -
+    the caller (router) must not be able to tell the two cases apart, or
+    this becomes a user-enumeration oracle. If the user exists: any prior
+    unconsumed code is invalidated, a fresh one is generated, stored (hash
+    only), and best-effort delivered to Teams. A Teams outage never surfaces
+    here - see core/teams.py."""
+    email = email.lower()
+    resp = await supabase.table("users").select("id").eq("email", email).maybe_single().execute()
+    user_row = resp.data if resp is not None else None
+    if user_row is None:
+        return
+    user_id = user_row["id"]
+
+    # At most one live code per user - an old, still-unconsumed code from a
+    # previous request shouldn't keep working once a new one is issued.
+    await (
+        supabase.table("password_reset_codes")
+        .update({"consumed_at": datetime.now(UTC).isoformat()})
+        .eq("user_id", user_id)
+        .is_("consumed_at", "null")
+        .execute()
+    )
+
+    code = generate_otp_code()
+    expires_at = datetime.now(UTC) + timedelta(minutes=RESET_CODE_TTL_MINUTES)
+    await supabase.table("password_reset_codes").insert(
+        {
+            "user_id": user_id,
+            "code_hash": hash_otp_code(code),
+            "expires_at": expires_at.isoformat(),
+        }
+    ).execute()
+
+    await send_teams_message(
+        f"🔐 Cod resetare parolă BanK pentru {email}: **{code}**  \n"
+        f"Valabil {RESET_CODE_TTL_MINUTES} minute."
+    )
+
+    await record_audit_event(
+        supabase, user_id=uuid.UUID(user_id), action="auth.request_password_reset", entity=f"users:{user_id}"
+    )
+
+
+async def reset_password(supabase: AsyncClient, payload: ResetPasswordRequest) -> None:
+    email = payload.email.lower()
+    resp = await supabase.table("users").select("id").eq("email", email).maybe_single().execute()
+    user_row = resp.data if resp is not None else None
+    # Same generic error whether the email is unknown, the code is wrong, or
+    # it expired - never confirm which one it was (see request_password_reset).
+    if user_row is None:
+        raise InvalidResetCodeError()
+    user_id = user_row["id"]
+
+    resp = (
+        await supabase.table("password_reset_codes")
+        .select("*")
+        .eq("user_id", user_id)
+        .is_("consumed_at", "null")
+        .order("created_at", desc=True)
+        .limit(1)
+        .maybe_single()
+        .execute()
+    )
+    code_row = resp.data if resp is not None else None
+    if code_row is None or code_row["attempts"] >= RESET_CODE_MAX_ATTEMPTS:
+        raise InvalidResetCodeError()
+
+    expires_at = datetime.fromisoformat(code_row["expires_at"])
+    if datetime.now(UTC) >= expires_at or hash_otp_code(payload.code) != code_row["code_hash"]:
+        await (
+            supabase.table("password_reset_codes")
+            .update({"attempts": code_row["attempts"] + 1})
+            .eq("id", code_row["id"])
+            .execute()
+        )
+        raise InvalidResetCodeError()
+
+    await supabase.table("users").update(
+        {"password_hash": hash_password(payload.new_password)}
+    ).eq("id", user_id).execute()
+
+    await (
+        supabase.table("password_reset_codes")
+        .update({"consumed_at": datetime.now(UTC).isoformat()})
+        .eq("id", code_row["id"])
+        .execute()
+    )
+
+    # A reset invalidates every existing session, on every device - the same
+    # way a real bank would treat "someone just changed this password".
+    await supabase.table("sessions").delete().eq("user_id", user_id).execute()
+
+    await record_audit_event(
+        supabase, user_id=uuid.UUID(user_id), action="auth.reset_password", entity=f"users:{user_id}"
+    )
 
 
 async def logout_user(supabase: AsyncClient, user: UserRead, token: str | None) -> None:

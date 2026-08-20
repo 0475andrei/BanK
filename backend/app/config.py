@@ -51,6 +51,12 @@ class Settings(BaseSettings):
 
     RATE_LIMIT_PER_MINUTE: int = 120
 
+    # Password reset OTP delivery - a Microsoft Teams "Workflows" incoming
+    # webhook URL (Teams channel > Workflows > "Send webhook alerts to a
+    # chat"). See app/core/teams.py. None disables delivery: reset codes are
+    # still generated/stored, they just never reach the user.
+    TEAMS_WEBHOOK_URL: str | None = None
+
     # ------------------------------------------------------------------
     # AI layer ([B]-owned app/ai). Azure OpenAI / Azure AI Foundry.
     # ------------------------------------------------------------------

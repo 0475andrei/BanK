@@ -117,6 +117,12 @@ class LoginRateLimitedError(AppError):
     default_message = "Too many failed login attempts. Try again later."
 
 
+class InvalidResetCodeError(AppError):
+    status_code = 400
+    error_code = "invalid_reset_code"
+    default_message = "Invalid or expired reset code."
+
+
 class AIServiceUnavailableError(AppError):
     """The AI layer could not be constructed - typically missing credentials.
 
