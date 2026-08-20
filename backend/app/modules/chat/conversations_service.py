@@ -2,6 +2,7 @@ import uuid
 
 from supabase import AsyncClient
 
+from app.ai.routing import RoutingDecision
 from app.ai.schemas import Message, ToolCall
 from app.core.exceptions import ConversationNotFoundError
 from app.modules.users.schemas import UserRead
@@ -47,8 +48,13 @@ async def list_conversations(supabase: AsyncClient, user: UserRead) -> list[dict
 
 
 async def append_message(
-    supabase: AsyncClient, conversation_id: uuid.UUID, message: Message
+    supabase: AsyncClient,
+    conversation_id: uuid.UUID,
+    message: Message,
+    routing: RoutingDecision | None = None,
 ) -> dict:
+    """Store one turn. `routing` belongs on the assistant turn the routed agent
+    produced, and is None everywhere else (user turns, tool results)."""
     resp = (
         await supabase.table("messages")
         .insert(
@@ -59,6 +65,7 @@ async def append_message(
                 "tool_calls": [tc.model_dump() for tc in message.tool_calls] or None,
                 "tool_call_id": message.tool_call_id,
                 "name": message.name,
+                "routing_metadata": routing.model_dump() if routing is not None else None,
             }
         )
         .execute()
