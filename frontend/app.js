@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const views = document.querySelectorAll('.view');
 
     navItems.forEach(item => {
-        item.addEventListener('click', () => {
+        item.addEventListener('click', async () => {
             // Remove active class from all nav items
             navItems.forEach(nav => nav.classList.remove('active'));
             // Add active class to clicked item
@@ -21,6 +21,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Show the corresponding view
             const viewId = `view-${item.dataset.view}`;
             document.getElementById(viewId).classList.add('active');
+
+            const isChatView = item.dataset.view === 'chat';
+            toggleConversationHistory(isChatView);
+            if (isChatView) {
+                await loadConversationHistory();
+            }
 
             // Re-fetch balances/transactions whenever the dashboard is opened,
             // so money received while the user was on another tab shows up
@@ -65,9 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
  * ------------------------------------------------------------------------- */
 
 let currentConversationId = null;
-// Guards against re-fetching conversation history every time the chat nav
-// item is clicked - it's loaded once per page load, same as the dashboard.
-let conversationHistoryLoaded = false;
+let conversationHistory = [];
 
 const CHAT_WELCOME_TEXT =
     'Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?';
@@ -152,7 +156,8 @@ async function sendMessage() {
 
         typingBubble.remove();
         appendChatBubble('ai', response.reply);
-        currentConversationId = response.conversation_id;
+        setCurrentConversationId(response.conversation_id);
+        void loadConversationHistory();
     } catch (err) {
         typingBubble.remove();
 
@@ -172,39 +177,248 @@ async function sendMessage() {
 /** Clears the chat panel back to the empty-state welcome bubble and detaches
  * from the current conversation - the next message starts a new one. */
 function startNewConversation() {
-    currentConversationId = null;
+    setCurrentConversationId(null);
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = '';
     appendChatBubble('ai', CHAT_WELCOME_TEXT);
+    renderConversationHistory();
 }
 
-/** Restores the most recent conversation's transcript on page load, so a
- * refresh doesn't lose the chat. No-ops past the first call and swallows
- * failures - a user who never chatted, or is offline, just sees the normal
- * empty state instead of an error. */
-async function loadLatestConversationIfAny() {
-    if (conversationHistoryLoaded) return;
-    conversationHistoryLoaded = true;
+function setCurrentConversationId(conversationId) {
+    currentConversationId = conversationId || null;
+    if (currentConversationId) {
+        sessionStorage.setItem('bank.currentConversationId', currentConversationId);
+    } else {
+        sessionStorage.removeItem('bank.currentConversationId');
+    }
+}
+
+function toggleConversationHistory(isVisible) {
+    const history = document.getElementById('conversation-history');
+    if (history) history.hidden = !isVisible;
+}
+
+function truncateConversationPreview(value) {
+    const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+    return normalized.length > 58 ? `${normalized.slice(0, 58).trim()}...` : normalized;
+}
+
+function formatRelativeConversationTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+
+    const elapsedMinutes = Math.floor((Date.now() - date.getTime()) / 60000);
+    if (elapsedMinutes < 1) return 'acum câteva secunde';
+    if (elapsedMinutes === 1) return 'acum un minut';
+    if (elapsedMinutes < 60) return `acum ${elapsedMinutes} minute`;
+    if (elapsedMinutes < 120) return 'acum o oră';
+    if (elapsedMinutes < 24 * 60) return `acum ${Math.floor(elapsedMinutes / 60)} ore`;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const conversationDay = new Date(date);
+    conversationDay.setHours(0, 0, 0, 0);
+    const dayDifference = Math.floor((today - conversationDay) / 86400000);
+    if (dayDifference === 1) return 'ieri';
+    if (dayDifference < 7) return `acum ${dayDifference} zile`;
+    return date.toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' });
+}
+
+function showConversationHistoryError(message = '') {
+    const error = document.getElementById('conversation-history-error');
+    if (!error) return;
+    error.textContent = message;
+    error.hidden = !message;
+}
+
+async function loadConversationHistory() {
+    const list = document.getElementById('conversation-history-list');
+    if (!list) return;
+
+    showConversationHistoryError();
+    list.innerHTML = '<p class="conversation-history-empty">Se încarcă...</p>';
 
     try {
         const conversations = await apiFetch('/chat/conversations');
-        if (!conversations.length) return;
+        conversationHistory = await Promise.all(conversations.map(async conversation => {
+            let preview = conversation.title;
+            if (!preview) {
+                try {
+                    const messages = await apiFetch(`/chat/conversations/${conversation.id}/messages`);
+                    const firstMessage = messages.find(message =>
+                        (message.role === 'user' || message.role === 'assistant') && message.content
+                    );
+                    preview = firstMessage?.content;
+                } catch {
+                    preview = null;
+                }
+            }
+            return { ...conversation, preview: preview || 'Conversație nouă' };
+        }));
 
-        const latest = conversations[0]; // ordered by created_at desc
-        const messages = await apiFetch(`/chat/conversations/${latest.id}/messages`);
-        // Only turns with real text render as a bubble - an assistant turn that
-        // only carried tool_calls (content is null) has nothing to show.
-        const dialogue = messages.filter(
-            m => (m.role === 'user' || m.role === 'assistant') && m.content
-        );
-        if (!dialogue.length) return;
+        renderConversationHistory();
 
-        currentConversationId = latest.id;
+        const rememberedId = sessionStorage.getItem('bank.currentConversationId');
+        if (!currentConversationId && rememberedId && conversationHistory.some(item => item.id === rememberedId)) {
+            await openConversation(rememberedId);
+        }
+    } catch (err) {
+        list.innerHTML = '';
+        showConversationHistoryError('Istoricul conversațiilor nu a putut fi încărcat. Încearcă din nou.');
+    }
+}
+
+function renderConversationHistory() {
+    const list = document.getElementById('conversation-history-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (!conversationHistory.length) {
+        list.innerHTML = '<p class="conversation-history-empty">Nu ai conversații salvate.</p>';
+        return;
+    }
+
+    conversationHistory.forEach(conversation => {
+        const item = document.createElement('div');
+        item.className = 'conversation-history-item';
+        if (conversation.id === currentConversationId) item.classList.add('active');
+
+        const selectButton = document.createElement('button');
+        selectButton.type = 'button';
+        selectButton.className = 'conversation-history-select';
+        selectButton.addEventListener('click', () => openConversation(conversation.id));
+
+        const preview = document.createElement('span');
+        preview.className = 'conversation-history-preview';
+        preview.textContent = truncateConversationPreview(conversation.preview);
+
+        const timestamp = document.createElement('span');
+        timestamp.className = 'conversation-history-time';
+        timestamp.textContent = formatRelativeConversationTime(conversation.created_at);
+        selectButton.append(preview, timestamp);
+
+        const actions = document.createElement('div');
+        actions.className = 'conversation-history-actions';
+
+        const renameButton = document.createElement('button');
+        renameButton.type = 'button';
+        renameButton.className = 'conversation-history-action';
+        renameButton.title = 'Redenumește conversația';
+        renameButton.setAttribute('aria-label', 'Redenumește conversația');
+        renameButton.innerHTML = '<i data-lucide="pencil"></i>';
+        renameButton.addEventListener('click', () => beginConversationRename(item, conversation));
+
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'conversation-history-action';
+        deleteButton.title = 'Șterge conversația';
+        deleteButton.setAttribute('aria-label', 'Șterge conversația');
+        deleteButton.innerHTML = '<i data-lucide="trash-2"></i>';
+        deleteButton.addEventListener('click', () => deleteConversation(conversation));
+
+        actions.append(renameButton, deleteButton);
+        item.append(selectButton, actions);
+        list.appendChild(item);
+    });
+
+    if (window.lucide) lucide.createIcons();
+}
+
+async function openConversation(conversationId) {
+    setCurrentConversationId(conversationId);
+    renderConversationHistory();
+    showConversationHistoryError();
+
+    try {
+        const messages = await apiFetch(`/chat/conversations/${conversationId}/messages`);
         const chatMessages = document.getElementById('chat-messages');
         chatMessages.innerHTML = '';
-        dialogue.forEach(m => appendChatBubble(m.role === 'user' ? 'user' : 'ai', m.content || ''));
-    } catch {
-        // Non-fatal: chat just starts fresh, same as before this feature existed.
+        const dialogue = messages.filter(message =>
+            (message.role === 'user' || message.role === 'assistant') && message.content
+        );
+        if (dialogue.length) {
+            dialogue.forEach(message => appendChatBubble(message.role === 'user' ? 'user' : 'ai', message.content));
+        } else {
+            appendChatBubble('ai', CHAT_WELCOME_TEXT);
+        }
+    } catch (err) {
+        showConversationHistoryError('Conversația nu a putut fi încărcată. Încearcă din nou.');
+    }
+}
+
+function beginConversationRename(item, conversation) {
+    const selectButton = item.querySelector('.conversation-history-select');
+    const actions = item.querySelector('.conversation-history-actions');
+    if (!selectButton || !actions) return;
+
+    item.classList.add('editing');
+    selectButton.replaceChildren();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'conversation-history-rename-input';
+    input.value = conversation.title || conversation.preview;
+    input.maxLength = 120;
+    input.setAttribute('aria-label', 'Nume conversație');
+    input.addEventListener('click', event => event.stopPropagation());
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') saveConversationRename(conversation, input.value);
+        if (event.key === 'Escape') renderConversationHistory();
+    });
+    selectButton.appendChild(input);
+
+    actions.replaceChildren();
+    const saveButton = document.createElement('button');
+    saveButton.type = 'button';
+    saveButton.className = 'conversation-history-action';
+    saveButton.title = 'Salvează numele';
+    saveButton.setAttribute('aria-label', 'Salvează numele');
+    saveButton.innerHTML = '<i data-lucide="check"></i>';
+    saveButton.addEventListener('click', () => saveConversationRename(conversation, input.value));
+
+    const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
+    cancelButton.className = 'conversation-history-action';
+    cancelButton.title = 'Renunță';
+    cancelButton.setAttribute('aria-label', 'Renunță');
+    cancelButton.innerHTML = '<i data-lucide="x"></i>';
+    cancelButton.addEventListener('click', renderConversationHistory);
+    actions.append(saveButton, cancelButton);
+    input.focus();
+    input.select();
+    if (window.lucide) lucide.createIcons();
+}
+
+async function saveConversationRename(conversation, nextTitle) {
+    const title = nextTitle.trim();
+    if (!title) {
+        showConversationHistoryError('Numele conversației nu poate fi gol.');
+        return;
+    }
+
+    try {
+        await apiFetch(`/chat/conversations/${conversation.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ title }),
+        });
+        conversation.title = title;
+        conversation.preview = title;
+        renderConversationHistory();
+    } catch (err) {
+        showConversationHistoryError('Conversația nu a putut fi redenumită. Încearcă din nou.');
+    }
+}
+
+async function deleteConversation(conversation) {
+    const approved = window.confirm(`Sigur vrei să ștergi conversația „${truncateConversationPreview(conversation.preview)}”?`);
+    if (!approved) return;
+
+    try {
+        await apiFetch(`/chat/conversations/${conversation.id}`, { method: 'DELETE' });
+        conversationHistory = conversationHistory.filter(item => item.id !== conversation.id);
+        if (currentConversationId === conversation.id) startNewConversation();
+        renderConversationHistory();
+    } catch (err) {
+        showConversationHistoryError('Conversația nu a putut fi ștearsă. Încearcă din nou.');
     }
 }
 
@@ -274,7 +488,6 @@ async function initDashboard() {
     wireProfileView(user);
 
     await refreshDashboard();
-    await loadLatestConversationIfAny();
 }
 
 async function refreshDashboard() {

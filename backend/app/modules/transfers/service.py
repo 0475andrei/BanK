@@ -112,21 +112,36 @@ async def get_transfer(supabase: AsyncClient, user: UserRead, transfer_id: uuid.
     return transfer
 
 
-async def list_transfers(supabase: AsyncClient, user: UserRead) -> list[dict]:
+async def list_transfers_for_owner(
+    supabase: AsyncClient, user_id: uuid.UUID | str, *, limit: int | None = None
+) -> list[dict]:
+    """Transfer list for callers holding a bare user id (the AI layer's
+    `Context`), mirroring `accounts_service.get_account_for_owner`.
+
+    `limit` is optional so `list_transfers` below - the banking modules' entry
+    point - keeps returning the full history unchanged.
+    """
     # Safe two-call fallback instead of relying on PostgREST's embedded-
     # filter syntax (unstable across versions) - not a hot/concurrent path.
     accounts_resp = (
-        await supabase.table("accounts").select("id").eq("user_id", str(user.id)).execute()
+        await supabase.table("accounts").select("id").eq("user_id", str(user_id)).execute()
     )
     account_ids = [row["id"] for row in accounts_resp.data]
     if not account_ids:
         return []
 
-    resp = (
-        await supabase.table("transfers")
+    query = (
+        supabase.table("transfers")
         .select("*")
         .in_("from_account_id", account_ids)
         .order("created_at", desc=True)
-        .execute()
     )
+    if limit is not None:
+        query = query.limit(limit)
+
+    resp = await query.execute()
     return resp.data
+
+
+async def list_transfers(supabase: AsyncClient, user: UserRead) -> list[dict]:
+    return await list_transfers_for_owner(supabase, user.id)

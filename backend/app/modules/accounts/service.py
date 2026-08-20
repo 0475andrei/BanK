@@ -114,15 +114,27 @@ async def get_account(supabase: AsyncClient, user: UserRead, account_id: uuid.UU
     return await _get_owned_account(supabase, user, account_id)
 
 
-async def list_accounts(supabase: AsyncClient, user: UserRead) -> list[dict]:
+async def list_accounts_for_owner(
+    supabase: AsyncClient, user_id: uuid.UUID | str
+) -> list[dict]:
+    """Account list for callers holding a bare user id.
+
+    Same reason `get_account_for_owner` exists: the AI layer's `Context` carries
+    a user id string, not a `UserRead`. `list_accounts` below is this same read
+    for the banking modules, which do have the full user.
+    """
     resp = (
         await supabase.table("accounts")
         .select("*")
-        .eq("user_id", str(user.id))
+        .eq("user_id", str(user_id))
         .order("created_at")
         .execute()
     )
     return resp.data
+
+
+async def list_accounts(supabase: AsyncClient, user: UserRead) -> list[dict]:
+    return await list_accounts_for_owner(supabase, user.id)
 
 
 async def get_account_balance(supabase: AsyncClient, user: UserRead, account_id: uuid.UUID) -> int:

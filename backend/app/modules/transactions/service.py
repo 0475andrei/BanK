@@ -11,9 +11,9 @@ DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 
 
-async def list_account_transactions(
+async def list_account_transactions_for_owner(
     supabase: AsyncClient,
-    user: UserRead,
+    user_id: uuid.UUID | str,
     account_id: uuid.UUID,
     *,
     date_from: datetime | None = None,
@@ -21,9 +21,13 @@ async def list_account_transactions(
     limit: int = DEFAULT_LIMIT,
     offset: int = 0,
 ) -> list[TransactionEntryRead]:
+    """Transaction list for callers holding a bare user id (the AI layer's
+    `Context`), mirroring `accounts_service.get_account_for_owner` - which is
+    also what enforces ownership here. `list_account_transactions` below is the
+    same read for the banking modules, which have a full `UserRead`."""
     # Ownership check - raises AccountNotFoundError (404) if this isn't the
     # caller's account, without leaking whether it exists at all.
-    await accounts_service.get_account(supabase, user, account_id)
+    await accounts_service.get_account_for_owner(supabase, user_id, account_id)
 
     limit = max(1, min(limit, MAX_LIMIT))
     offset = max(0, offset)
@@ -54,3 +58,24 @@ async def list_account_transactions(
         )
         for row in resp.data
     ]
+
+
+async def list_account_transactions(
+    supabase: AsyncClient,
+    user: UserRead,
+    account_id: uuid.UUID,
+    *,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    limit: int = DEFAULT_LIMIT,
+    offset: int = 0,
+) -> list[TransactionEntryRead]:
+    return await list_account_transactions_for_owner(
+        supabase,
+        user.id,
+        account_id,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=offset,
+    )
