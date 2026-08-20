@@ -49,12 +49,54 @@ body {
     padding: 24px;
 }
 
-.logo h2 {
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 40px;
+    width: fit-content;
+    max-width: 100%;
+}
+
+.logo-mark {
+    width: 52px;
+    height: 52px;
+    flex: 0 0 52px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.logo-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    line-height: 1;
+}
+
+.logo-name {
+    color: var(--text-main);
     font-size: 28px;
     font-weight: 700;
-    color: var(--primary-teal);
-    margin-bottom: 40px;
-    letter-spacing: -1px;
+}
+
+.logo-bank {
+    color: #289da4;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 5px;
+    margin-top: 3px;
+}
+
+.logo-tagline {
+    color: #289da4;
+    font-size: 8px;
+    font-weight: 600;
+    margin-top: 4px;
+    white-space: nowrap;
+}
+
+.sidebar .logo {
+    align-self: center;
 }
 
 .nav-menu {
@@ -973,7 +1015,15 @@ body {
 
 .auth-card-wide { max-width: 480px; }
 
-.auth-card .logo h2 { margin-bottom: 4px; }
+.auth-card .logo {
+    margin-bottom: 12px;
+}
+
+.auth-card .logo-mark {
+    width: 46px;
+    height: 46px;
+    flex-basis: 46px;
+}
 
 .auth-subtitle {
     color: var(--text-muted);
