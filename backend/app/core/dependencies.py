@@ -22,7 +22,7 @@ from app.modules.users.schemas import UserRead
 _USER_COLUMNS = (
     "id, email, first_name, last_name, email_verified, "
     "national_id, gender, date_of_birth, phone, address, "
-    "referral_bonus_eligible, created_at"
+    "referral_bonus_eligible, referral_code, referred_by_user_id, created_at"
 )
 
 
