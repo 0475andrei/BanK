@@ -178,7 +178,11 @@ async function loadLatestConversationIfAny() {
 
         const latest = conversations[0]; // ordered by created_at desc
         const messages = await apiFetch(`/chat/conversations/${latest.id}/messages`);
-        const dialogue = messages.filter(m => m.role === 'user' || m.role === 'assistant');
+        // Only turns with real text render as a bubble - an assistant turn that
+        // only carried tool_calls (content is null) has nothing to show.
+        const dialogue = messages.filter(
+            m => (m.role === 'user' || m.role === 'assistant') && m.content
+        );
         if (!dialogue.length) return;
 
         currentConversationId = latest.id;
