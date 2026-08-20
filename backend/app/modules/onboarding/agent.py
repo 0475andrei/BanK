@@ -1,0 +1,132 @@
+"""Comodul - the calm, patient assistant that interviews a new user for the
+fields /auth/register needs, then hands off to that endpoint's normal
+validation for the actual account creation.
+
+Same tool-calling loop shape as app/ai/agents/banking_agent.py::BankingAgent
+- see that file for the detailed rationale of each step. Kept as a separate
+class rather than sharing a base implementation: this agent's tool set (one
+tool, pure, no side effects, no identity/account resolution) is different in
+kind from the banking agent's, and Agent's base contract is already thin
+enough that duplicating the loop is cheaper than generalizing it for two
+callers.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Sequence
+
+from app.ai.agents.base import Agent
+from app.ai.context import Context
+from app.ai.providers.base import ModelProvider
+from app.ai.schemas import Message, ToolCall, ToolResult
+from app.ai.tools.registry import ToolRegistry
+
+logger = logging.getLogger(__name__)
+
+SYSTEM_PROMPT = """Ești Comodul, asistentul calm și răbdător care ajută un \
+client nou să își deschidă un cont la BanK.
+
+Tonul tău: calm, prietenos, răbdător - niciodată grăbit sau formal-rece. \
+Pui o singură întrebare pe rând (sau două strâns legate), ca într-o \
+conversație reală, nu ca un formular completat mecanic.
+
+Ai nevoie de aceste date, în ordinea firească a unei conversații:
+- Nume și prenume
+- CNP (numărul de identitate românesc, 13 cifre)
+- Adresă de email
+- O parolă (minim 8 caractere)
+
+Apoi întrebi, specificând clar că sunt OPȚIONALE și pot fi sărite:
+- Telefon (opțional)
+- Adresă (opțională)
+- Cod de referral (opțional - dacă are unul, primește 500 RON cadou la \
+deschiderea contului)
+
+La începutul conversației, întreabă politicos dacă vrea să încarce o poză \
+a buletinului - aplicația poate citi automat numele, CNP-ul și adresa din \
+ea, ca să nu mai fie nevoie să le scrie manual. Dacă acceptă, aplicația se \
+ocupă de partea tehnică; tu doar aștepți să primești rezultatul citirii \
+într-un mesaj și confirmi politicos ce ai înțeles, întrebând dacă e corect.
+
+Odată ce ai toate câmpurile obligatorii și ai întrebat explicit despre \
+fiecare câmp opțional (chiar dacă a fost sărit), cheamă tool-ul \
+propose_registration cu tot ce ai adunat (null pentru câmpurile opționale \
+sărite). NU inventa niciodată o valoare pe care utilizatorul nu a dat-o. \
+După ce chemi tool-ul, rezumă natural datele adunate și întreabă dacă \
+poate confirma crearea contului - aplicația se ocupă de restul.
+
+Nu creezi tu contul - tool-ul propose_registration doar pregătește datele \
+pentru ca aplicația să le arate clientului spre confirmare finală."""
+
+#: Cap on provider round-trips per user message. Prevents an infinite tool loop.
+MAX_ITERATIONS = 5
+
+FALLBACK_REPLY = (
+    "Îmi pare rău, am nevoie de puțin mai mult timp să procesez asta. "
+    "Poți reformula, te rog?"
+)
+
+
+class OnboardingAgent(Agent):
+    """Runs the propose_registration tool loop against a provider."""
+
+    name = "onboarding"
+
+    def __init__(
+        self,
+        provider: ModelProvider,
+        tools: ToolRegistry,
+        *,
+        system_prompt: str = SYSTEM_PROMPT,
+        max_iterations: int = MAX_ITERATIONS,
+    ) -> None:
+        if max_iterations < 1:
+            raise ValueError("max_iterations must be at least 1")
+        self._provider = provider
+        self._tools = tools
+        self._system_prompt = system_prompt
+        self._max_iterations = max_iterations
+
+    async def run(self, messages: Sequence[Message], context: Context) -> tuple[str, list[Message]]:
+        working: list[Message] = [
+            Message(role="system", content=self._system_prompt),
+            *messages,
+        ]
+        trace_start = len(working)
+        specs = self._tools.list_specs()
+
+        for iteration in range(1, self._max_iterations + 1):
+            response = self._provider.complete(working, specs)
+
+            if not response.wants_tools:
+                return response.text or "", working[trace_start:]
+
+            working.append(response.to_assistant_message())
+            for call in response.tool_calls:
+                logger.info(
+                    "agent=%s iteration=%d executing tool=%s",
+                    self.name,
+                    iteration,
+                    call.name,
+                )
+                result = await self._execute(call, context)
+                working.append(result.to_message())
+
+        logger.warning(
+            "agent=%s hit max_iterations=%d; returning fallback",
+            self.name,
+            self._max_iterations,
+        )
+        return FALLBACK_REPLY, working[trace_start:]
+
+    async def _execute(self, call: ToolCall, context: Context) -> ToolResult:
+        tool = self._tools.get(call.name)
+        if tool is None:
+            logger.warning("agent=%s requested unknown tool=%s", self.name, call.name)
+            return ToolResult.failure(
+                name=call.name,
+                error=f"unknown tool: {call.name}",
+                tool_call_id=call.id,
+            )
+        return await tool.execute(call, context)
