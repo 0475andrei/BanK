@@ -61,7 +61,7 @@ class BankingAgent(Agent):
         self._system_prompt = system_prompt
         self._max_iterations = max_iterations
 
-    def run(self, messages: Sequence[Message], context: Context) -> str:
+    async def run(self, messages: Sequence[Message], context: Context) -> str:
         # `context` is threaded straight to the tools and is never rendered into
         # the prompt — the model must not be able to read or restate identity.
         #
@@ -88,7 +88,8 @@ class BankingAgent(Agent):
                     iteration,
                     call.name,
                 )
-                working.append(self._execute(call, context).to_message())
+                result = await self._execute(call, context)
+                working.append(result.to_message())
 
         logger.warning(
             "agent=%s hit max_iterations=%d; returning fallback",
@@ -97,7 +98,7 @@ class BankingAgent(Agent):
         )
         return FALLBACK_REPLY
 
-    def _execute(self, call: ToolCall, context: Context) -> ToolResult:
+    async def _execute(self, call: ToolCall, context: Context) -> ToolResult:
         tool = self._tools.get(call.name)
         if tool is None:
             # The model asked for something it was never offered.
@@ -108,4 +109,4 @@ class BankingAgent(Agent):
                 tool_call_id=call.id,
             )
         # `execute` validates arguments, enforces the context, and never raises.
-        return tool.execute(call, context)
+        return await tool.execute(call, context)

@@ -8,6 +8,8 @@ below for why that needs saying out loud.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from app.ai.agents.banking_agent import BankingAgent
@@ -39,6 +41,62 @@ OWNED_ACCOUNT_IDS = ("acc-owned-1", "acc-owned-2")
 UNOWNED_ACCOUNT_ID = "acc-someone-else-9"
 TEST_USER_ID = "user-under-test"
 
+# What the fake Supabase below reports for any account it is asked about.
+STUB_BALANCE_MINOR = 4_242
+STUB_CURRENCY = "USD"
+# A real UUID: the tool parses `account["id"]` before calling the ledger, so
+# the fake's row has to look like a genuine database row.
+STUB_ACCOUNT_ROW_ID = "11111111-2222-3333-4444-555555555555"
+
+
+class _FakeQuery:
+    """Swallows the PostgREST builder chain and returns a canned payload."""
+
+    def __init__(self, data: object) -> None:
+        self._data = data
+
+    def select(self, *args: object, **kwargs: object) -> _FakeQuery:
+        return self
+
+    def eq(self, *args: object, **kwargs: object) -> _FakeQuery:
+        return self
+
+    def maybe_single(self) -> _FakeQuery:
+        return self
+
+    async def execute(self) -> SimpleNamespace:
+        return SimpleNamespace(data=self._data)
+
+
+class FakeSupabase:
+    """Offline stand-in for `supabase.AsyncClient`.
+
+    Only the two calls `get_balance` makes are supported: the ownership-scoped
+    `accounts` read and the `get_account_balance` RPC. It answers for whatever
+    account it is asked about - ownership is enforced by `Context` in memory,
+    well before any of this is reached, so these tests never depend on the fake
+    to refuse anything.
+    """
+
+    def __init__(
+        self, balance_minor: int = STUB_BALANCE_MINOR, currency: str = STUB_CURRENCY
+    ) -> None:
+        self.balance_minor = balance_minor
+        self.currency = currency
+
+    def table(self, name: str) -> _FakeQuery:
+        return _FakeQuery({"id": STUB_ACCOUNT_ROW_ID, "currency": self.currency})
+
+    def rpc(self, function_name: str, params: dict | None = None) -> _FakeQuery:
+        return _FakeQuery(self.balance_minor)
+
+
+@pytest.fixture
+def supabase() -> FakeSupabase:
+    """Offline DB stand-in. Overrides the real client fixture in the parent
+    conftest for this suite, exactly as `clean_db` above does."""
+    return FakeSupabase()
+
 
 @pytest.fixture
 def context() -> Context:
@@ -47,8 +105,8 @@ def context() -> Context:
 
 
 @pytest.fixture
-def tools() -> ToolRegistry:
-    return build_banking_tools()
+def tools(supabase: FakeSupabase) -> ToolRegistry:
+    return build_banking_tools(supabase)
 
 
 @pytest.fixture
