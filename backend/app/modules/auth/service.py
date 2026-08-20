@@ -203,16 +203,22 @@ async def request_password_reset(supabase: AsyncClient, email: str) -> None:
     )
 
 
-async def reset_password(supabase: AsyncClient, payload: ResetPasswordRequest) -> None:
-    email = payload.email.lower()
-    resp = await supabase.table("users").select("id").eq("email", email).maybe_single().execute()
+async def _get_user_id_for_reset(supabase: AsyncClient, email: str) -> str:
+    resp = await supabase.table("users").select("id").eq("email", email.lower()).maybe_single().execute()
     user_row = resp.data if resp is not None else None
     # Same generic error whether the email is unknown, the code is wrong, or
     # it expired - never confirm which one it was (see request_password_reset).
     if user_row is None:
         raise InvalidResetCodeError()
-    user_id = user_row["id"]
+    return user_row["id"]
 
+
+async def _verify_code_or_raise(supabase: AsyncClient, user_id: str, code: str) -> dict:
+    """Returns the still-live code row if `code` matches, unexpired, under the
+    attempt limit. Records a failed attempt (shared with the final
+    reset_password call, so brute-forcing via either endpoint counts against
+    the same limit) and raises otherwise. Never consumes the code itself -
+    only reset_password does that, once the new password is actually set."""
     resp = (
         await supabase.table("password_reset_codes")
         .select("*")
@@ -228,7 +234,7 @@ async def reset_password(supabase: AsyncClient, payload: ResetPasswordRequest) -
         raise InvalidResetCodeError()
 
     expires_at = datetime.fromisoformat(code_row["expires_at"])
-    if datetime.now(UTC) >= expires_at or hash_otp_code(payload.code) != code_row["code_hash"]:
+    if datetime.now(UTC) >= expires_at or hash_otp_code(code) != code_row["code_hash"]:
         await (
             supabase.table("password_reset_codes")
             .update({"attempts": code_row["attempts"] + 1})
@@ -236,6 +242,22 @@ async def reset_password(supabase: AsyncClient, payload: ResetPasswordRequest) -
             .execute()
         )
         raise InvalidResetCodeError()
+
+    return code_row
+
+
+async def verify_password_reset_code(supabase: AsyncClient, email: str, code: str) -> None:
+    """Step 2 of the flow: confirms the code alone, before the frontend shows
+    the new-password form. Deliberately does not consume the code - the user
+    still has to actually submit a new password (reset_password) to use it
+    up, so a verified-but-abandoned attempt doesn't burn the code."""
+    user_id = await _get_user_id_for_reset(supabase, email)
+    await _verify_code_or_raise(supabase, user_id, code)
+
+
+async def reset_password(supabase: AsyncClient, payload: ResetPasswordRequest) -> None:
+    user_id = await _get_user_id_for_reset(supabase, payload.email)
+    code_row = await _verify_code_or_raise(supabase, user_id, payload.code)
 
     await supabase.table("users").update(
         {"password_hash": hash_password(payload.new_password)}
