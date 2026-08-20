@@ -234,7 +234,7 @@ async def test_service_end_to_end_denies_a_model_supplied_foreign_account():
     service = AIService(FakeSupabase(), provider=provider)
     caller = Context(user_id="u-1", account_ids=("acc-mine",))
 
-    reply, history = await service.handle_message(
+    reply, history, _routing = await service.handle_message(
         [], "balance of acc-someone-else-9", caller
     )
 

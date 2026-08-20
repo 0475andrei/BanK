@@ -8,10 +8,43 @@ from collections.abc import Sequence
 from app.ai.agents.base import Agent
 from app.ai.context import Context
 from app.ai.providers.base import ModelProvider
+from app.ai.routing import RoutingRule
 from app.ai.schemas import Message, ToolCall, ToolResult
 from app.ai.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
+
+#: Keyword STEMS, not whole words: `RoutingRule` matches them as word prefixes,
+#: so `sold` claims soldul/soldurile and `tranzac` claims
+#: tranzacție/tranzacții/tranzacțiile. Diacritics are folded before matching, so
+#: only the unaccented spelling is listed here. English is included because the
+#: UI is Romanian but users type both.
+BANKING_ROUTING_RULES = (
+    RoutingRule(
+        name="banking_keywords",
+        keywords=frozenset(
+            {
+                # Romanian
+                "sold",
+                "cont",
+                "card",
+                "transfer",
+                "tranzac",
+                "iban",
+                "plat",
+                "econom",
+                "extras",
+                "bani",
+                "cheltui",
+                # English
+                "balance",
+                "account",
+                "transaction",
+                "payment",
+            }
+        ),
+    ),
+)
 
 SYSTEM_PROMPT = """Ești asistentul bancar al unei aplicații de banking personal.
 Răspunzi mereu în limba română.
@@ -23,7 +56,11 @@ muta bani, nu poți deschide sau închide conturi, nu poți bloca sau anula card
 Nu pretinde niciodată că ai efectuat o acțiune.
 
 Ce unealtă folosești:
-- „care este soldul meu”, „cât am în cont” → get_balance
+- Întrebare GENERALĂ despre sold, fără să numească un anume cont („care este
+  soldul meu”, „cât am”, „câți bani am”) → list_accounts, și arată TOATE
+  conturile cu soldurile lor. Omul care întreabă așa vrea imaginea completă.
+- Întrebare despre UN ANUME cont, numit explicit („cât am în Cont Curent”,
+  „soldul contului de economii”) → get_balance
 - „ce conturi am”, „câte conturi am”, „arată-mi conturile” → list_accounts
   (întoarce toate conturile, fiecare cu soldul lui — nu mai e nevoie de get_balance)
 - „ultimele tranzacții”, „ce am cheltuit”, „arată-mi tranzacțiile” → list_transactions
@@ -66,6 +103,7 @@ class BankingAgent(Agent):
     """Runs the read-only tool loop against a provider."""
 
     name = "banking"
+    routing_rules = BANKING_ROUTING_RULES
 
     def __init__(
         self,

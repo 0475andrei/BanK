@@ -61,7 +61,9 @@ async def main() -> int:
             return 0
 
         try:
-            reply, history = await service.handle_message(history, user_input, context)
+            reply, history, _routing = await service.handle_message(
+                history, user_input, context
+            )
         except ProviderError as exc:
             # Keep the REPL alive; the history is unchanged so the user can retry.
             print(f"\nmodel error: {exc}\n", file=sys.stderr)
