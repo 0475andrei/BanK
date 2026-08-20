@@ -501,6 +501,39 @@ body {
 .tx-amount.positive { color: var(--income-green); }
 .tx-amount.negative { color: var(--text-main); } /* Revolut usually keeps it white/black for expense */
 
+/* --- View: All Transactions (grouped by month) --- */
+.section-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.section-header-row .section-title { margin-bottom: 0; }
+
+.link-btn {
+    background: none;
+    border: none;
+    color: var(--primary-teal);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+}
+
+.link-btn:hover { text-decoration: underline; }
+
+.month-group { margin-bottom: 30px; }
+
+.month-header {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
 /* --- View 2: AI Chat --- */
 .chat-container {
     display: flex;
