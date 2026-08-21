@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const views = document.querySelectorAll('.view');
 
     navItems.forEach(item => {
-        item.addEventListener('click', () => {
+        item.addEventListener('click', async () => {
             // Remove active class from all nav items
             navItems.forEach(nav => nav.classList.remove('active'));
             // Add active class to clicked item
@@ -21,6 +21,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Show the corresponding view
             const viewId = `view-${item.dataset.view}`;
             document.getElementById(viewId).classList.add('active');
+
+            const isChatView = item.dataset.view === 'chat';
+            toggleConversationHistory(isChatView);
+            if (isChatView) {
+                await loadConversationHistory();
+            }
 
             // Re-fetch balances/transactions whenever the dashboard is opened,
             // so money received while the user was on another tab shows up
@@ -65,9 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
  * ------------------------------------------------------------------------- */
 
 let currentConversationId = null;
-// Guards against re-fetching conversation history every time the chat nav
-// item is clicked - it's loaded once per page load, same as the dashboard.
-let conversationHistoryLoaded = false;
+let conversationHistory = [];
 
 const CHAT_WELCOME_TEXT =
     'Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?';
@@ -152,7 +156,8 @@ async function sendMessage() {
 
         typingBubble.remove();
         appendChatBubble('ai', response.reply);
-        currentConversationId = response.conversation_id;
+        setCurrentConversationId(response.conversation_id);
+        void loadConversationHistory();
     } catch (err) {
         typingBubble.remove();
 
@@ -172,39 +177,248 @@ async function sendMessage() {
 /** Clears the chat panel back to the empty-state welcome bubble and detaches
  * from the current conversation - the next message starts a new one. */
 function startNewConversation() {
-    currentConversationId = null;
+    setCurrentConversationId(null);
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = '';
     appendChatBubble('ai', CHAT_WELCOME_TEXT);
+    renderConversationHistory();
 }
 
-/** Restores the most recent conversation's transcript on page load, so a
- * refresh doesn't lose the chat. No-ops past the first call and swallows
- * failures - a user who never chatted, or is offline, just sees the normal
- * empty state instead of an error. */
-async function loadLatestConversationIfAny() {
-    if (conversationHistoryLoaded) return;
-    conversationHistoryLoaded = true;
+function setCurrentConversationId(conversationId) {
+    currentConversationId = conversationId || null;
+    if (currentConversationId) {
+        sessionStorage.setItem('bank.currentConversationId', currentConversationId);
+    } else {
+        sessionStorage.removeItem('bank.currentConversationId');
+    }
+}
+
+function toggleConversationHistory(isVisible) {
+    const history = document.getElementById('conversation-history');
+    if (history) history.hidden = !isVisible;
+}
+
+function truncateConversationPreview(value) {
+    const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+    return normalized.length > 58 ? `${normalized.slice(0, 58).trim()}...` : normalized;
+}
+
+function formatRelativeConversationTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+
+    const elapsedMinutes = Math.floor((Date.now() - date.getTime()) / 60000);
+    if (elapsedMinutes < 1) return 'acum câteva secunde';
+    if (elapsedMinutes === 1) return 'acum un minut';
+    if (elapsedMinutes < 60) return `acum ${elapsedMinutes} minute`;
+    if (elapsedMinutes < 120) return 'acum o oră';
+    if (elapsedMinutes < 24 * 60) return `acum ${Math.floor(elapsedMinutes / 60)} ore`;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const conversationDay = new Date(date);
+    conversationDay.setHours(0, 0, 0, 0);
+    const dayDifference = Math.floor((today - conversationDay) / 86400000);
+    if (dayDifference === 1) return 'ieri';
+    if (dayDifference < 7) return `acum ${dayDifference} zile`;
+    return date.toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' });
+}
+
+function showConversationHistoryError(message = '') {
+    const error = document.getElementById('conversation-history-error');
+    if (!error) return;
+    error.textContent = message;
+    error.hidden = !message;
+}
+
+async function loadConversationHistory() {
+    const list = document.getElementById('conversation-history-list');
+    if (!list) return;
+
+    showConversationHistoryError();
+    list.innerHTML = '<p class="conversation-history-empty">Se încarcă...</p>';
 
     try {
         const conversations = await apiFetch('/chat/conversations');
-        if (!conversations.length) return;
+        conversationHistory = await Promise.all(conversations.map(async conversation => {
+            let preview = conversation.title;
+            if (!preview) {
+                try {
+                    const messages = await apiFetch(`/chat/conversations/${conversation.id}/messages`);
+                    const firstMessage = messages.find(message =>
+                        (message.role === 'user' || message.role === 'assistant') && message.content
+                    );
+                    preview = firstMessage?.content;
+                } catch {
+                    preview = null;
+                }
+            }
+            return { ...conversation, preview: preview || 'Conversație nouă' };
+        }));
 
-        const latest = conversations[0]; // ordered by created_at desc
-        const messages = await apiFetch(`/chat/conversations/${latest.id}/messages`);
-        // Only turns with real text render as a bubble - an assistant turn that
-        // only carried tool_calls (content is null) has nothing to show.
-        const dialogue = messages.filter(
-            m => (m.role === 'user' || m.role === 'assistant') && m.content
-        );
-        if (!dialogue.length) return;
+        renderConversationHistory();
 
-        currentConversationId = latest.id;
+        const rememberedId = sessionStorage.getItem('bank.currentConversationId');
+        if (!currentConversationId && rememberedId && conversationHistory.some(item => item.id === rememberedId)) {
+            await openConversation(rememberedId);
+        }
+    } catch (err) {
+        list.innerHTML = '';
+        showConversationHistoryError('Istoricul conversațiilor nu a putut fi încărcat. Încearcă din nou.');
+    }
+}
+
+function renderConversationHistory() {
+    const list = document.getElementById('conversation-history-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (!conversationHistory.length) {
+        list.innerHTML = '<p class="conversation-history-empty">Nu ai conversații salvate.</p>';
+        return;
+    }
+
+    conversationHistory.forEach(conversation => {
+        const item = document.createElement('div');
+        item.className = 'conversation-history-item';
+        if (conversation.id === currentConversationId) item.classList.add('active');
+
+        const selectButton = document.createElement('button');
+        selectButton.type = 'button';
+        selectButton.className = 'conversation-history-select';
+        selectButton.addEventListener('click', () => openConversation(conversation.id));
+
+        const preview = document.createElement('span');
+        preview.className = 'conversation-history-preview';
+        preview.textContent = truncateConversationPreview(conversation.preview);
+
+        const timestamp = document.createElement('span');
+        timestamp.className = 'conversation-history-time';
+        timestamp.textContent = formatRelativeConversationTime(conversation.created_at);
+        selectButton.append(preview, timestamp);
+
+        const actions = document.createElement('div');
+        actions.className = 'conversation-history-actions';
+
+        const renameButton = document.createElement('button');
+        renameButton.type = 'button';
+        renameButton.className = 'conversation-history-action';
+        renameButton.title = 'Redenumește conversația';
+        renameButton.setAttribute('aria-label', 'Redenumește conversația');
+        renameButton.innerHTML = '<i data-lucide="pencil"></i>';
+        renameButton.addEventListener('click', () => beginConversationRename(item, conversation));
+
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'conversation-history-action';
+        deleteButton.title = 'Șterge conversația';
+        deleteButton.setAttribute('aria-label', 'Șterge conversația');
+        deleteButton.innerHTML = '<i data-lucide="trash-2"></i>';
+        deleteButton.addEventListener('click', () => deleteConversation(conversation));
+
+        actions.append(renameButton, deleteButton);
+        item.append(selectButton, actions);
+        list.appendChild(item);
+    });
+
+    if (window.lucide) lucide.createIcons();
+}
+
+async function openConversation(conversationId) {
+    setCurrentConversationId(conversationId);
+    renderConversationHistory();
+    showConversationHistoryError();
+
+    try {
+        const messages = await apiFetch(`/chat/conversations/${conversationId}/messages`);
         const chatMessages = document.getElementById('chat-messages');
         chatMessages.innerHTML = '';
-        dialogue.forEach(m => appendChatBubble(m.role === 'user' ? 'user' : 'ai', m.content || ''));
-    } catch {
-        // Non-fatal: chat just starts fresh, same as before this feature existed.
+        const dialogue = messages.filter(message =>
+            (message.role === 'user' || message.role === 'assistant') && message.content
+        );
+        if (dialogue.length) {
+            dialogue.forEach(message => appendChatBubble(message.role === 'user' ? 'user' : 'ai', message.content));
+        } else {
+            appendChatBubble('ai', CHAT_WELCOME_TEXT);
+        }
+    } catch (err) {
+        showConversationHistoryError('Conversația nu a putut fi încărcată. Încearcă din nou.');
+    }
+}
+
+function beginConversationRename(item, conversation) {
+    const selectButton = item.querySelector('.conversation-history-select');
+    const actions = item.querySelector('.conversation-history-actions');
+    if (!selectButton || !actions) return;
+
+    item.classList.add('editing');
+    selectButton.replaceChildren();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'conversation-history-rename-input';
+    input.value = conversation.title || conversation.preview;
+    input.maxLength = 120;
+    input.setAttribute('aria-label', 'Nume conversație');
+    input.addEventListener('click', event => event.stopPropagation());
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') saveConversationRename(conversation, input.value);
+        if (event.key === 'Escape') renderConversationHistory();
+    });
+    selectButton.appendChild(input);
+
+    actions.replaceChildren();
+    const saveButton = document.createElement('button');
+    saveButton.type = 'button';
+    saveButton.className = 'conversation-history-action';
+    saveButton.title = 'Salvează numele';
+    saveButton.setAttribute('aria-label', 'Salvează numele');
+    saveButton.innerHTML = '<i data-lucide="check"></i>';
+    saveButton.addEventListener('click', () => saveConversationRename(conversation, input.value));
+
+    const cancelButton = document.createElement('button');
+    cancelButton.type = 'button';
+    cancelButton.className = 'conversation-history-action';
+    cancelButton.title = 'Renunță';
+    cancelButton.setAttribute('aria-label', 'Renunță');
+    cancelButton.innerHTML = '<i data-lucide="x"></i>';
+    cancelButton.addEventListener('click', renderConversationHistory);
+    actions.append(saveButton, cancelButton);
+    input.focus();
+    input.select();
+    if (window.lucide) lucide.createIcons();
+}
+
+async function saveConversationRename(conversation, nextTitle) {
+    const title = nextTitle.trim();
+    if (!title) {
+        showConversationHistoryError('Numele conversației nu poate fi gol.');
+        return;
+    }
+
+    try {
+        await apiFetch(`/chat/conversations/${conversation.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ title }),
+        });
+        conversation.title = title;
+        conversation.preview = title;
+        renderConversationHistory();
+    } catch (err) {
+        showConversationHistoryError('Conversația nu a putut fi redenumită. Încearcă din nou.');
+    }
+}
+
+async function deleteConversation(conversation) {
+    const approved = window.confirm(`Sigur vrei să ștergi conversația „${truncateConversationPreview(conversation.preview)}”?`);
+    if (!approved) return;
+
+    try {
+        await apiFetch(`/chat/conversations/${conversation.id}`, { method: 'DELETE' });
+        conversationHistory = conversationHistory.filter(item => item.id !== conversation.id);
+        if (currentConversationId === conversation.id) startNewConversation();
+        renderConversationHistory();
+    } catch (err) {
+        showConversationHistoryError('Conversația nu a putut fi ștearsă. Încearcă din nou.');
     }
 }
 
@@ -271,10 +485,10 @@ async function initDashboard() {
     wireNewCardModal();
     wireCardOrderModal();
     wirePaymentsForm();
-    wireProfileView(user);
+    wireProfilePanel(user);
+    wireNotificationsPanel();
 
     await refreshDashboard();
-    await loadLatestConversationIfAny();
 }
 
 async function refreshDashboard() {
@@ -533,24 +747,124 @@ function wireTransferModal() {
             return;
         }
 
+        const idempotencyKey = crypto.randomUUID();
+        const body = JSON.stringify({
+            from_account_id: fromSelect.value,
+            to_account_id: document.getElementById('transfer-to').value,
+            amount_minor: Math.round(amountMajor * 100),
+            currency: fromAccount.currency,
+            description: document.getElementById('transfer-description').value || undefined,
+        });
+
         try {
-            await apiFetch('/transfers', {
-                method: 'POST',
-                headers: { 'Idempotency-Key': crypto.randomUUID() },
-                body: JSON.stringify({
-                    from_account_id: fromSelect.value,
-                    to_account_id: document.getElementById('transfer-to').value,
-                    amount_minor: Math.round(amountMajor * 100),
-                    currency: fromAccount.currency,
-                    description: document.getElementById('transfer-description').value || undefined,
-                }),
-            });
+            const result = await submitWithFaceConfirmation('/transfers', idempotencyKey, body);
+            if (result === CONFIRMATION_CANCELLED) return; // user closed the camera modal - stay put, silently
             modal.hidden = true;
             await refreshDashboard();
         } catch (err) {
             errorEl.textContent = err.message;
             errorEl.hidden = false;
         }
+    });
+}
+
+// Sentinel returned by submitWithFaceConfirmation when the user cancels the
+// face-confirm modal - distinguishes "cancelled, do nothing" from a real
+// response, without resorting to throwing a non-Error value.
+const CONFIRMATION_CANCELLED = Symbol('confirmation-cancelled');
+
+/** Shared by the transfer and payment forms: submits a money-moving POST,
+ * and if the backend rejects it with 428 (amount over the face-confirmation
+ * threshold - see backend/app/modules/face_auth), opens the camera modal,
+ * gets a confirmation token, and retries once with it attached. Reuses the
+ * same Idempotency-Key on the retry - it's the same request, just proven. */
+async function submitWithFaceConfirmation(path, idempotencyKey, body) {
+    try {
+        return await apiFetch(path, {
+            method: 'POST',
+            headers: { 'Idempotency-Key': idempotencyKey },
+            body,
+        });
+    } catch (err) {
+        if (err.status !== 428) throw err;
+
+        const token = await requestFaceConfirmationToken();
+        if (!token) return CONFIRMATION_CANCELLED;
+
+        return await apiFetch(path, {
+            method: 'POST',
+            headers: { 'Idempotency-Key': idempotencyKey, 'X-Face-Confirmation': token },
+            body,
+        });
+    }
+}
+
+/** Opens the face-confirm modal, captures a photo, exchanges it for a
+ * short-lived confirmation token via POST /auth/face/confirm. Resolves with
+ * the token, or null if the user cancels. Never rejects - camera/API errors
+ * show inline in the modal and let the user retry or cancel. */
+function requestFaceConfirmationToken() {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('face-confirm-modal');
+        const video = document.getElementById('face-confirm-video');
+        const canvas = document.getElementById('face-confirm-canvas');
+        const errorEl = document.getElementById('face-confirm-error');
+        const captureBtn = document.getElementById('capture-face-confirm');
+        const cancelBtn = document.getElementById('cancel-face-confirm');
+        const closeBtn = document.getElementById('close-face-confirm-modal');
+
+        let stream = null;
+        errorEl.hidden = true;
+        modal.hidden = false;
+
+        function cleanup(result) {
+            if (stream) stream.getTracks().forEach(track => track.stop());
+            stream = null;
+            video.srcObject = null;
+            modal.hidden = true;
+            captureBtn.onclick = null;
+            cancelBtn.onclick = null;
+            closeBtn.onclick = null;
+            resolve(result);
+        }
+
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then((s) => { stream = s; video.srcObject = s; })
+            .catch(() => {
+                errorEl.textContent = 'Nu s-a putut accesa camera. Verifică permisiunile browserului.';
+                errorEl.hidden = false;
+            });
+
+        captureBtn.onclick = () => {
+            errorEl.hidden = true;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+
+            canvas.toBlob(async (blob) => {
+                const formData = new FormData();
+                formData.append('file', blob, 'confirm.jpg');
+                try {
+                    const res = await fetch(`${API_BASE_URL}/auth/face/confirm`, {
+                        method: 'POST',
+                        credentials: 'include',
+                        body: formData,
+                    });
+                    if (!res.ok) {
+                        const errBody = await res.json().catch(() => ({}));
+                        throw new Error(errBody?.error?.message || `Request failed (${res.status})`);
+                    }
+                    const { token } = await res.json();
+                    cleanup(token);
+                } catch (err) {
+                    errorEl.textContent = err.message;
+                    errorEl.hidden = false;
+                }
+            }, 'image/jpeg', 0.92);
+        };
+
+        cancelBtn.onclick = () => cleanup(null);
+        closeBtn.onclick = () => cleanup(null);
     });
 }
 
@@ -869,18 +1183,18 @@ function wirePaymentsForm() {
         const amountMinor = Math.round(parseFloat(amountInput) * 100);
         const iban = document.getElementById('payments-iban').value.replace(/\s+/g, '').toUpperCase();
 
+        const idempotencyKey = crypto.randomUUID();
+        const body = JSON.stringify({
+            from_account_id: accountSelect.value,
+            to_iban: iban,
+            beneficiary_name: document.getElementById('payments-beneficiary').value,
+            amount_minor: amountMinor,
+            description: document.getElementById('payments-description').value || undefined,
+        });
+
         try {
-            await apiFetch('/payments', {
-                method: 'POST',
-                headers: { 'Idempotency-Key': crypto.randomUUID() },
-                body: JSON.stringify({
-                    from_account_id: accountSelect.value,
-                    to_iban: iban,
-                    beneficiary_name: document.getElementById('payments-beneficiary').value,
-                    amount_minor: amountMinor,
-                    description: document.getElementById('payments-description').value || undefined,
-                }),
-            });
+            const result = await submitWithFaceConfirmation('/payments', idempotencyKey, body);
+            if (result === CONFIRMATION_CANCELLED) return; // user closed the camera modal - stay put, silently
             successEl.textContent = 'Plata a fost trimisă cu succes!';
             successEl.hidden = false;
             form.reset();
@@ -915,11 +1229,18 @@ function applyAvatar(user) {
     }
 }
 
-function wireProfileView(user) {
+/** Sets up the auto-hide profile menu: opens on click of the header
+ * name/avatar, closes on an outside click or Escape. Each item redirects to
+ * its own dedicated view (view-avatar / view-referral / view-change-password)
+ * rather than showing anything inline in the menu itself. */
+function wireProfilePanel(user) {
+    const panel = document.getElementById('profile-panel');
+    const trigger = document.getElementById('user-profile-btn');
     const grid = document.getElementById('emoji-grid');
     const preview = document.getElementById('profile-avatar-preview');
-    const navItems = document.querySelectorAll('.nav-item');
-    const views = document.querySelectorAll('.view');
+
+    document.getElementById('profile-panel-name').textContent = `${user.first_name} ${user.last_name}`;
+    document.getElementById('profile-panel-email').textContent = user.email;
 
     grid.innerHTML = EMOJI_AVATAR_OPTIONS.map(emoji =>
         `<button type="button" class="emoji-option" data-emoji="${emoji}">${emoji}</button>`
@@ -942,16 +1263,293 @@ function wireProfileView(user) {
         });
     });
 
-    document.getElementById('user-profile-btn').addEventListener('click', () => {
-        navItems.forEach(nav => nav.classList.remove('active'));
-        views.forEach(view => view.classList.remove('active'));
-        document.getElementById('view-profile').classList.add('active');
+    function openPanel() { panel.hidden = false; }
+    function closePanel() { panel.hidden = true; }
+
+    trigger.addEventListener('click', (event) => {
+        // Stops this same click from immediately reaching the document
+        // listener below and closing the panel it just opened.
+        event.stopPropagation();
+        document.getElementById('notifications-panel').hidden = true;
+        if (panel.hidden) openPanel(); else closePanel();
+    });
+    panel.addEventListener('click', (event) => event.stopPropagation());
+    document.addEventListener('click', () => {
+        if (!panel.hidden) closePanel();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !panel.hidden) closePanel();
     });
 
-    document.getElementById('back-from-profile-btn').addEventListener('click', () => {
-        views.forEach(view => view.classList.remove('active'));
-        document.getElementById('view-dashboard').classList.add('active');
-        document.querySelector('.nav-item[data-view="dashboard"]').classList.add('active');
-        refreshDashboard();
+    panel.querySelectorAll('.profile-menu-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            closePanel();
+            goToProfileView(btn.dataset.target);
+        });
+    });
+
+    document.querySelectorAll('.back-to-dashboard-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
+            document.getElementById('view-dashboard').classList.add('active');
+            document.querySelector('.nav-item[data-view="dashboard"]').classList.add('active');
+            stopFaceCamera(); // no-op if the camera was never started
+            refreshDashboard();
+        });
+    });
+
+    wireReferralCode();
+    wireChangePasswordForm();
+    wireFaceLoginPanel();
+}
+
+/** Switches to one of the profile menu's own views - not a sidebar nav item,
+ * so this deactivates the sidebar explicitly rather than reusing its click
+ * handler. */
+function goToProfileView(target) {
+    document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
+    document.getElementById(`view-${target}`).classList.add('active');
+
+    if (target === 'referral') loadReferralCode();
+    if (target === 'face-login') loadFaceStatus();
+}
+
+/* --- Face login enrollment (profile menu section) ---
+ * DIY, camera-based - see backend/app/modules/face_auth for the caveat that
+ * this is demo-grade biometric auth, not a real security boundary. */
+
+let faceCameraStream = null;
+
+function stopFaceCamera() {
+    if (faceCameraStream) {
+        faceCameraStream.getTracks().forEach(track => track.stop());
+        faceCameraStream = null;
+    }
+    const video = document.getElementById('face-video');
+    if (video) video.srcObject = null;
+    document.getElementById('face-start-camera-btn').hidden = false;
+    document.getElementById('face-capture-btn').hidden = true;
+}
+
+async function loadFaceStatus() {
+    const statusText = document.getElementById('face-status-text');
+    const removeBtn = document.getElementById('face-remove-btn');
+    try {
+        const { enrolled } = await apiFetch('/auth/face/status');
+        statusText.textContent = enrolled
+            ? 'Face Login e activat pe contul tău.'
+            : 'Face Login nu e activat încă. Pornește camera și fă o poză ca să-l activezi.';
+        removeBtn.hidden = !enrolled;
+    } catch (err) {
+        statusText.textContent = `Nu s-a putut verifica starea: ${err.message}`;
+    }
+}
+
+function wireFaceLoginPanel() {
+    const video = document.getElementById('face-video');
+    const canvas = document.getElementById('face-canvas');
+    const startBtn = document.getElementById('face-start-camera-btn');
+    const captureBtn = document.getElementById('face-capture-btn');
+    const removeBtn = document.getElementById('face-remove-btn');
+    const errorEl = document.getElementById('face-enroll-error');
+    const successEl = document.getElementById('face-enroll-success');
+
+    startBtn.addEventListener('click', async () => {
+        errorEl.hidden = true;
+        successEl.hidden = true;
+        try {
+            faceCameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = faceCameraStream;
+            startBtn.hidden = true;
+            captureBtn.hidden = false;
+        } catch {
+            errorEl.textContent = 'Nu s-a putut accesa camera. Verifică permisiunile browserului.';
+            errorEl.hidden = false;
+        }
+    });
+
+    captureBtn.addEventListener('click', () => {
+        errorEl.hidden = true;
+        successEl.hidden = true;
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+
+        canvas.toBlob(async (blob) => {
+            const formData = new FormData();
+            formData.append('file', blob, 'face.jpg');
+            try {
+                await fetch(`${API_BASE_URL}/auth/face/enroll`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    body: formData,
+                }).then(async (res) => {
+                    if (!res.ok) {
+                        const body = await res.json().catch(() => ({}));
+                        throw new Error(body?.error?.message || `Request failed (${res.status})`);
+                    }
+                });
+                successEl.textContent = 'Face Login activat cu succes!';
+                successEl.hidden = false;
+                stopFaceCamera();
+                await loadFaceStatus();
+            } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.hidden = false;
+            }
+        }, 'image/jpeg', 0.92);
+    });
+
+    removeBtn.addEventListener('click', async () => {
+        try {
+            await apiFetch('/auth/face/enroll', { method: 'DELETE' });
+            await loadFaceStatus();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        }
+    });
+}
+
+/* --- Notifications dropdown (bell icon) --- */
+
+async function refreshNotificationsBadge() {
+    const badge = document.getElementById('notifications-badge');
+    try {
+        const { count } = await apiFetch('/notifications/unread-count');
+        badge.hidden = count === 0;
+    } catch {
+        badge.hidden = true;
+    }
+}
+
+function renderNotifications(notifications) {
+    const list = document.getElementById('notifications-list');
+    if (notifications.length === 0) {
+        list.innerHTML = '<div class="empty-state">Nicio notificare încă.</div>';
+        return;
+    }
+    list.innerHTML = notifications.map(n => `
+        <div class="notification-item ${n.read_at ? '' : 'unread'}">
+            <div class="notification-dot"></div>
+            <div>
+                <div class="notification-title">${escapeHTML(n.title)}</div>
+                <div class="notification-body">${escapeHTML(n.body)}</div>
+                <div class="notification-time">${formatDateTime(n.created_at)}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadNotifications() {
+    const list = document.getElementById('notifications-list');
+    try {
+        const notifications = await apiFetch('/notifications');
+        renderNotifications(notifications);
+        if (notifications.some(n => !n.read_at)) {
+            await apiFetch('/notifications/mark-read', { method: 'POST' });
+            document.getElementById('notifications-badge').hidden = true;
+        }
+    } catch (err) {
+        list.innerHTML = `<div class="empty-state">Nu s-au putut încărca notificările: ${escapeHTML(err.message)}</div>`;
+    }
+}
+
+/** Sets up the auto-hide notifications dropdown: opens on click of the
+ * header bell, closes on an outside click or Escape. Loads the list and
+ * marks everything read (clearing the badge) each time it's opened. */
+function wireNotificationsPanel() {
+    const panel = document.getElementById('notifications-panel');
+    const trigger = document.getElementById('notifications-btn');
+
+    function openPanel() {
+        panel.hidden = false;
+        loadNotifications();
+    }
+    function closePanel() { panel.hidden = true; }
+
+    trigger.addEventListener('click', (event) => {
+        event.stopPropagation();
+        document.getElementById('profile-panel').hidden = true;
+        if (panel.hidden) openPanel(); else closePanel();
+    });
+    panel.addEventListener('click', (event) => event.stopPropagation());
+    document.addEventListener('click', () => {
+        if (!panel.hidden) closePanel();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !panel.hidden) closePanel();
+    });
+
+    refreshNotificationsBadge();
+}
+
+/* --- Referral code (panel section 2) --- */
+
+// Fetched once per page load - the code never changes once generated, and
+// the panel can be opened/closed freely without re-fetching every time.
+let referralCodeLoaded = false;
+
+async function loadReferralCode() {
+    if (referralCodeLoaded) return;
+    referralCodeLoaded = true;
+    const el = document.getElementById('referral-code-value');
+    try {
+        const { code } = await apiFetch('/users/me/referral-code');
+        el.textContent = code;
+    } catch {
+        el.textContent = '—';
+        referralCodeLoaded = false; // allow a retry next time the panel opens
+    }
+}
+
+function wireReferralCode() {
+    document.getElementById('copy-referral-code-btn').addEventListener('click', async () => {
+        const code = document.getElementById('referral-code-value').textContent;
+        if (!code || code === '…' || code === '—') return;
+        try {
+            await navigator.clipboard.writeText(code);
+        } catch {
+            // Clipboard API can be unavailable (e.g. insecure context) - not critical.
+        }
+    });
+}
+
+/* --- Change password (panel section 3) --- */
+
+function wireChangePasswordForm() {
+    const form = document.getElementById('change-password-form');
+    const errorEl = document.getElementById('change-password-error');
+    const successEl = document.getElementById('change-password-success');
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorEl.hidden = true;
+        successEl.hidden = true;
+
+        const currentPassword = document.getElementById('current-password').value;
+        const newPassword = document.getElementById('new-password-profile').value;
+        const confirmPassword = document.getElementById('new-password-profile-confirm').value;
+
+        if (newPassword !== confirmPassword) {
+            errorEl.textContent = 'Parolele nu coincid.';
+            errorEl.hidden = false;
+            return;
+        }
+
+        try {
+            await apiFetch('/auth/change-password', {
+                method: 'POST',
+                body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+            });
+            successEl.textContent = 'Parola a fost schimbată.';
+            successEl.hidden = false;
+            form.reset();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        }
     });
 }

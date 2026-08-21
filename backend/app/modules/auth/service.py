@@ -29,7 +29,12 @@ from app.core.security import (
     verify_password,
 )
 from app.core.teams import send_teams_message
-from app.modules.auth.schemas import LoginRequest, RegisterRequest, ResetPasswordRequest
+from app.modules.auth.schemas import (
+    ChangePasswordRequest,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+)
 from app.modules.auth.validation import (
     extract_date_of_birth,
     extract_gender,
@@ -45,14 +50,38 @@ RESET_CODE_MAX_ATTEMPTS = 5
 
 UNIQUE_VIOLATION = "23505"
 
-# Optional at registration - entering it is what unlocks the welcome
-# balance on accounts (see accounts/service.py::OPENING_BALANCE_MINOR).
-# Case-insensitive so "bankTHA"/"BANKTHA"/etc all count.
-REFERRAL_CODE = "BanKTHA"
+# Optional at registration - entering a valid one is what unlocks the
+# welcome balance on accounts (see accounts/service.py::OPENING_BALANCE_MINOR).
+# Two kinds of code count: any user's own per-user users.referral_code (see
+# users/service.py::ensure_referral_code, added in 0008), OR this fixed
+# fallback - the original single global code, kept working for anyone it
+# was already shared with. Case-insensitive either way.
+FALLBACK_REFERRAL_CODE = "BanKTHA"
 
 
-def _is_referral_code_valid(referral_code: str | None) -> bool:
-    return referral_code is not None and referral_code.strip().lower() == REFERRAL_CODE.lower()
+async def _resolve_referral(supabase: AsyncClient, referral_code: str | None) -> tuple[bool, str | None]:
+    """Returns (bonus_eligible, referrer_user_id). referrer_user_id is only
+    ever set for a per-user code match - the fallback code makes the new
+    user eligible for their own welcome balance, but has no specific referrer
+    to reward (see accounts/service.py's referral_rewards handling)."""
+    if referral_code is None:
+        return False, None
+    code = referral_code.strip()
+    if not code:
+        return False, None
+    if code.lower() == FALLBACK_REFERRAL_CODE.lower():
+        return True, None
+
+    resp = (
+        await supabase.table("users")
+        .select("id")
+        .eq("referral_code", code.upper())
+        .maybe_single()
+        .execute()
+    )
+    if resp is not None and resp.data is not None:
+        return True, resp.data["id"]
+    return False, None
 
 
 async def start_session(supabase: AsyncClient, user: UserRead) -> str:
@@ -82,6 +111,8 @@ async def register_user(supabase: AsyncClient, payload: RegisterRequest) -> tupl
     if not is_valid:
         raise ValidationError(reason)
 
+    referral_bonus_eligible, referred_by_user_id = await _resolve_referral(supabase, payload.referral_code)
+
     try:
         resp = (
             await supabase.table("users")
@@ -96,7 +127,8 @@ async def register_user(supabase: AsyncClient, payload: RegisterRequest) -> tupl
                     "date_of_birth": extract_date_of_birth(payload.national_id).isoformat(),
                     "phone": payload.phone,
                     "address": payload.address,
-                    "referral_bonus_eligible": _is_referral_code_valid(payload.referral_code),
+                    "referral_bonus_eligible": referral_bonus_eligible,
+                    "referred_by_user_id": referred_by_user_id,
                 }
             )
             .execute()
@@ -127,6 +159,34 @@ async def _count_recent_failed_attempts(supabase: AsyncClient, email: str) -> in
         .execute()
     )
     return resp.count or 0
+
+
+async def check_existing_account(supabase: AsyncClient, email: str, national_id: str) -> dict:
+    """Read-only pre-check for the onboarding assistant (see
+    app/modules/onboarding/tool.py) - lets it short-circuit as soon as it
+    has an email + CNP, instead of only discovering a duplicate at the
+    final /auth/register call after a full interview. Reveals nothing
+    register_user's 409 doesn't already: same two fields, same
+    disclosure, just earlier.
+    """
+    email = email.lower()
+    email_resp = (
+        await supabase.table("users").select("id").eq("email", email).maybe_single().execute()
+    )
+    if email_resp is not None and email_resp.data is not None:
+        return {"exists": True, "matched_field": "email"}
+
+    national_id_resp = (
+        await supabase.table("users")
+        .select("id")
+        .eq("national_id", national_id)
+        .maybe_single()
+        .execute()
+    )
+    if national_id_resp is not None and national_id_resp.data is not None:
+        return {"exists": True, "matched_field": "national_id"}
+
+    return {"exists": False, "matched_field": None}
 
 
 async def login_user(supabase: AsyncClient, payload: LoginRequest) -> tuple[UserRead, str]:
@@ -276,6 +336,38 @@ async def reset_password(supabase: AsyncClient, payload: ResetPasswordRequest) -
 
     await record_audit_event(
         supabase, user_id=uuid.UUID(user_id), action="auth.reset_password", entity=f"users:{user_id}"
+    )
+
+
+async def change_password(
+    supabase: AsyncClient,
+    user: UserRead,
+    current_token: str | None,
+    payload: ChangePasswordRequest,
+) -> None:
+    """Change password for an already-authenticated user - distinct from
+    reset_password (which proves identity via an OTP instead of a session).
+    Unlike reset_password, this keeps the caller's own session alive: only
+    every *other* session is invalidated, since the whole point here is
+    "I'm already logged in on this device and just want a new password"."""
+    resp = (
+        await supabase.table("users").select("password_hash").eq("id", str(user.id)).maybe_single().execute()
+    )
+    user_row = resp.data if resp is not None else None
+    if user_row is None or not verify_password(payload.current_password, user_row["password_hash"]):
+        raise UnauthorizedError("Current password is incorrect.")
+
+    await supabase.table("users").update(
+        {"password_hash": hash_password(payload.new_password)}
+    ).eq("id", str(user.id)).execute()
+
+    sessions_query = supabase.table("sessions").delete().eq("user_id", str(user.id))
+    if current_token:
+        sessions_query = sessions_query.neq("token_hash", hash_session_token(current_token))
+    await sessions_query.execute()
+
+    await record_audit_event(
+        supabase, user_id=user.id, action="auth.change_password", entity=f"users:{user.id}"
     )
 
 

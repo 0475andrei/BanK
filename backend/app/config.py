@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     # still generated/stored, they just never reach the user.
     TEAMS_WEBHOOK_URL: str | None = None
 
+    # Trusted-device cookie (see app/modules/trusted_devices) - separate
+    # from the session cookie above, and much longer-lived: it identifies
+    # "this browser has completed OTP enrollment before", not "this browser
+    # is currently logged in".
+    TRUSTED_DEVICE_COOKIE_NAME: str = "trusted_device_token"
+    TRUSTED_DEVICE_TTL_SECONDS: int = 60 * 60 * 24 * 180
+
     # ------------------------------------------------------------------
     # AI layer ([B]-owned app/ai). Azure OpenAI / Azure AI Foundry.
     # ------------------------------------------------------------------

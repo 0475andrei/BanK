@@ -6,6 +6,7 @@ from supabase import AsyncClient
 from app.core.dependencies import get_current_user
 from app.core.idempotency import require_idempotency_key
 from app.db.supabase_client import get_supabase
+from app.modules.face_auth.router import optional_face_confirmation_token
 from app.modules.transfers import service
 from app.modules.transfers.schemas import TransferCreate, TransferRead
 from app.modules.users.schemas import UserRead
@@ -17,10 +18,11 @@ router = APIRouter()
 async def create_transfer(
     payload: TransferCreate,
     idempotency_key: str = Depends(require_idempotency_key),
+    face_token: str | None = Depends(optional_face_confirmation_token),
     supabase: AsyncClient = Depends(get_supabase),
     user: UserRead = Depends(get_current_user),
 ) -> dict:
-    return await service.create_transfer(supabase, user, payload, idempotency_key)
+    return await service.create_transfer(supabase, user, payload, idempotency_key, face_token)
 
 
 @router.get("", response_model=list[TransferRead])

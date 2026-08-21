@@ -12,7 +12,12 @@
         <!-- Sidebar Navigation -->
         <aside class="sidebar">
             <div class="logo">
-                <h2>BanK.</h2>
+                <img class="logo-mark" src="static/bank-mark.jpg" alt="">
+                <span class="logo-text">
+                    <span class="logo-name">BanK</span>
+                    <span class="logo-bank">BANCA</span>
+                    <span class="logo-tagline">CONFORTUL TAU FINANCIAR</span>
+                </span>
             </div>
             <nav class="nav-menu">
                 <button class="nav-item active" data-view="dashboard">
@@ -40,6 +45,13 @@
                     <span>Plăți</span>
                 </button>
             </nav>
+            <section class="conversation-history" id="conversation-history" hidden aria-labelledby="conversation-history-title">
+                <div class="conversation-history-header">
+                    <h2 id="conversation-history-title">Conversații recente</h2>
+                </div>
+                <p class="conversation-history-error" id="conversation-history-error" role="alert" hidden></p>
+                <div class="conversation-history-list" id="conversation-history-list"></div>
+            </section>
         </aside>
 
         <!-- Main Content Area -->
@@ -51,12 +63,51 @@
                     <input type="text" placeholder="Caută tranzacții, carduri, contacte...">
                 </div>
                 <div class="user-actions">
-                    <button class="notification-btn"><i data-lucide="bell" class="icon"></i><span class="badge"></span></button>
+                    <button class="notification-btn" id="notifications-btn"><i data-lucide="bell" class="icon"></i><span class="badge" id="notifications-badge" hidden></span></button>
+
+                    <!-- Auto-hide notifications dropdown: opens on click of the
+                         bell above, closes on outside click or Escape (see
+                         wireNotificationsPanel in app.js). -->
+                    <div class="profile-panel notifications-panel" id="notifications-panel" hidden>
+                        <div class="profile-panel-header">
+                            <div class="profile-panel-name">Notificări</div>
+                        </div>
+                        <div id="notifications-list">
+                            <div class="empty-state">Nicio notificare încă.</div>
+                        </div>
+                    </div>
+
                     <div class="user-profile" id="user-profile-btn" title="Profilul meu">
                         <div id="user-avatar" class="avatar"></div>
                         <span id="user-name"></span>
                     </div>
                     <button class="logout-btn" id="logout-btn" title="Log out"><i data-lucide="log-out" class="icon"></i></button>
+
+                    <!-- Auto-hide profile menu: opens on click of the name/avatar
+                         above, closes on outside click or Escape. Each item
+                         redirects to its own dedicated view below, rather than
+                         showing anything inline here (see wireProfilePanel in
+                         app.js). Lives here, not in views-container, so it can
+                         be positioned as a dropdown anchored under the header. -->
+                    <div class="profile-panel" id="profile-panel" hidden>
+                        <div class="profile-panel-header">
+                            <div class="profile-panel-name" id="profile-panel-name"></div>
+                            <div class="profile-panel-email" id="profile-panel-email"></div>
+                        </div>
+
+                        <button type="button" class="profile-menu-item" data-target="avatar">
+                            <i data-lucide="smile" class="icon"></i> Avatar
+                        </button>
+                        <button type="button" class="profile-menu-item" data-target="referral">
+                            <i data-lucide="gift" class="icon"></i> Codul meu de referral
+                        </button>
+                        <button type="button" class="profile-menu-item" data-target="change-password">
+                            <i data-lucide="lock" class="icon"></i> Schimbă parola
+                        </button>
+                        <button type="button" class="profile-menu-item" data-target="face-login">
+                            <i data-lucide="scan-face" class="icon"></i> Face Login
+                        </button>
+                    </div>
                 </div>
             </header>
 
@@ -244,16 +295,79 @@
                     </div>
                 </section>
 
-                <!-- Profile view (avatar picker) -->
-                <section id="view-profile" class="view hidden">
-                    <button class="btn btn-secondary" id="back-from-profile-btn" style="margin-bottom: 24px;">
+                <!-- Profile menu destinations: reached only via the header
+                     dropdown (profile-panel), never from the sidebar. -->
+                <section id="view-avatar" class="view hidden">
+                    <button class="btn btn-secondary back-to-dashboard-btn" style="margin-bottom: 24px;">
                         <i data-lucide="arrow-left" class="icon"></i> Înapoi
                     </button>
-                    <h2 class="view-title">Profilul meu</h2>
-                    <div class="profile-card">
+                    <h2 class="view-title">Avatar</h2>
+                    <div class="standalone-card centered">
                         <div class="profile-avatar-preview" id="profile-avatar-preview">🏦</div>
                         <p class="profile-subtitle">Alege o emoji pentru avatarul tău</p>
                         <div class="emoji-grid" id="emoji-grid"></div>
+                    </div>
+                </section>
+
+                <section id="view-referral" class="view hidden">
+                    <button class="btn btn-secondary back-to-dashboard-btn" style="margin-bottom: 24px;">
+                        <i data-lucide="arrow-left" class="icon"></i> Înapoi
+                    </button>
+                    <h2 class="view-title">Codul meu de referral</h2>
+                    <div class="standalone-card">
+                        <div class="my-iban-box">
+                            <span class="iban-value" id="referral-code-value">&hellip;</span>
+                            <button type="button" class="card-eye-btn" id="copy-referral-code-btn" title="Copiază codul"><i data-lucide="copy"></i></button>
+                        </div>
+                        <p class="field-hint">Cine se înregistrează cu acest cod primește 500 RON la primul cont.</p>
+                    </div>
+                </section>
+
+                <section id="view-change-password" class="view hidden">
+                    <button class="btn btn-secondary back-to-dashboard-btn" style="margin-bottom: 24px;">
+                        <i data-lucide="arrow-left" class="icon"></i> Înapoi
+                    </button>
+                    <h2 class="view-title">Schimbă parola</h2>
+                    <div class="standalone-card">
+                        <div class="auth-error" id="change-password-error" hidden></div>
+                        <div class="auth-success" id="change-password-success" hidden></div>
+                        <form id="change-password-form">
+                            <label class="field-label" for="current-password">Parola curentă</label>
+                            <input class="field-input" type="password" id="current-password" required autocomplete="current-password">
+
+                            <label class="field-label" for="new-password-profile">Parolă nouă</label>
+                            <input class="field-input" type="password" id="new-password-profile" minlength="8" required autocomplete="new-password">
+
+                            <label class="field-label" for="new-password-profile-confirm">Confirmă parola nouă</label>
+                            <input class="field-input" type="password" id="new-password-profile-confirm" minlength="8" required autocomplete="new-password">
+
+                            <button class="btn btn-primary" type="submit" style="margin-top: 16px;">Schimbă parola</button>
+                        </form>
+                    </div>
+                </section>
+
+                <section id="view-face-login" class="view hidden">
+                    <button class="btn btn-secondary back-to-dashboard-btn" style="margin-bottom: 24px;">
+                        <i data-lucide="arrow-left" class="icon"></i> Înapoi
+                    </button>
+                    <h2 class="view-title">Face Login</h2>
+                    <div class="standalone-card centered">
+                        <p class="field-hint" id="face-status-text" style="margin-bottom: 20px;">Se verifică...</p>
+
+                        <div class="face-camera-wrap">
+                            <video id="face-video" autoplay playsinline muted></video>
+                            <canvas id="face-canvas" hidden></canvas>
+                        </div>
+
+                        <div class="auth-error" id="face-enroll-error" hidden></div>
+                        <div class="auth-success" id="face-enroll-success" hidden></div>
+
+                        <div class="modal-actions" style="margin-top: 20px;">
+                            <button type="button" class="btn btn-secondary" id="face-start-camera-btn">Pornește camera</button>
+                            <button type="button" class="btn btn-primary" id="face-capture-btn" hidden>Capturează și activează</button>
+                        </div>
+
+                        <button type="button" class="card-cancel-btn" id="face-remove-btn" hidden style="margin-top: 16px;">Dezactivează Face Login</button>
                     </div>
                 </section>
             </div>
@@ -374,6 +488,31 @@
                     <button type="submit" class="btn btn-primary">Trimite comanda</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Face confirmation modal - step-up auth for transfers/payments over
+         the threshold (see backend/app/modules/face_auth::enforce_face_
+         confirmation). Opened by requestFaceConfirmationToken() in app.js
+         whenever a transfer/payment submission comes back 428. -->
+    <div class="modal-overlay" id="face-confirm-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Confirmă cu Face ID</h3>
+                <button class="modal-close" id="close-face-confirm-modal"><i data-lucide="x"></i></button>
+            </div>
+            <p class="field-hint" style="margin-bottom: 16px;">
+                Suma depășește pragul de confirmare - verifică-ți identitatea prin cameră.
+            </p>
+            <div class="auth-error" id="face-confirm-error" hidden></div>
+            <div class="face-camera-wrap">
+                <video id="face-confirm-video" autoplay playsinline muted></video>
+                <canvas id="face-confirm-canvas" hidden></canvas>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="cancel-face-confirm">Anulează</button>
+                <button type="button" class="btn btn-primary" id="capture-face-confirm">Confirmă</button>
+            </div>
         </div>
     </div>
 

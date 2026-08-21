@@ -13,23 +13,25 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends
+from supabase import AsyncClient
 
 from app.ai.context import build_context
 from app.ai.providers.base import ModelProvider, ProviderError
 from app.ai.schemas import Message
 from app.ai.tools.registry import ToolRegistry
 from app.core.exceptions import AIProviderError
+from app.db.supabase_client import get_supabase
 from app.modules.chat.router import get_model_provider
 from app.modules.onboarding.agent import OnboardingAgent
 from app.modules.onboarding.schemas import OnboardingChatRequest, OnboardingChatResponse
-from app.modules.onboarding.tool import ProposeRegistrationTool
+from app.modules.onboarding.tool import CheckExistingAccountTool, ProposeRegistrationTool
 
 router = APIRouter()
 
 
-def _extract_collected_fields(trace: list[Message]) -> dict | None:
+def _extract_tool_result(trace: list[Message], tool_name: str) -> dict | None:
     for message in trace:
-        if message.role != "tool" or message.name != ProposeRegistrationTool.name:
+        if message.role != "tool" or message.name != tool_name:
             continue
         payload = json.loads(message.content or "{}")
         if payload.get("ok"):
@@ -41,13 +43,16 @@ def _extract_collected_fields(trace: list[Message]) -> dict | None:
 async def chat(
     payload: OnboardingChatRequest,
     provider: ModelProvider = Depends(get_model_provider),
+    supabase: AsyncClient = Depends(get_supabase),
 ) -> OnboardingChatResponse:
     # No real identity exists yet - a fresh synthetic id per request is
-    # fine since propose_registration ignores context entirely (it has no
-    # DB access and resolves nothing through it).
+    # fine since neither tool resolves anything through context (one has
+    # no DB access at all, the other only reads users by email/national_id,
+    # not by identity).
     context = build_context(user_id=f"onboarding-{uuid.uuid4()}", account_ids=())
 
-    agent = OnboardingAgent(provider, ToolRegistry([ProposeRegistrationTool()]))
+    tools = ToolRegistry([ProposeRegistrationTool(), CheckExistingAccountTool(supabase)])
+    agent = OnboardingAgent(provider, tools)
     conversation = [*payload.history, Message(role="user", content=payload.message)]
 
     try:
@@ -57,8 +62,13 @@ async def chat(
 
     updated_history = [*conversation, *trace, Message(role="assistant", content=reply)]
 
+    account_conflict = _extract_tool_result(trace, CheckExistingAccountTool.name)
+    if account_conflict is not None and not account_conflict.get("exists"):
+        account_conflict = None
+
     return OnboardingChatResponse(
         reply=reply,
         history=updated_history,
-        collected_fields=_extract_collected_fields(trace),
+        collected_fields=_extract_tool_result(trace, ProposeRegistrationTool.name),
+        account_conflict=account_conflict,
     )

@@ -10,12 +10,19 @@
 <body class="auth-body">
     <div class="auth-page">
         <div class="auth-card auth-card-wide" id="auth-card">
-            <div class="logo"><h2>BanK.</h2></div>
+            <div class="logo">
+                <img class="logo-mark" src="static/bank-mark.jpg" alt="">
+                <span class="logo-text">
+                    <span class="logo-name">BanK</span>
+                    <span class="logo-bank">BANCA</span>
+                    <span class="logo-tagline">CONFORTUL TAU FINANCIAR</span>
+                </span>
+            </div>
             <p class="auth-subtitle">Create your account</p>
 
             <div class="onboarding-mode-switch">
                 <button type="button" class="mode-tab active" id="mode-tab-manual">Completare manuală</button>
-                <button type="button" class="mode-tab" id="mode-tab-comodul">💬 Chat cu Comodul</button>
+                <button type="button" class="mode-tab" id="mode-tab-comodul"><i data-lucide="sparkles" class="icon"></i> Chat cu Comodul</button>
             </div>
 
             <div class="auth-error" id="auth-error" hidden></div>
@@ -26,7 +33,7 @@
                     <div class="ocr-upload-box">
                         <label class="field-label">Completare automată din buletin <span class="field-optional">(opțional)</span></label>
                         <div class="file-dropzone" id="id-photo-dropzone" tabindex="0" role="button" aria-label="Încarcă poza buletinului">
-                            <span class="file-dropzone-icon">📎</span>
+                            <span class="file-dropzone-icon"><i data-lucide="paperclip"></i></span>
                             <span class="file-dropzone-text" id="id-photo-filename">Trage poza aici sau <span class="file-dropzone-link">alege un fișier</span></span>
                             <input type="file" id="id_photo" accept="image/png" hidden>
                         </div>
@@ -78,7 +85,7 @@
             <div id="comodul-panel" hidden>
                 <div class="chat-container comodul-chat-container">
                     <div class="chat-header">
-                        <div class="ai-avatar">🤖</div>
+                        <div class="ai-avatar"><i data-lucide="sparkles"></i></div>
                         <div class="ai-info">
                             <h2>Comodul</h2>
                             <span class="status">Te ajut să deschizi un cont, în ritmul tău</span>
@@ -87,14 +94,14 @@
 
                     <div class="chat-messages" id="comodul-messages">
                         <div class="message ai">
-                            <div class="avatar">🤖</div>
+                            <div class="avatar"><i data-lucide="sparkles"></i></div>
                             <div class="bubble">Salut! Sunt Comodul și te ajut să deschizi un cont la BanK, fără grabă. Poți să-mi spui numele tău, sau, dacă e mai simplu, poți încărca o poză a buletinului mai jos și citesc eu datele automat.</div>
                         </div>
                     </div>
 
                     <div class="ocr-upload-box comodul-upload-box">
                         <div class="file-dropzone" id="comodul-photo-dropzone" tabindex="0" role="button" aria-label="Încarcă poza buletinului">
-                            <span class="file-dropzone-icon">📎</span>
+                            <span class="file-dropzone-icon"><i data-lucide="paperclip"></i></span>
                             <span class="file-dropzone-text" id="comodul-photo-filename">Trage poza buletinului aici sau <span class="file-dropzone-link">alege un fișier</span> (opțional)</span>
                             <input type="file" id="comodul_photo" accept="image/png" hidden>
                         </div>
@@ -111,8 +118,11 @@
         </div>
     </div>
 
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="api.js"></script>
     <script>
+        if (window.lucide) lucide.createIcons();
+
         /* ------------------------------------------------------------------
          * Reusable pieces shared by the manual form and Comodul's chat.
          * ------------------------------------------------------------------ */
@@ -277,7 +287,9 @@
                     referral_code: document.getElementById("referral_code").value || null,
                 });
                 // Registration also logs the user in (see backend/docs/AUTH_HANDOFF.md).
-                window.location.href = "index.html";
+                // enroll-device.html offers (optionally) to recognize this
+                // browser, so future logins here only need the password.
+                window.location.href = "enroll-device.html";
             } catch (err) {
                 errorEl.textContent = err.message;
                 errorEl.hidden = false;
@@ -301,7 +313,7 @@
             if (role === "ai") {
                 const avatar = document.createElement("div");
                 avatar.className = "avatar";
-                avatar.textContent = "🤖";
+                avatar.innerHTML = '<i data-lucide="sparkles"></i>';
                 wrapper.appendChild(avatar);
             }
 
@@ -318,6 +330,7 @@
 
             messages.appendChild(wrapper);
             messages.scrollTop = messages.scrollHeight;
+            if (window.lucide) lucide.createIcons();
             return wrapper;
         }
 
@@ -353,15 +366,68 @@
                 const card = wrapper.querySelector(".human-in-the-loop-card");
                 try {
                     await submitRegistration(fields);
-                    window.location.href = "index.html";
+                    window.location.href = "enroll-device.html";
                 } catch (err) {
-                    card.innerHTML = `<div style="color: var(--expense-red);">Nu am putut crea contul: ${escapeHTML(err.message)}. Poți continua conversația ca să corectezi.</div>`;
+                    if (err.code === "email_already_registered" || err.code === "national_id_already_registered") {
+                        showExistingAccountFallback(card, fields, err.code);
+                    } else {
+                        card.innerHTML = `<div style="color: var(--expense-red);">Nu am putut crea contul: ${escapeHTML(err.message)}. Poți continua conversația ca să corectezi.</div>`;
+                    }
                 }
             });
             wrapper.querySelector("#comodul-edit-btn").addEventListener("click", () => {
                 wrapper.querySelector(".human-in-the-loop-card").remove();
                 appendComodulBubble("ai", "Sigur - spune-mi ce vrei să schimb.");
             });
+        }
+
+        /** Shared by both places Comodul can discover an existing account:
+         * the early check_existing_account tool call (ideal path - before
+         * the interview even continues) and the late 409 on final submit
+         * (defense in depth, e.g. if the email changed after the early
+         * check). Offers a way into the already-built forgot-password flow
+         * instead of a dead-end error - reuses that page's own 3-step
+         * OTP-over-Teams flow rather than reimplementing it here. */
+        function accountConflictCardHTML(reason, email) {
+            return `
+                <div class="action-proposal">
+                    <strong>Cont existent</strong>
+                    <p>${escapeHTML(reason)} Dacă e contul tău, te pot ajuta să-ți resetezi parola ca să te poți autentifica.</p>
+                </div>
+                <div class="hitl-actions">
+                    <a class="btn btn-primary" href="forgot-password.html?email=${encodeURIComponent(email)}">Resetează parola</a>
+                    <button type="button" class="btn btn-secondary conflict-retry-btn">Corectez datele</button>
+                </div>
+            `;
+        }
+
+        function wireConflictRetry(container) {
+            container.querySelector(".conflict-retry-btn").addEventListener("click", () => {
+                container.closest(".message").remove();
+                appendComodulBubble("ai", "Sigur - spune-mi ce vrei să corectez.");
+            });
+        }
+
+        /** Late path: registration was actually attempted and rejected. */
+        function showExistingAccountFallback(card, fields, errorCode) {
+            const reason = errorCode === "email_already_registered"
+                ? "Există deja un cont cu acest email."
+                : "Acest CNP este deja asociat unui cont existent.";
+            card.innerHTML = accountConflictCardHTML(reason, fields.email);
+            wireConflictRetry(card);
+        }
+
+        /** Early path: check_existing_account caught it before the rest of
+         * the interview even happened - a brand new bubble, not editing an
+         * existing confirmation card (there isn't one yet). */
+        function renderAccountConflictBubble(conflict) {
+            const reason = conflict.matched_field === "email"
+                ? "Există deja un cont cu acest email."
+                : "Acest CNP este deja asociat unui cont existent.";
+            const wrapper = appendComodulBubble("ai", "", {
+                html: `<div class="human-in-the-loop-card">${accountConflictCardHTML(reason, conflict.email)}</div>`,
+            });
+            wireConflictRetry(wrapper);
         }
 
         function escapeHTML(str) {
@@ -394,7 +460,9 @@
                 appendComodulBubble("ai", response.reply);
                 comodulHistory = response.history;
 
-                if (response.collected_fields) {
+                if (response.account_conflict) {
+                    renderAccountConflictBubble(response.account_conflict);
+                } else if (response.collected_fields) {
                     renderConfirmationCard(response.collected_fields);
                 }
             } catch (err) {
@@ -419,7 +487,9 @@
         });
 
         wireDropzone("comodul-photo-dropzone", "comodul_photo", "comodul-photo-filename", async (file) => {
-            appendComodulBubble("user", `📎 ${file.name}`);
+            appendComodulBubble("user", "", {
+                html: `<span class="attachment-icon"><i data-lucide="paperclip"></i></span> ${escapeHTML(file.name)}`,
+            });
             const typingBubble = appendComodulBubble("ai", "", {
                 bubbleClass: "typing",
                 html: '<div class="typing-label">Citesc poza...</div>',

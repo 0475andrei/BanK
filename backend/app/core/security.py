@@ -50,6 +50,17 @@ def generate_otp_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
+_REFERRAL_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I - avoids visual ambiguity when shared
+_REFERRAL_CODE_LENGTH = 8
+
+
+def generate_referral_code() -> str:
+    """A random per-user shareable code (e.g. "K7M2XQP9"). Collisions are
+    handled by the caller (retry on the DB's UNIQUE violation), same pattern
+    as accounts/service.py's IBAN generation."""
+    return "".join(secrets.choice(_REFERRAL_CODE_ALPHABET) for _ in range(_REFERRAL_CODE_LENGTH))
+
+
 def hash_otp_code(code: str) -> str:
     """Same store-a-hash-not-the-secret pattern as hash_session_token. Unlike
     a session token, a 6-digit code has only 1e6 possibilities, so this is
