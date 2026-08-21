@@ -10,6 +10,8 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from app.ai.agents.banking_agent import BankingAgent
+from app.ai.agents.insights_agent import InsightsAgent
+from app.ai.agents.planning_agent import PlanningAgent
 from app.ai.context import Context
 from app.ai.orchestrator import Orchestrator
 from app.ai.providers.base import ModelProvider
@@ -22,6 +24,14 @@ from app.ai.tools.banking import (
     ListTransactionsTool,
     ListTransfersTool,
 )
+from app.ai.tools.insights import (
+    CategorizeTransactionsTool,
+    ComputeSpendingStatsTool,
+    DetectAnomaliesTool,
+    DetectRecurringPaymentsTool,
+    GetTransactionsInRangeTool,
+)
+from app.ai.tools.planning import ProjectBalanceTool, SavingsGoalTool, SimulateScenarioTool
 from app.ai.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
@@ -45,6 +55,40 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
     )
 
 
+def build_insights_tools(supabase: AsyncClient) -> ToolRegistry:
+    """The read-only tools the insights agent is allowed to call.
+
+    Deliberately a different registry from `build_banking_tools`: an agent's
+    reach is defined by what it is handed, so the analytical agent cannot read
+    card numbers and the banking agent cannot run an unbounded date sweep.
+    """
+    return ToolRegistry(
+        [
+            GetTransactionsInRangeTool(supabase),
+            CategorizeTransactionsTool(supabase),
+            DetectRecurringPaymentsTool(supabase),
+            ComputeSpendingStatsTool(supabase),
+            DetectAnomaliesTool(supabase),
+        ]
+    )
+
+
+def build_planning_tools(supabase: AsyncClient) -> ToolRegistry:
+    """The read-only tools the planning agent is allowed to call.
+
+    A third distinct registry, same reason as insights vs banking: the
+    goal-oriented agent projects and simulates, it does not need (and is not
+    handed) the analytical categorisation/anomaly tools either.
+    """
+    return ToolRegistry(
+        [
+            ProjectBalanceTool(supabase),
+            SimulateScenarioTool(supabase),
+            SavingsGoalTool(supabase),
+        ]
+    )
+
+
 class AIService:
     """Holds the orchestrator and hands conversations to the routed agent."""
 
@@ -61,11 +105,37 @@ class AIService:
             provider = AzureOpenAIProvider()
         self._provider = provider
         # The provider goes to the orchestrator too: routing's LLM fallback
-        # needs a model of its own once more than one agent is registered.
-        self._orchestrator = orchestrator or Orchestrator(
-            [BankingAgent(provider, build_banking_tools(supabase))],
-            provider=provider,
+        # needs a model of its own now that more than one agent is registered.
+        self._orchestrator = orchestrator or self._build_orchestrator(supabase, provider)
+
+    @staticmethod
+    def _build_orchestrator(supabase: AsyncClient, provider: ModelProvider) -> Orchestrator:
+        """Register the agents, in the order routing should consider them.
+
+        ORDER MATTERS. `Orchestrator._match_rules` walks agents in registration
+        order and stops at the first rule that claims the message, so the agent
+        registered first gets first refusal. Insights goes first deliberately:
+        it and Banking share the `cheltui` / `bani` keywords (Banking has had
+        them since Step 6), and for a phrase like "cât am cheltuit?" the
+        analytical reading is the more specific one.
+
+        Planning goes LAST deliberately, for the opposite reason: it shares
+        the `econom` stem with Banking's "Economii" account keyword, and here
+        Banking should win - "arată-mi contul de economii" is transactional.
+        That does mean a bare "econom"-only savings-goal phrasing currently
+        mis-routes to Banking (see the KNOWN COLLISION note on
+        `PlanningAgent`'s rules); acceptable for now, revisited in Step 16.
+
+        Banking is still the DEFAULT — what an unmatched or unclassifiable
+        message falls back to — which is a separate thing from rule order.
+        """
+        orchestrator = Orchestrator(provider=provider)
+        orchestrator.register(InsightsAgent(provider, build_insights_tools(supabase)))
+        orchestrator.register(
+            BankingAgent(provider, build_banking_tools(supabase)), default=True
         )
+        orchestrator.register(PlanningAgent(provider, build_planning_tools(supabase)))
+        return orchestrator
 
     @property
     def orchestrator(self) -> Orchestrator:

@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
 
-from app.ai.agents.base import Agent
-from app.ai.context import Context
-from app.ai.providers.base import ModelProvider
+from app.ai.agents.tool_loop import MAX_ITERATIONS as _MAX_ITERATIONS
+from app.ai.agents.tool_loop import ToolLoopAgent
 from app.ai.routing import RoutingRule
-from app.ai.schemas import Message, ToolCall, ToolResult
-from app.ai.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +87,8 @@ Reguli:
 """
 
 #: Cap on provider round-trips per user message. Prevents an infinite tool loop.
-MAX_ITERATIONS = 5
+#: Re-exported from `tool_loop` so this module's public surface is unchanged.
+MAX_ITERATIONS = _MAX_ITERATIONS
 
 FALLBACK_REPLY = (
     "I wasn't able to finish that request — I kept needing more information and "
@@ -99,75 +96,14 @@ FALLBACK_REPLY = (
 )
 
 
-class BankingAgent(Agent):
-    """Runs the read-only tool loop against a provider."""
+class BankingAgent(ToolLoopAgent):
+    """The transactional agent: strictly factual, never speculative.
+
+    The provider/tool loop lives in `ToolLoopAgent`; what makes this agent
+    *banking* is its prompt, its tools and the questions its rules claim.
+    """
 
     name = "banking"
     routing_rules = BANKING_ROUTING_RULES
-
-    def __init__(
-        self,
-        provider: ModelProvider,
-        tools: ToolRegistry,
-        *,
-        system_prompt: str = SYSTEM_PROMPT,
-        max_iterations: int = MAX_ITERATIONS,
-    ) -> None:
-        if max_iterations < 1:
-            raise ValueError("max_iterations must be at least 1")
-        self._provider = provider
-        self._tools = tools
-        self._system_prompt = system_prompt
-        self._max_iterations = max_iterations
-
-    async def run(self, messages: Sequence[Message], context: Context) -> tuple[str, list[Message]]:
-        # `context` is threaded straight to the tools and is never rendered into
-        # the prompt — the model must not be able to read or restate identity.
-        #
-        # Local working copy: the caller's history is never mutated. Everything
-        # appended after the system prompt + caller's messages is the trace this
-        # call hands back, so the caller can persist it.
-        working: list[Message] = [
-            Message(role="system", content=self._system_prompt),
-            *messages,
-        ]
-        trace_start = len(working)
-        specs = self._tools.list_specs()
-
-        for iteration in range(1, self._max_iterations + 1):
-            response = self._provider.complete(working, specs)
-
-            if not response.wants_tools:
-                return response.text or "", working[trace_start:]
-
-            working.append(response.to_assistant_message())
-            for call in response.tool_calls:
-                # Log the tool name only — arguments and results may carry PII.
-                logger.info(
-                    "agent=%s iteration=%d executing tool=%s",
-                    self.name,
-                    iteration,
-                    call.name,
-                )
-                result = await self._execute(call, context)
-                working.append(result.to_message())
-
-        logger.warning(
-            "agent=%s hit max_iterations=%d; returning fallback",
-            self.name,
-            self._max_iterations,
-        )
-        return FALLBACK_REPLY, working[trace_start:]
-
-    async def _execute(self, call: ToolCall, context: Context) -> ToolResult:
-        tool = self._tools.get(call.name)
-        if tool is None:
-            # The model asked for something it was never offered.
-            logger.warning("agent=%s requested unknown tool=%s", self.name, call.name)
-            return ToolResult.failure(
-                name=call.name,
-                error=f"unknown tool: {call.name}",
-                tool_call_id=call.id,
-            )
-        # `execute` validates arguments, enforces the context, and never raises.
-        return await tool.execute(call, context)
+    system_prompt = SYSTEM_PROMPT
+    fallback_reply = FALLBACK_REPLY

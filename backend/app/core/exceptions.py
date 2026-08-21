@@ -145,6 +145,18 @@ class InvalidFaceConfirmationError(AppError):
     default_message = "Invalid or expired face confirmation."
 
 
+class InvalidEnrollmentCodeError(AppError):
+    status_code = 400
+    error_code = "invalid_enrollment_code"
+    default_message = "Invalid or expired verification code."
+
+
+class DeviceNotTrustedError(AppError):
+    status_code = 401
+    error_code = "device_not_trusted"
+    default_message = "This device is not enrolled."
+
+
 class AIServiceUnavailableError(AppError):
     """The AI layer could not be constructed - typically missing credentials.
 
