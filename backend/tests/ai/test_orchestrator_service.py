@@ -6,10 +6,16 @@ import pytest
 
 from app.ai.agents.banking_agent import BankingAgent
 from app.ai.agents.insights_agent import InsightsAgent
+from app.ai.agents.planning_agent import PlanningAgent
 from app.ai.orchestrator import Orchestrator
 from app.ai.providers.mock_provider import MockProvider
 from app.ai.schemas import Message, ModelResponse
-from app.ai.service import AIService, build_banking_tools, build_insights_tools
+from app.ai.service import (
+    AIService,
+    build_banking_tools,
+    build_insights_tools,
+    build_planning_tools,
+)
 from tests.ai.conftest import OWNED_ACCOUNT_IDS, FakeSupabase, balance_call
 
 
@@ -31,12 +37,14 @@ def test_route_always_returns_the_banking_agent(context):
         assert orchestrator.get(decision.agent_name) is agent
 
 
-def test_service_wires_a_default_orchestrator_with_both_agents(context):
-    """Insights is registered FIRST (it wins shared keywords), Banking is the
-    default (it takes anything unclaimed). Those are two different things."""
+def test_service_wires_a_default_orchestrator_with_all_agents(context):
+    """Insights is registered FIRST (it wins shared keywords with Banking),
+    Planning is registered LAST (it loses the shared `econom` keyword to
+    Banking), Banking is the default (it takes anything unclaimed). All
+    three of those are different things."""
     service, _ = _service([ModelResponse(text="ok")])
 
-    assert service.orchestrator.names() == ["insights", "banking"]
+    assert service.orchestrator.names() == ["insights", "banking", "planning"]
 
     # A banking-only keyword still reaches banking despite insights being first.
     decision = service.orchestrator.route("care este soldul meu?", context)
@@ -292,3 +300,128 @@ def test_orchestrator_rejects_duplicate_agent_names():
 
     with pytest.raises(ValueError):
         orchestrator.register(BankingAgent(provider, build_banking_tools(FakeSupabase())))
+
+
+# ---------------------------------------------------------------------------
+# Three agents: PlanningAgent joins, registered exactly as AIService wires it.
+# ---------------------------------------------------------------------------
+
+
+def _three_agent_orchestrator(classifier_script: list[ModelResponse] | None = None):
+    """All three agents wired exactly as AIService wires them: insights
+    first (wins shared keywords with banking), banking default, planning
+    last (loses the shared `econom` keyword to banking - see PlanningAgent's
+    KNOWN COLLISION note)."""
+    provider = MockProvider([ModelResponse(text="ok")], repeat_last=True)
+    classifier = (
+        MockProvider(classifier_script) if classifier_script is not None else None
+    )
+    orchestrator = Orchestrator(provider=classifier)
+    orchestrator.register(InsightsAgent(provider, build_insights_tools(FakeSupabase())))
+    orchestrator.register(
+        BankingAgent(provider, build_banking_tools(FakeSupabase())), default=True
+    )
+    orchestrator.register(PlanningAgent(provider, build_planning_tools(FakeSupabase())))
+    return orchestrator
+
+
+def test_routing_picks_planning_for_goal_question(context):
+    """Uses the `obiectiv` keyword directly, not `econom` - which collides
+    with Banking's "Economii" account keyword and loses to it (registered
+    first); see test_routing_economii_collision_goes_to_banking below."""
+    decision = _three_agent_orchestrator().route(
+        "vreau să-mi ating obiectivul de a-mi lua un PS5", context
+    )
+
+    assert decision.agent_name == "planning"
+    assert decision.matched_rule == "planning_goals"
+
+
+def test_routing_picks_planning_for_projection(context):
+    """Avoids `sold` (a Banking keyword, checked first) - "proiecție
+    financiară" only matches Planning's `proiect` stem."""
+    decision = _three_agent_orchestrator().route("poți face o proiecție financiară?", context)
+
+    assert decision.agent_name == "planning"
+    assert decision.matched_rule == "planning_projection"
+
+
+def test_routing_picks_planning_for_what_if(context):
+    """Avoids `cheltui` (shared by Insights and Banking, both checked before
+    Planning) - "dacă aș reduce cafeaua" only matches Planning's `daca` stem."""
+    decision = _three_agent_orchestrator().route("ce-ar fi dacă aș reduce cafeaua?", context)
+
+    assert decision.agent_name == "planning"
+    assert decision.matched_rule == "planning_scenario"
+
+
+def test_routing_still_picks_banking_for_balance(context):
+    decision = _three_agent_orchestrator().route("care este soldul?", context)
+
+    assert decision.agent_name == "banking"
+    assert decision.matched_rule == "banking_keywords"
+
+
+def test_routing_still_picks_insights_for_spending(context):
+    decision = _three_agent_orchestrator().route("unde am cheltuit banii?", context)
+
+    assert decision.agent_name == "insights"
+    assert decision.matched_rule == "insights_spending"
+
+
+def test_routing_economii_collision_goes_to_banking(context):
+    """DOCUMENTED COLLISION: `econom` belongs to both Banking ("Economii"
+    account) and Planning (savings goals). Banking is registered first among
+    the two, so a bare "economii" phrasing goes to Banking - see
+    PlanningAgent's KNOWN COLLISION note. Pinned here so a future rule change
+    shows up as a deliberate decision, same as the existing `luna`/insights
+    and `an`/Andrei regression tests above."""
+    decision = _three_agent_orchestrator().route("arată-mi contul de economii", context)
+
+    assert decision.agent_name == "banking"
+    assert decision.matched_rule == "banking_keywords"
+
+
+def test_planning_agent_registered_with_orchestrator():
+    orchestrator = _three_agent_orchestrator()
+
+    assert "planning" in orchestrator.names()
+    assert isinstance(orchestrator.get("planning"), PlanningAgent)
+
+
+def test_planning_agent_has_own_routing_rules():
+    assert PlanningAgent.routing_rules
+    assert PlanningAgent.routing_rules is not BankingAgent.routing_rules
+    assert PlanningAgent.routing_rules is not InsightsAgent.routing_rules
+    assert {rule.name for rule in PlanningAgent.routing_rules} == {
+        "planning_goals",
+        "planning_projection",
+        "planning_scenario",
+        "planning_timeline",
+        "planning_budget",
+    }
+
+
+def test_planning_agent_has_own_system_prompt():
+    """Goal-oriented, not transactional or analytical - and explicitly still
+    read-only, same shape as the other two agents' guardrail assertions."""
+    prompt = PlanningAgent.system_prompt
+
+    assert prompt != BankingAgent.system_prompt
+    assert prompt != InsightsAgent.system_prompt
+    assert "planificatorul financiar" in prompt
+    assert "orientat pe obiective" in prompt
+    assert "NU poți executa nimic" in prompt
+
+
+def test_planning_agent_gets_only_its_own_tools():
+    """An agent's reach is what it was handed: the planning agent has no way
+    to read card numbers or categorize spending."""
+    tools = build_planning_tools(FakeSupabase())
+
+    assert tools.names() == ["project_balance", "simulate_scenario", "savings_goal"]
+    assert tools.get("list_cards") is None
+    assert tools.get("categorize_transactions") is None
+    assert all(tool.read_only for tool in tools)
+
+
