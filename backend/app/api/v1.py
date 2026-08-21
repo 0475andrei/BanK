@@ -12,6 +12,7 @@ from app.modules.onboarding.router import router as onboarding_router
 from app.modules.payments.router import router as payments_router
 from app.modules.transactions.router import router as transactions_router
 from app.modules.transfers.router import router as transfers_router
+from app.modules.trusted_devices.router import router as trusted_devices_router
 from app.modules.users.router import router as users_router
 
 api_router = APIRouter()
@@ -29,3 +30,6 @@ api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
 api_router.include_router(id_ocr_router, prefix="/id-ocr", tags=["id-ocr"])
 api_router.include_router(onboarding_router, prefix="/onboarding", tags=["onboarding"])
 api_router.include_router(notifications_router, prefix="/notifications", tags=["notifications"])
+api_router.include_router(
+    trusted_devices_router, prefix="/trusted-devices", tags=["trusted-devices"]
+)

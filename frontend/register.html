@@ -287,7 +287,9 @@
                     referral_code: document.getElementById("referral_code").value || null,
                 });
                 // Registration also logs the user in (see backend/docs/AUTH_HANDOFF.md).
-                window.location.href = "index.html";
+                // enroll-device.html offers (optionally) to recognize this
+                // browser, so future logins here only need the password.
+                window.location.href = "enroll-device.html";
             } catch (err) {
                 errorEl.textContent = err.message;
                 errorEl.hidden = false;
@@ -364,7 +366,7 @@
                 const card = wrapper.querySelector(".human-in-the-loop-card");
                 try {
                     await submitRegistration(fields);
-                    window.location.href = "index.html";
+                    window.location.href = "enroll-device.html";
                 } catch (err) {
                     if (err.code === "email_already_registered" || err.code === "national_id_already_registered") {
                         showExistingAccountFallback(card, fields, err.code);

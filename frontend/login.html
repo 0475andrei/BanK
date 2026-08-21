@@ -18,27 +18,98 @@
                     <span class="logo-tagline">CONFORTUL TAU FINANCIAR</span>
                 </span>
             </div>
-            <p class="auth-subtitle">Log in to your account</p>
 
-            <div class="auth-error" id="auth-error" hidden></div>
+            <!-- Recognized-device path: shown only after GET /trusted-devices/check
+                 confirms this browser already completed OTP enrollment. -->
+            <div id="device-login" hidden>
+                <p class="auth-subtitle">Bine ai revenit, <span id="device-email"></span></p>
+                <p class="field-hint" style="margin-bottom: 20px;">
+                    Acest calculator este recunoscut - introdu doar parola pentru a continua.
+                </p>
 
-            <form id="login-form">
-                <label class="field-label" for="email">Email</label>
-                <input class="field-input" type="email" id="email" name="email" required autocomplete="email">
+                <div class="auth-error" id="device-error" hidden></div>
 
-                <label class="field-label" for="password">Password</label>
-                <input class="field-input" type="password" id="password" name="password" required autocomplete="current-password">
+                <form id="device-login-form">
+                    <label class="field-label" for="device-password">Password</label>
+                    <input class="field-input" type="password" id="device-password" required autocomplete="current-password">
 
-                <button class="btn btn-primary auth-submit" type="submit">Log in</button>
-            </form>
+                    <button class="btn btn-primary auth-submit" type="submit">Continuă</button>
+                </form>
 
-            <p class="auth-switch"><a href="forgot-password.html">Ai uitat parola?</a></p>
-            <p class="auth-switch">No account yet? <a href="register.html">Register</a></p>
+                <p class="auth-switch"><a href="#" id="not-you-link">Nu ești tu? Autentifică-te cu alt cont</a></p>
+                <p class="auth-switch"><a href="forgot-password.html">Ai uitat parola?</a></p>
+            </div>
+
+            <!-- Normal path: default until proven otherwise, and always
+                 reachable via "Nu ești tu?" above. -->
+            <div id="normal-login">
+                <p class="auth-subtitle">Log in to your account</p>
+
+                <div class="auth-error" id="auth-error" hidden></div>
+
+                <form id="login-form">
+                    <label class="field-label" for="email">Email</label>
+                    <input class="field-input" type="email" id="email" name="email" required autocomplete="email">
+
+                    <label class="field-label" for="password">Password</label>
+                    <input class="field-input" type="password" id="password" name="password" required autocomplete="current-password">
+
+                    <button class="btn btn-primary auth-submit" type="submit">Log in</button>
+                </form>
+
+                <p class="auth-switch"><a href="forgot-password.html">Ai uitat parola?</a></p>
+                <p class="auth-switch">No account yet? <a href="register.html">Register</a></p>
+            </div>
         </div>
     </div>
 
     <script src="api.js"></script>
     <script>
+        const deviceLoginPanel = document.getElementById('device-login');
+        const normalLoginPanel = document.getElementById('normal-login');
+
+        function showNormalLogin() {
+            deviceLoginPanel.hidden = true;
+            normalLoginPanel.hidden = false;
+        }
+
+        (async () => {
+            try {
+                const result = await apiFetch('/trusted-devices/check');
+                if (result.trusted) {
+                    document.getElementById('device-email').textContent = result.email;
+                    deviceLoginPanel.hidden = false;
+                    normalLoginPanel.hidden = true;
+                }
+            } catch {
+                // Any failure here just falls back to the normal form -
+                // this is a convenience shortcut, never a requirement.
+            }
+        })();
+
+        document.getElementById('not-you-link').addEventListener('click', (event) => {
+            event.preventDefault();
+            showNormalLogin();
+        });
+
+        document.getElementById('device-login-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const errorEl = document.getElementById('device-error');
+            errorEl.hidden = true;
+            try {
+                await apiFetch('/trusted-devices/login', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        password: document.getElementById('device-password').value,
+                    }),
+                });
+                window.location.href = 'index.html';
+            } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.hidden = false;
+            }
+        });
+
         document.getElementById("login-form").addEventListener("submit", async (event) => {
             event.preventDefault();
             const errorEl = document.getElementById("auth-error");
