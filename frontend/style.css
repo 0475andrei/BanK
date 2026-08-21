@@ -616,6 +616,13 @@ body {
     border: none;
 }
 
+/* display:inline-flex above beats the browser's default [hidden] rule at
+   equal specificity (author stylesheet wins ties) - without this, a
+   hidden .btn (e.g. face-capture buttons toggled by JS) stays visible. */
+.btn[hidden] {
+    display: none;
+}
+
 .btn-primary {
     background: linear-gradient(135deg, var(--primary-teal) 0%, #0d9488 100%);
     color: #000;
