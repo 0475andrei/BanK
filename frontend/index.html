@@ -265,6 +265,7 @@
                             <form id="payments-form">
                                 <label class="field-label" for="payments-iban">IBAN destinatar</label>
                                 <input class="field-input" type="text" id="payments-iban" required placeholder="RO49 BANK ...">
+                                <p class="field-hint" id="payments-iban-holder"></p>
 
                                 <label class="field-label" for="payments-beneficiary">Nume beneficiar</label>
                                 <input class="field-input" type="text" id="payments-beneficiary" required>
@@ -274,6 +275,11 @@
 
                                 <label class="field-label" for="payments-description">Descriere <span class="field-optional">(opțional)</span></label>
                                 <input class="field-input" type="text" id="payments-description">
+
+                                <label class="field-label" style="display: flex; align-items: center; gap: 8px; margin-top: 16px;">
+                                    <input type="checkbox" id="payments-save-beneficiary" checked style="width: auto;">
+                                    Salvează acest beneficiar în Contactele mele
+                                </label>
 
                                 <div class="modal-actions">
                                     <button type="submit" class="btn btn-primary">Trimite plata</button>

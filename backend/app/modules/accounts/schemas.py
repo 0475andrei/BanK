@@ -21,3 +21,8 @@ class AccountRead(BaseModel):
     status: AccountStatus
     balance_minor: int
     created_at: datetime
+
+
+class AccountHolderRead(BaseModel):
+    first_name: str
+    last_name: str

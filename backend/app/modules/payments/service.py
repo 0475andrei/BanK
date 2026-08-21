@@ -28,6 +28,36 @@ from app.modules.payments.schemas import PaymentCreate
 from app.modules.users.schemas import UserRead
 
 
+async def _is_first_payment_to_person(
+    supabase: AsyncClient, from_user_id: uuid.UUID, to_user_id: str
+) -> bool:
+    """"Per person", not per IBAN: someone can own several accounts/IBANs, so
+    this checks every account the recipient owns against the sender's saved
+    beneficiaries, not just the one IBAN being paid right now. Relies on
+    beneficiaries actually being saved (see PaymentCreate.save_beneficiary) -
+    a payment sent with that unset never registers as "known", so the next
+    one to the same person is treated as new again."""
+    if str(from_user_id) == to_user_id:
+        return False
+
+    recipient_accounts_resp = (
+        await supabase.table("accounts").select("iban").eq("user_id", to_user_id).execute()
+    )
+    recipient_ibans = [row["iban"] for row in recipient_accounts_resp.data if row["iban"]]
+    if not recipient_ibans:
+        return True
+
+    resp = (
+        await supabase.table("beneficiaries")
+        .select("id")
+        .eq("user_id", str(from_user_id))
+        .in_("iban", recipient_ibans)
+        .limit(1)
+        .execute()
+    )
+    return not resp.data
+
+
 async def _find_by_idempotency_key(supabase: AsyncClient, idempotency_key: str) -> dict | None:
     resp = (
         await supabase.table("payments")
@@ -89,7 +119,13 @@ async def create_payment(
             "share one."
         )
 
-    await face_auth_service.enforce_face_confirmation(supabase, user, payload.amount_minor, face_token)
+    is_new_person = await _is_first_payment_to_person(supabase, user.id, to_account["user_id"])
+    await face_auth_service.enforce_face_confirmation(
+        supabase,
+        user,
+        required=face_auth_service.requires_face_confirmation(payload.amount_minor) or is_new_person,
+        token=face_token,
+    )
 
     try:
         resp = await supabase.rpc(
@@ -113,9 +149,10 @@ async def create_payment(
 
     payment = resp.data
 
-    await beneficiaries_service.upsert_beneficiary(
-        supabase, user_id=user.id, iban=to_iban, display_name=payload.beneficiary_name
-    )
+    if payload.save_beneficiary:
+        await beneficiaries_service.upsert_beneficiary(
+            supabase, user_id=user.id, iban=to_iban, display_name=payload.beneficiary_name
+        )
 
     return payment
 

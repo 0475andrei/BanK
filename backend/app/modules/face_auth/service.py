@@ -238,15 +238,18 @@ def requires_face_confirmation(amount_minor: int) -> bool:
 
 
 async def enforce_face_confirmation(
-    supabase: AsyncClient, user: UserRead, amount_minor: int, token: str | None
+    supabase: AsyncClient, user: UserRead, *, required: bool, token: str | None
 ) -> None:
     """Single call site transfers/service.py and payments/service.py use
-    before executing a money movement. No-ops below the threshold, and also
-    no-ops (can't require what was never set up) when the user has no face
+    before executing a money movement. `required` is the caller's decision -
+    transfers only ever pass `requires_face_confirmation(amount_minor)`;
+    payments additionally OR it with "first payment to this person" (see
+    payments/service.py). No-ops when `required` is False, and also no-ops
+    (can't require what was never set up) when the user has no face
     enrolled - otherwise raises FaceConfirmationRequiredError when no token
     was supplied, or InvalidFaceConfirmationError when the supplied one
     doesn't check out."""
-    if not requires_face_confirmation(amount_minor):
+    if not required:
         return
     if not await has_face_enrolled(supabase, user):
         return

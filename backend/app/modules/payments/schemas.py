@@ -12,6 +12,10 @@ class PaymentCreate(BaseModel):
     beneficiary_name: str = Field(..., min_length=1, max_length=200)
     amount_minor: int = Field(gt=0)
     description: str | None = Field(default=None, max_length=500)
+    # Beneficiaries otherwise auto-save on every successful payment (see
+    # beneficiaries_service.upsert_beneficiary) - this opts a one-off payment
+    # out of that. True by default to keep existing behavior unchanged.
+    save_beneficiary: bool = True
 
 
 class PaymentRead(BaseModel):
