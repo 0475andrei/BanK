@@ -104,6 +104,9 @@
                         <button type="button" class="profile-menu-item" data-target="change-password">
                             <i data-lucide="lock" class="icon"></i> Schimbă parola
                         </button>
+                        <button type="button" class="profile-menu-item" data-target="face-login">
+                            <i data-lucide="scan-face" class="icon"></i> Face Login
+                        </button>
                     </div>
                 </div>
             </header>
@@ -342,6 +345,31 @@
                         </form>
                     </div>
                 </section>
+
+                <section id="view-face-login" class="view hidden">
+                    <button class="btn btn-secondary back-to-dashboard-btn" style="margin-bottom: 24px;">
+                        <i data-lucide="arrow-left" class="icon"></i> Înapoi
+                    </button>
+                    <h2 class="view-title">Face Login</h2>
+                    <div class="standalone-card centered">
+                        <p class="field-hint" id="face-status-text" style="margin-bottom: 20px;">Se verifică...</p>
+
+                        <div class="face-camera-wrap">
+                            <video id="face-video" autoplay playsinline muted></video>
+                            <canvas id="face-canvas" hidden></canvas>
+                        </div>
+
+                        <div class="auth-error" id="face-enroll-error" hidden></div>
+                        <div class="auth-success" id="face-enroll-success" hidden></div>
+
+                        <div class="modal-actions" style="margin-top: 20px;">
+                            <button type="button" class="btn btn-secondary" id="face-start-camera-btn">Pornește camera</button>
+                            <button type="button" class="btn btn-primary" id="face-capture-btn" hidden>Capturează și activează</button>
+                        </div>
+
+                        <button type="button" class="card-cancel-btn" id="face-remove-btn" hidden style="margin-top: 16px;">Dezactivează Face Login</button>
+                    </div>
+                </section>
             </div>
         </main>
     </div>
@@ -460,6 +488,31 @@
                     <button type="submit" class="btn btn-primary">Trimite comanda</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Face confirmation modal - step-up auth for transfers/payments over
+         the threshold (see backend/app/modules/face_auth::enforce_face_
+         confirmation). Opened by requestFaceConfirmationToken() in app.js
+         whenever a transfer/payment submission comes back 428. -->
+    <div class="modal-overlay" id="face-confirm-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Confirmă cu Face ID</h3>
+                <button class="modal-close" id="close-face-confirm-modal"><i data-lucide="x"></i></button>
+            </div>
+            <p class="field-hint" style="margin-bottom: 16px;">
+                Suma depășește pragul de confirmare - verifică-ți identitatea prin cameră.
+            </p>
+            <div class="auth-error" id="face-confirm-error" hidden></div>
+            <div class="face-camera-wrap">
+                <video id="face-confirm-video" autoplay playsinline muted></video>
+                <canvas id="face-confirm-canvas" hidden></canvas>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="cancel-face-confirm">Anulează</button>
+                <button type="button" class="btn btn-primary" id="capture-face-confirm">Confirmă</button>
+            </div>
         </div>
     </div>
 
