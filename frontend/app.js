@@ -228,7 +228,7 @@ function setConversationHistoryOpen(isOpen) {
         history.classList.remove('is-open');
         conversationHistoryCloseTimer = window.setTimeout(() => {
             if (!history.classList.contains('is-open')) history.hidden = true;
-        }, 280);
+        }, 1000);
     }
     toggle?.setAttribute('aria-expanded', String(isOpen));
 }
@@ -321,9 +321,9 @@ function renderConversationHistory() {
         const selectButton = document.createElement('button');
         selectButton.type = 'button';
         selectButton.className = 'conversation-history-select';
-        selectButton.addEventListener('click', () => {
+        selectButton.addEventListener('click', async () => {
+            await openConversation(conversation.id);
             setConversationHistoryOpen(false);
-            void openConversation(conversation.id);
         });
 
         const preview = document.createElement('span');
@@ -367,10 +367,12 @@ async function openConversation(conversationId) {
     renderConversationHistory();
     showConversationHistoryError();
 
+    const chatMessages = document.getElementById('chat-messages');
+    chatMessages.innerHTML = '';
+
     try {
         const messages = await apiFetch(`/chat/conversations/${conversationId}/messages`);
-        const chatMessages = document.getElementById('chat-messages');
-        chatMessages.innerHTML = '';
+        if (currentConversationId !== conversationId) return;
         const dialogue = messages.filter(message =>
             (message.role === 'user' || message.role === 'assistant') && message.content
         );
