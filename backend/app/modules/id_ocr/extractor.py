@@ -143,16 +143,49 @@ def _preprocess(image: Image.Image) -> Image.Image:
     return ImageOps.autocontrast(ImageOps.grayscale(image))
 
 
+#: Tesseract's own per-word confidence is 0-100. Below this, the read is
+#: unreliable enough that the caller should ask for a clearer photo rather
+#: than silently trust (possibly wrong) autofilled data.
+LOW_CONFIDENCE_THRESHOLD = 60.0
+
+
+def _average_ocr_confidence(image: Image.Image) -> float:
+    """Tesseract reports a confidence (0-100) per detected word, and -1 for
+    boxes that aren't real text (whitespace/layout regions) - those are
+    excluded, not averaged in. No real text detected at all is scored 0,
+    not skipped - that itself means the photo didn't read."""
+    data = pytesseract.image_to_data(image, lang="ron", output_type=pytesseract.Output.DICT)
+    scores = [float(conf) for conf in data.get("conf", []) if float(conf) >= 0]
+    if not scores:
+        return 0.0
+    return sum(scores) / len(scores)
+
+
 def extract_id_fields(png_path: str) -> dict:
     """Reads the ID card at `png_path` and returns a best-effort PII dict:
 
         national_id, national_id_valid, last_name, first_name, address,
-        date_of_birth, gender, series_number, raw_text
+        date_of_birth, gender, series_number, ocr_confidence,
+        low_confidence, raw_text
 
     date_of_birth/gender are decoded from the CNP itself (reliable) rather
     than OCR'd separately, once a CNP is found - see
     app/modules/auth/validation.py, the same logic /auth/register uses.
+
+    low_confidence is true when either Tesseract's own average word
+    confidence is below LOW_CONFIDENCE_THRESHOLD, or no CNP was found at
+    all (the single most important field - a photo that fails to yield one
+    is unreliable regardless of what the confidence score says about the
+    rest of the card). Callers should surface this as "try a clearer
+    photo," not silently trust whatever partial data came back.
     """
     image = _preprocess(Image.open(Path(png_path)))
     raw_text = pytesseract.image_to_string(image, lang="ron")
-    return _parse_fields(raw_text)
+    fields = _parse_fields(raw_text)
+
+    confidence = _average_ocr_confidence(image)
+    fields["ocr_confidence"] = round(confidence, 1)
+    fields["low_confidence"] = (
+        confidence < LOW_CONFIDENCE_THRESHOLD or fields["national_id"] is None
+    )
+    return fields

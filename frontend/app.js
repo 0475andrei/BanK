@@ -465,6 +465,18 @@ let currentAccounts = [];
 
 const CURRENCY_ICONS = { RON: 'coins', EUR: 'euro', USD: 'dollar-sign' };
 
+/** A term deposit can receive money anytime but can't be the SOURCE of a
+ * transfer/payment until maturity_date - matches the backend's
+ * assert_not_locked_for_debit, kept here too so the UI never offers a
+ * choice that would just come back as a 409. */
+function isSpendable(acc) {
+    if (acc.status !== 'active') return false;
+    if (acc.product_type === 'term_deposit' && acc.maturity_date) {
+        return new Date(acc.maturity_date) <= new Date();
+    }
+    return true;
+}
+
 async function initDashboard() {
     const user = await requireSession();
     if (!user) return; // requireSession already redirected to login.html
@@ -481,6 +493,7 @@ async function initDashboard() {
     });
 
     wireNewAccountModal();
+    wireSavingsModal();
     wireTransferModal();
     wireNewCardModal();
     wireCardOrderModal();
@@ -488,6 +501,7 @@ async function initDashboard() {
     wireProfilePanel(user);
     wireNotificationsPanel();
 
+    await loadAccountProducts();
     await refreshDashboard();
 }
 
@@ -510,6 +524,7 @@ async function loadAccounts() {
 
     renderAccountsGrid();
     renderHeadlineBalance();
+    renderSavingsAccountsList();
     populateTransferAccountSelects();
     populatePaymentsAccountSelect();
 }
@@ -525,10 +540,11 @@ function renderAccountsGrid() {
             <div class="acc-icon"><i data-lucide="${CURRENCY_ICONS[acc.currency] || 'wallet'}"></i></div>
             <div class="acc-info">
                 <h3>${escapeHTML(acc.name)}</h3>
-                <p>${escapeHTML(acc.currency)}</p>
+                <p>${escapeHTML(acc.currency)}${acc.product_type !== 'checking' ? ` &middot; ${(acc.interest_rate_bps / 100).toFixed(1)}% p.a.` : ''}</p>
             </div>
             <div class="acc-balance">${formatMoney(acc.balance_minor, acc.currency)}</div>
             ${acc.status === 'closed' ? '<span class="acc-status">Închis</span>' : ''}
+            ${!isSpendable(acc) ? '<span class="acc-status locked">Blocat</span>' : ''}
         </div>
     `).join('');
     if (window.lucide) lucide.createIcons();
@@ -716,6 +732,172 @@ function wireNewAccountModal() {
     });
 }
 
+/* --- Savings / term-deposit accounts (Investiții & Bugetare) --- */
+
+let accountProducts = null;
+
+async function loadAccountProducts() {
+    try {
+        accountProducts = await apiFetch('/accounts/products');
+        const savingsLabel = document.getElementById('savings-rate-label');
+        const termLabel = document.getElementById('term-deposit-rate-label');
+        if (savingsLabel) {
+            savingsLabel.textContent = `${(accountProducts.savings_interest_rate_bps / 100).toFixed(1)}% p.a.`;
+        }
+        if (termLabel && accountProducts.term_deposit_options.length) {
+            const maxRate = Math.max(...accountProducts.term_deposit_options.map((o) => o.interest_rate_bps));
+            termLabel.textContent = `până la ${(maxRate / 100).toFixed(1)}% p.a.`;
+        }
+    } catch {
+        // The product picker just keeps its placeholder labels - not
+        // critical enough to show an error banner for.
+    }
+}
+
+function wireSavingsModal() {
+    const modal = document.getElementById('new-savings-modal');
+    const form = document.getElementById('new-savings-form');
+    const errorEl = document.getElementById('new-savings-error');
+    const titleEl = document.getElementById('new-savings-modal-title');
+    const termRow = document.getElementById('new-savings-term-row');
+    const termSelect = document.getElementById('new-savings-term');
+    const rateHint = document.getElementById('new-savings-rate-hint');
+    const currencySelect = document.getElementById('new-savings-currency');
+    const projectionRow = document.getElementById('new-savings-projection-row');
+    const projectionAmountInput = document.getElementById('new-savings-projection-amount');
+    const projectionBox = document.getElementById('new-savings-projection-box');
+    let productType = 'savings';
+
+    function updateRateHint() {
+        if (!accountProducts) {
+            rateHint.textContent = '';
+            return;
+        }
+        if (productType === 'savings') {
+            rateHint.textContent =
+                `Dobândă: ${(accountProducts.savings_interest_rate_bps / 100).toFixed(1)}% p.a., calculată lunar.`;
+        } else {
+            const months = Number(termSelect.value);
+            const option = accountProducts.term_deposit_options.find((o) => o.term_months === months);
+            rateHint.textContent = option
+                ? `Dobândă: ${(option.interest_rate_bps / 100).toFixed(1)}% p.a., plătită la final. Banii sunt blocați ${months} luni.`
+                : '';
+        }
+    }
+
+    // Purely an estimate shown while filling in the modal - the account
+    // itself always opens empty (or with the referral welcome balance);
+    // funding it is still a separate transfer afterwards, same as any
+    // other account.
+    function updateProjection() {
+        if (productType !== 'term_deposit' || !accountProducts) {
+            projectionBox.hidden = true;
+            return;
+        }
+        const principalMajor = parseFloat(projectionAmountInput.value);
+        const months = Number(termSelect.value);
+        const option = accountProducts.term_deposit_options.find((o) => o.term_months === months);
+        if (!option || !Number.isFinite(principalMajor) || principalMajor <= 0) {
+            projectionBox.hidden = true;
+            return;
+        }
+        const currency = currencySelect.value;
+        const principalMinor = Math.round(principalMajor * 100);
+        const interestMinor = Math.floor((principalMinor * option.interest_rate_bps * months) / (12 * 10_000));
+        const totalMinor = principalMinor + interestMinor;
+
+        projectionBox.hidden = false;
+        projectionBox.innerHTML = `
+            Depui ${formatMoney(principalMinor, currency)} acum, pe ${months} luni la ${(option.interest_rate_bps / 100).toFixed(1)}% p.a.
+            <div class="projection-total">${formatMoney(totalMinor, currency)}</div>
+            <div>la maturitate (din care ${formatMoney(interestMinor, currency)} dobândă)</div>
+        `;
+    }
+
+    function openModal(type) {
+        productType = type;
+        errorEl.hidden = true;
+        form.reset();
+        if (type === 'savings') {
+            titleEl.textContent = 'Cont de economii nou';
+            termRow.hidden = true;
+            projectionRow.hidden = true;
+            projectionBox.hidden = true;
+        } else {
+            titleEl.textContent = 'Cont cu dobândă fixă nou';
+            termRow.hidden = false;
+            projectionRow.hidden = false;
+            if (accountProducts) {
+                termSelect.innerHTML = accountProducts.term_deposit_options
+                    .map((o) => `<option value="${o.term_months}">${o.term_months} luni - ${(o.interest_rate_bps / 100).toFixed(1)}% p.a.</option>`)
+                    .join('');
+            }
+        }
+        updateRateHint();
+        updateProjection();
+        modal.hidden = false;
+    }
+
+    document.getElementById('open-savings-btn').addEventListener('click', () => openModal('savings'));
+    document.getElementById('open-term-deposit-btn').addEventListener('click', () => openModal('term_deposit'));
+    document.getElementById('close-new-savings-modal').addEventListener('click', () => { modal.hidden = true; });
+    document.getElementById('cancel-new-savings').addEventListener('click', () => { modal.hidden = true; });
+    termSelect.addEventListener('change', () => { updateRateHint(); updateProjection(); });
+    currencySelect.addEventListener('change', updateProjection);
+    projectionAmountInput.addEventListener('input', updateProjection);
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorEl.hidden = true;
+        try {
+            await apiFetch('/accounts', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: document.getElementById('new-savings-name').value,
+                    currency: document.getElementById('new-savings-currency').value,
+                    product_type: productType,
+                    term_months: productType === 'term_deposit' ? Number(termSelect.value) : null,
+                }),
+            });
+            modal.hidden = true;
+            await refreshDashboard();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        }
+    });
+}
+
+function renderSavingsAccountsList() {
+    const list = document.getElementById('savings-accounts-list');
+    if (!list) return;
+    const savingsAccounts = currentAccounts.filter((a) => a.product_type !== 'checking');
+    if (savingsAccounts.length === 0) {
+        list.innerHTML = '<div class="empty-state">Niciun cont de economii încă.</div>';
+        return;
+    }
+    list.innerHTML = savingsAccounts.map((acc) => {
+        const rate = `${(acc.interest_rate_bps / 100).toFixed(1)}% p.a.`;
+        const locked = !isSpendable(acc);
+        const maturityLabel = acc.product_type === 'term_deposit'
+            ? (locked
+                ? `Blocat până la ${new Date(acc.maturity_date).toLocaleDateString('ro-RO')}`
+                : `Maturitate atinsă (${new Date(acc.maturity_date).toLocaleDateString('ro-RO')}) - poți retrage`)
+            : 'Flexibil - retragi oricând';
+        return `
+            <div class="pot-item savings-account-item">
+                <div class="pot-header">
+                    <span class="pot-icon"><i data-lucide="${acc.product_type === 'term_deposit' ? 'lock' : 'piggy-bank'}"></i></span>
+                    <div class="pot-name">${escapeHTML(acc.name)}</div>
+                    <div class="pot-amounts">${formatMoney(acc.balance_minor, acc.currency)} &middot; ${rate}</div>
+                </div>
+                <div class="savings-account-maturity ${locked ? 'locked' : ''}">${maturityLabel}</div>
+            </div>
+        `;
+    }).join('');
+    if (window.lucide) lucide.createIcons();
+}
+
 /* --- Transfer modal --- */
 
 function wireTransferModal() {
@@ -771,8 +953,8 @@ function wireTransferModal() {
 function populateTransferAccountSelects() {
     const fromSelect = document.getElementById('transfer-from');
     if (!fromSelect) return;
-    const active = currentAccounts.filter(a => a.status === 'active');
-    fromSelect.innerHTML = active.map(acc =>
+    const spendable = currentAccounts.filter(isSpendable);
+    fromSelect.innerHTML = spendable.map(acc =>
         `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`
     ).join('');
     populateTransferToOptions();
@@ -975,12 +1157,12 @@ function wireCardOrderModal() {
 function populatePaymentsAccountSelect() {
     const select = document.getElementById('payments-account');
     if (!select) return;
-    const active = currentAccounts.filter(a => a.status === 'active');
+    const spendable = currentAccounts.filter(isSpendable);
     const previousValue = select.value;
-    select.innerHTML = active.length
-        ? active.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
+    select.innerHTML = spendable.length
+        ? spendable.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
         : '<option value="" disabled selected>Creează mai întâi un cont</option>';
-    if (active.some(a => a.id === previousValue)) select.value = previousValue;
+    if (spendable.some(a => a.id === previousValue)) select.value = previousValue;
     updateMyIbanDisplay();
 }
 

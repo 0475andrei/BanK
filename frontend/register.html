@@ -55,7 +55,10 @@
                     <input class="field-input" type="email" id="email" name="email" required autocomplete="email">
 
                     <label class="field-label" for="password">Password</label>
-                    <input class="field-input" type="password" id="password" name="password" minlength="8" required autocomplete="new-password">
+                    <div class="password-field-wrapper">
+                        <input class="field-input" type="password" id="password" name="password" minlength="8" required autocomplete="new-password">
+                        <button type="button" class="password-toggle-btn" data-target="password" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
+                    </div>
                     <p class="field-hint">At least 8 characters</p>
 
                     <label class="field-label" for="national_id">National ID (CNP)</label>
@@ -257,7 +260,12 @@
                         filledCount += 1;
                     }
                 }
-                if (filledCount > 0) {
+                if (body.low_confidence) {
+                    statusEl.textContent = filledCount > 0
+                        ? `Poza pare neclară - am completat doar ${filledCount}/${autofillFields.length} câmpuri și e posibil să fie greșite. Verifică-le cu atenție sau încarcă o poză mai clară.`
+                        : "Poza pare neclară și nu am putut citi datele. Încearcă o poză mai clară a buletinului sau completează manual.";
+                    statusEl.className = "field-hint ocr-warning";
+                } else if (filledCount > 0) {
                     statusEl.textContent =
                         `Date completate din buletin (${filledCount}/${autofillFields.length} câmpuri) - verifică și corectează dacă e nevoie.`;
                     statusEl.className = "field-hint ocr-success";
@@ -356,7 +364,6 @@
                         </div>
                         <div class="hitl-actions">
                             <button class="btn btn-primary" id="comodul-confirm-btn">Confirmă și creează contul</button>
-                            <button class="btn btn-secondary" id="comodul-edit-btn">Mai modific ceva</button>
                         </div>
                     </div>
                 `,
@@ -375,10 +382,6 @@
                     }
                 }
             });
-            wrapper.querySelector("#comodul-edit-btn").addEventListener("click", () => {
-                wrapper.querySelector(".human-in-the-loop-card").remove();
-                appendComodulBubble("ai", "Sigur - spune-mi ce vrei să schimb.");
-            });
         }
 
         /** Shared by both places Comodul can discover an existing account:
@@ -395,17 +398,10 @@
                     <p>${escapeHTML(reason)} Dacă e contul tău, te pot ajuta să-ți resetezi parola ca să te poți autentifica.</p>
                 </div>
                 <div class="hitl-actions">
+                    <a class="btn btn-secondary" href="login.html">Înapoi la login</a>
                     <a class="btn btn-primary" href="forgot-password.html?email=${encodeURIComponent(email)}">Resetează parola</a>
-                    <button type="button" class="btn btn-secondary conflict-retry-btn">Corectez datele</button>
                 </div>
             `;
-        }
-
-        function wireConflictRetry(container) {
-            container.querySelector(".conflict-retry-btn").addEventListener("click", () => {
-                container.closest(".message").remove();
-                appendComodulBubble("ai", "Sigur - spune-mi ce vrei să corectez.");
-            });
         }
 
         /** Late path: registration was actually attempted and rejected. */
@@ -414,7 +410,6 @@
                 ? "Există deja un cont cu acest email."
                 : "Acest CNP este deja asociat unui cont existent.";
             card.innerHTML = accountConflictCardHTML(reason, fields.email);
-            wireConflictRetry(card);
         }
 
         /** Early path: check_existing_account caught it before the rest of
@@ -424,10 +419,9 @@
             const reason = conflict.matched_field === "email"
                 ? "Există deja un cont cu acest email."
                 : "Acest CNP este deja asociat unui cont existent.";
-            const wrapper = appendComodulBubble("ai", "", {
+            appendComodulBubble("ai", "", {
                 html: `<div class="human-in-the-loop-card">${accountConflictCardHTML(reason, conflict.email)}</div>`,
             });
-            wireConflictRetry(wrapper);
         }
 
         function escapeHTML(str) {
@@ -512,9 +506,14 @@
                 extracted.address && `Adresă: ${extracted.address}`,
             ].filter(Boolean);
 
-            const message = readFields.length
+            let message = readFields.length
                 ? `Am încărcat o poză a buletinului. Datele citite automat sunt: ${readFields.join(", ")}.`
                 : "Am încărcat o poză a buletinului, dar nu s-a putut citi nimic din ea.";
+            if (extracted.low_confidence) {
+                message += readFields.length
+                    ? " Poza pare neclară, deci verifică-mi te rog dacă datele astea sunt corecte sau spune-mi dacă vrei să încarc o poză mai clară."
+                    : " Poza pare neclară - poate ar trebui să încarc alta, mai clară.";
+            }
 
             await sendComodulMessage(message);
         });

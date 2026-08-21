@@ -31,7 +31,10 @@
 
                 <form id="device-login-form">
                     <label class="field-label" for="device-password">Password</label>
-                    <input class="field-input" type="password" id="device-password" required autocomplete="current-password">
+                    <div class="password-field-wrapper">
+                        <input class="field-input" type="password" id="device-password" required autocomplete="current-password">
+                        <button type="button" class="password-toggle-btn" data-target="device-password" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
+                    </div>
 
                     <button class="btn btn-primary auth-submit" type="submit">Continuă</button>
                 </form>
@@ -52,7 +55,10 @@
                     <input class="field-input" type="email" id="email" name="email" required autocomplete="email">
 
                     <label class="field-label" for="password">Password</label>
-                    <input class="field-input" type="password" id="password" name="password" required autocomplete="current-password">
+                    <div class="password-field-wrapper">
+                        <input class="field-input" type="password" id="password" name="password" required autocomplete="current-password">
+                        <button type="button" class="password-toggle-btn" data-target="password" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
+                    </div>
 
                     <button class="btn btn-primary auth-submit" type="submit">Log in</button>
                 </form>
@@ -63,8 +69,11 @@
         </div>
     </div>
 
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="api.js"></script>
     <script>
+        if (window.lucide) lucide.createIcons();
+
         const deviceLoginPanel = document.getElementById('device-login');
         const normalLoginPanel = document.getElementById('normal-login');
 

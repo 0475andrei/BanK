@@ -140,6 +140,12 @@ class DeviceNotTrustedError(AppError):
     default_message = "This device is not enrolled."
 
 
+class TermDepositLockedError(AppError):
+    status_code = 409
+    error_code = "term_deposit_locked"
+    default_message = "This account is locked until its maturity date."
+
+
 class AIServiceUnavailableError(AppError):
     """The AI layer could not be constructed - typically missing credentials.
 
