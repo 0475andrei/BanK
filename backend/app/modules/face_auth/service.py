@@ -96,15 +96,19 @@ async def remove_face(supabase: AsyncClient, user: UserRead) -> None:
     )
 
 
-async def has_face_enrolled(supabase: AsyncClient, user: UserRead) -> bool:
+async def has_face_enrolled_by_id(supabase: AsyncClient, user_id: str) -> bool:
     resp = (
         await supabase.table("face_credentials")
         .select("id")
-        .eq("user_id", str(user.id))
+        .eq("user_id", user_id)
         .maybe_single()
         .execute()
     )
     return resp is not None and resp.data is not None
+
+
+async def has_face_enrolled(supabase: AsyncClient, user: UserRead) -> bool:
+    return await has_face_enrolled_by_id(supabase, str(user.id))
 
 
 async def _count_recent_failed_attempts(supabase: AsyncClient, email: str) -> int:

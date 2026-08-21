@@ -213,32 +213,25 @@
                         </div>
 
                         <div class="pots-card">
-                            <h3>Bugetare (Pots)</h3>
-                            <div class="pots-list">
-                                <div class="pot-item">
-                                    <div class="pot-header">
-                                        <span class="pot-icon"><i data-lucide="plane"></i></span>
-                                        <div class="pot-name">Vacanță vară</div>
-                                        <div class="pot-amounts">1,200 / 3,000 RON</div>
-                                    </div>
-                                    <div class="progress-bg"><div class="progress-fill teal" style="width: 40%"></div></div>
-                                </div>
-                                <div class="pot-item">
-                                    <div class="pot-header">
-                                        <span class="pot-icon"><i data-lucide="car"></i></span>
-                                        <div class="pot-name">Avans Mașină</div>
-                                        <div class="pot-amounts">5,000 / 20,000 EUR</div>
-                                    </div>
-                                    <div class="progress-bg"><div class="progress-fill blue" style="width: 25%"></div></div>
-                                </div>
-                                <div class="pot-item">
-                                    <div class="pot-header">
-                                        <span class="pot-icon"><i data-lucide="shield-alert"></i></span>
-                                        <div class="pot-name">Fond de Urgență</div>
-                                        <div class="pot-amounts">10,000 / 10,000 RON</div>
-                                    </div>
-                                    <div class="progress-bg"><div class="progress-fill green" style="width: 100%"></div></div>
-                                </div>
+                            <h3>Deschide un cont nou</h3>
+                            <div class="savings-product-picker">
+                                <button type="button" class="savings-product-btn" id="open-savings-btn">
+                                    <i data-lucide="piggy-bank" class="icon"></i>
+                                    <div class="savings-product-btn-title">Cont de economii</div>
+                                    <div class="savings-product-btn-rate" id="savings-rate-label">…</div>
+                                    <div class="savings-product-btn-desc">Flexibil - retragi oricând</div>
+                                </button>
+                                <button type="button" class="savings-product-btn" id="open-term-deposit-btn">
+                                    <i data-lucide="lock" class="icon"></i>
+                                    <div class="savings-product-btn-title">Cont cu dobândă fixă</div>
+                                    <div class="savings-product-btn-rate" id="term-deposit-rate-label">…</div>
+                                    <div class="savings-product-btn-desc">Alegi perioada - rată mai mare</div>
+                                </button>
+                            </div>
+
+                            <h3 style="margin-top: 30px;">Conturile mele de economii</h3>
+                            <div id="savings-accounts-list" class="pots-list">
+                                <div class="loading-state">Se încarcă...</div>
                             </div>
                         </div>
                     </div>
@@ -339,13 +332,22 @@
                         <div class="auth-success" id="change-password-success" hidden></div>
                         <form id="change-password-form">
                             <label class="field-label" for="current-password">Parola curentă</label>
-                            <input class="field-input" type="password" id="current-password" required autocomplete="current-password">
+                            <div class="password-field-wrapper">
+                                <input class="field-input" type="password" id="current-password" required autocomplete="current-password">
+                                <button type="button" class="password-toggle-btn" data-target="current-password" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
+                            </div>
 
                             <label class="field-label" for="new-password-profile">Parolă nouă</label>
-                            <input class="field-input" type="password" id="new-password-profile" minlength="8" required autocomplete="new-password">
+                            <div class="password-field-wrapper">
+                                <input class="field-input" type="password" id="new-password-profile" minlength="8" required autocomplete="new-password">
+                                <button type="button" class="password-toggle-btn" data-target="new-password-profile" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
+                            </div>
 
                             <label class="field-label" for="new-password-profile-confirm">Confirmă parola nouă</label>
-                            <input class="field-input" type="password" id="new-password-profile-confirm" minlength="8" required autocomplete="new-password">
+                            <div class="password-field-wrapper">
+                                <input class="field-input" type="password" id="new-password-profile-confirm" minlength="8" required autocomplete="new-password">
+                                <button type="button" class="password-toggle-btn" data-target="new-password-profile-confirm" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
+                            </div>
 
                             <button class="btn btn-primary" type="submit" style="margin-top: 16px;">Schimbă parola</button>
                         </form>
@@ -402,6 +404,46 @@
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" id="cancel-new-account">Anulează</button>
                     <button type="submit" class="btn btn-primary">Creează</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- New savings / term-deposit account modal -->
+    <div class="modal-overlay" id="new-savings-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="new-savings-modal-title">Cont de economii nou</h3>
+                <button class="modal-close" id="close-new-savings-modal"><i data-lucide="x"></i></button>
+            </div>
+            <div class="auth-error" id="new-savings-error" hidden></div>
+            <form id="new-savings-form">
+                <label class="field-label" for="new-savings-name">Nume cont</label>
+                <input class="field-input" type="text" id="new-savings-name" required placeholder="ex. Economii vacanță">
+
+                <label class="field-label" for="new-savings-currency">Monedă</label>
+                <select class="field-input" id="new-savings-currency">
+                    <option value="RON">RON</option>
+                    <option value="EUR">EUR</option>
+                    <option value="USD">USD</option>
+                </select>
+
+                <div id="new-savings-term-row" hidden>
+                    <label class="field-label" for="new-savings-term">Perioadă</label>
+                    <select class="field-input" id="new-savings-term"></select>
+                </div>
+
+                <div id="new-savings-projection-row" hidden>
+                    <label class="field-label" for="new-savings-projection-amount">Sumă estimativă de depus <span class="field-optional">(doar pentru estimare)</span></label>
+                    <input class="field-input" type="number" id="new-savings-projection-amount" min="0" step="0.01" placeholder="ex. 5000">
+                </div>
+
+                <p class="field-hint" id="new-savings-rate-hint"></p>
+                <div class="savings-projection-box" id="new-savings-projection-box" hidden></div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-new-savings">Anulează</button>
+                    <button type="submit" class="btn btn-primary">Deschide contul</button>
                 </div>
             </form>
         </div>

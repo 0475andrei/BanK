@@ -107,6 +107,7 @@ async def create_payment(
         raise ValidationError("Invalid IBAN.")
 
     from_account = await accounts_service.get_account(supabase, user, payload.from_account_id)
+    accounts_service.assert_not_locked_for_debit(from_account)
     to_account = await _get_account_by_iban(supabase, to_iban)
 
     if to_account["id"] == str(from_account["id"]):
@@ -136,7 +137,8 @@ async def create_payment(
                 "p_to_iban": to_iban,
                 "p_amount_minor": payload.amount_minor,
                 "p_currency": currency,
-                "p_description": payload.description or f"Plata catre {to_iban}",
+                "p_description": payload.description
+                or f"Plată către {payload.beneficiary_name}",
                 "p_idempotency_key": idempotency_key,
                 "p_actor_user_id": str(user.id),
             },

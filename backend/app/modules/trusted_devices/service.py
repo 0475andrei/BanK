@@ -30,6 +30,7 @@ from app.core.security import (
 )
 from app.core.teams import send_teams_message
 from app.modules.auth import service as auth_service
+from app.modules.face_auth import service as face_auth_service
 from app.modules.users.schemas import UserRead
 
 ENROLLMENT_CODE_TTL_MINUTES = 10
@@ -136,12 +137,17 @@ async def verify_and_enroll_device(
 async def check_trusted_device(supabase: AsyncClient, raw_token: str | None) -> dict | None:
     """Read-only probe for the login page: is this browser already
     enrolled, and if so, whose account? Never touches last_used_at - only
-    an actual login attempt does that."""
+    an actual login attempt does that.
+
+    Also reports face_enrolled so the login page can try Face ID first on a
+    recognized browser (the account is already pinned down by the device
+    cookie, so there's no enumeration concern in revealing this, unlike the
+    unauthenticated normal-login form)."""
     if not raw_token:
         return None
     resp = (
         await supabase.table("trusted_devices")
-        .select("user:users(email)")
+        .select("user:users(id, email)")
         .eq("device_token_hash", hash_session_token(raw_token))
         .maybe_single()
         .execute()
@@ -149,7 +155,9 @@ async def check_trusted_device(supabase: AsyncClient, raw_token: str | None) -> 
     row = resp.data if resp is not None else None
     if row is None or row.get("user") is None:
         return None
-    return {"email": row["user"]["email"]}
+    user_id = row["user"]["id"]
+    face_enrolled = await face_auth_service.has_face_enrolled_by_id(supabase, user_id)
+    return {"email": row["user"]["email"], "face_enrolled": face_enrolled}
 
 
 async def login_with_trusted_device(

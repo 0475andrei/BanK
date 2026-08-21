@@ -74,7 +74,9 @@ async def check_device(
     result = await service.check_trusted_device(supabase, raw_token)
     if result is None:
         return DeviceCheckResponse(trusted=False)
-    return DeviceCheckResponse(trusted=True, email=result["email"])
+    return DeviceCheckResponse(
+        trusted=True, email=result["email"], face_enrolled=result["face_enrolled"]
+    )
 
 
 @router.post("/login", response_model=UserRead)

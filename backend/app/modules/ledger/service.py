@@ -90,6 +90,40 @@ async def grant_opening_balance(
     return resp.data
 
 
+async def grant_interest(
+    supabase: AsyncClient,
+    account_id: uuid.UUID,
+    amount_minor: int,
+    currency: str,
+    idempotency_key: str,
+    *,
+    actor_user_id: uuid.UUID | None = None,
+) -> dict:
+    """The other deliberate exception alongside grant_opening_balance: a
+    savings/term-deposit account's interest doesn't come from another
+    account either. Same shape, own RPC (backend/supabase/migrations/
+    0012_...sql) so the ledger/audit trail can tell interest credits apart
+    from the opening-balance grant - see accounts/service.py for when this
+    gets called (lazily, on every account read, not on a schedule)."""
+    params = {
+        "p_account_id": str(account_id),
+        "p_amount_minor": amount_minor,
+        "p_currency": currency.upper(),
+        "p_idempotency_key": idempotency_key,
+        "p_actor_user_id": str(actor_user_id) if actor_user_id else None,
+    }
+
+    try:
+        resp = await supabase.rpc("grant_interest", params).execute()
+    except APIError as exc:
+        mapped = map_postgrest_error(exc)
+        if mapped is not None:
+            raise mapped from exc
+        raise
+
+    return resp.data
+
+
 async def post_transaction(
     supabase: AsyncClient,
     legs: Sequence[LedgerLeg],
