@@ -23,6 +23,7 @@ from app.db.supabase_client import map_postgrest_error
 from app.modules.accounts import service as accounts_service
 from app.modules.auth.validation import validate_iban
 from app.modules.beneficiaries import service as beneficiaries_service
+from app.modules.face_auth import service as face_auth_service
 from app.modules.payments.schemas import PaymentCreate
 from app.modules.users.schemas import UserRead
 
@@ -63,6 +64,7 @@ async def create_payment(
     user: UserRead,
     payload: PaymentCreate,
     idempotency_key: str,
+    face_token: str | None = None,
 ) -> dict:
     existing = await _find_by_idempotency_key(supabase, idempotency_key)
     if existing is not None:
@@ -86,6 +88,8 @@ async def create_payment(
             "Payments can't cross currencies - sender and recipient accounts must "
             "share one."
         )
+
+    await face_auth_service.enforce_face_confirmation(supabase, user, payload.amount_minor, face_token)
 
     try:
         resp = await supabase.rpc(
