@@ -128,6 +128,23 @@ class InvalidResetCodeError(AppError):
     default_message = "Invalid or expired reset code."
 
 
+class FaceConfirmationRequiredError(AppError):
+    """This amount needs step-up face auth first - see
+    app/modules/face_auth::enforce_face_confirmation. 428 Precondition
+    Required is the semantically correct status for "do X first, then
+    retry", distinct from a plain validation failure."""
+
+    status_code = 428
+    error_code = "face_confirmation_required"
+    default_message = "This amount requires face confirmation before it can proceed."
+
+
+class InvalidFaceConfirmationError(AppError):
+    status_code = 400
+    error_code = "invalid_face_confirmation"
+    default_message = "Invalid or expired face confirmation."
+
+
 class InvalidEnrollmentCodeError(AppError):
     status_code = 400
     error_code = "invalid_enrollment_code"

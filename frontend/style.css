@@ -457,6 +457,26 @@ body {
 
 .standalone-card.centered { text-align: center; }
 
+/* --- Face login camera (enrollment view + login.html) --- */
+.face-camera-wrap {
+    width: 100%;
+    max-width: 360px;
+    aspect-ratio: 4 / 3;
+    margin: 0 auto;
+    background-color: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    overflow: hidden;
+}
+
+.face-camera-wrap video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transform: scaleX(-1); /* mirror, like a real camera preview */
+}
+
 .notification-btn {
     background: transparent;
     border: none;

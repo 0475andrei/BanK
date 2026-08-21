@@ -929,24 +929,124 @@ function wireTransferModal() {
             return;
         }
 
+        const idempotencyKey = crypto.randomUUID();
+        const body = JSON.stringify({
+            from_account_id: fromSelect.value,
+            to_account_id: document.getElementById('transfer-to').value,
+            amount_minor: Math.round(amountMajor * 100),
+            currency: fromAccount.currency,
+            description: document.getElementById('transfer-description').value || undefined,
+        });
+
         try {
-            await apiFetch('/transfers', {
-                method: 'POST',
-                headers: { 'Idempotency-Key': crypto.randomUUID() },
-                body: JSON.stringify({
-                    from_account_id: fromSelect.value,
-                    to_account_id: document.getElementById('transfer-to').value,
-                    amount_minor: Math.round(amountMajor * 100),
-                    currency: fromAccount.currency,
-                    description: document.getElementById('transfer-description').value || undefined,
-                }),
-            });
+            const result = await submitWithFaceConfirmation('/transfers', idempotencyKey, body);
+            if (result === CONFIRMATION_CANCELLED) return; // user closed the camera modal - stay put, silently
             modal.hidden = true;
             await refreshDashboard();
         } catch (err) {
             errorEl.textContent = err.message;
             errorEl.hidden = false;
         }
+    });
+}
+
+// Sentinel returned by submitWithFaceConfirmation when the user cancels the
+// face-confirm modal - distinguishes "cancelled, do nothing" from a real
+// response, without resorting to throwing a non-Error value.
+const CONFIRMATION_CANCELLED = Symbol('confirmation-cancelled');
+
+/** Shared by the transfer and payment forms: submits a money-moving POST,
+ * and if the backend rejects it with 428 (amount over the face-confirmation
+ * threshold - see backend/app/modules/face_auth), opens the camera modal,
+ * gets a confirmation token, and retries once with it attached. Reuses the
+ * same Idempotency-Key on the retry - it's the same request, just proven. */
+async function submitWithFaceConfirmation(path, idempotencyKey, body) {
+    try {
+        return await apiFetch(path, {
+            method: 'POST',
+            headers: { 'Idempotency-Key': idempotencyKey },
+            body,
+        });
+    } catch (err) {
+        if (err.status !== 428) throw err;
+
+        const token = await requestFaceConfirmationToken();
+        if (!token) return CONFIRMATION_CANCELLED;
+
+        return await apiFetch(path, {
+            method: 'POST',
+            headers: { 'Idempotency-Key': idempotencyKey, 'X-Face-Confirmation': token },
+            body,
+        });
+    }
+}
+
+/** Opens the face-confirm modal, captures a photo, exchanges it for a
+ * short-lived confirmation token via POST /auth/face/confirm. Resolves with
+ * the token, or null if the user cancels. Never rejects - camera/API errors
+ * show inline in the modal and let the user retry or cancel. */
+function requestFaceConfirmationToken() {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('face-confirm-modal');
+        const video = document.getElementById('face-confirm-video');
+        const canvas = document.getElementById('face-confirm-canvas');
+        const errorEl = document.getElementById('face-confirm-error');
+        const captureBtn = document.getElementById('capture-face-confirm');
+        const cancelBtn = document.getElementById('cancel-face-confirm');
+        const closeBtn = document.getElementById('close-face-confirm-modal');
+
+        let stream = null;
+        errorEl.hidden = true;
+        modal.hidden = false;
+
+        function cleanup(result) {
+            if (stream) stream.getTracks().forEach(track => track.stop());
+            stream = null;
+            video.srcObject = null;
+            modal.hidden = true;
+            captureBtn.onclick = null;
+            cancelBtn.onclick = null;
+            closeBtn.onclick = null;
+            resolve(result);
+        }
+
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then((s) => { stream = s; video.srcObject = s; })
+            .catch(() => {
+                errorEl.textContent = 'Nu s-a putut accesa camera. Verifică permisiunile browserului.';
+                errorEl.hidden = false;
+            });
+
+        captureBtn.onclick = () => {
+            errorEl.hidden = true;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+
+            canvas.toBlob(async (blob) => {
+                const formData = new FormData();
+                formData.append('file', blob, 'confirm.jpg');
+                try {
+                    const res = await fetch(`${API_BASE_URL}/auth/face/confirm`, {
+                        method: 'POST',
+                        credentials: 'include',
+                        body: formData,
+                    });
+                    if (!res.ok) {
+                        const errBody = await res.json().catch(() => ({}));
+                        throw new Error(errBody?.error?.message || `Request failed (${res.status})`);
+                    }
+                    const { token } = await res.json();
+                    cleanup(token);
+                } catch (err) {
+                    errorEl.textContent = err.message;
+                    errorEl.hidden = false;
+                }
+            }, 'image/jpeg', 0.92);
+        };
+
+        cancelBtn.onclick = () => cleanup(null);
+        closeBtn.onclick = () => cleanup(null);
     });
 }
 
@@ -1265,18 +1365,18 @@ function wirePaymentsForm() {
         const amountMinor = Math.round(parseFloat(amountInput) * 100);
         const iban = document.getElementById('payments-iban').value.replace(/\s+/g, '').toUpperCase();
 
+        const idempotencyKey = crypto.randomUUID();
+        const body = JSON.stringify({
+            from_account_id: accountSelect.value,
+            to_iban: iban,
+            beneficiary_name: document.getElementById('payments-beneficiary').value,
+            amount_minor: amountMinor,
+            description: document.getElementById('payments-description').value || undefined,
+        });
+
         try {
-            await apiFetch('/payments', {
-                method: 'POST',
-                headers: { 'Idempotency-Key': crypto.randomUUID() },
-                body: JSON.stringify({
-                    from_account_id: accountSelect.value,
-                    to_iban: iban,
-                    beneficiary_name: document.getElementById('payments-beneficiary').value,
-                    amount_minor: amountMinor,
-                    description: document.getElementById('payments-description').value || undefined,
-                }),
-            });
+            const result = await submitWithFaceConfirmation('/payments', idempotencyKey, body);
+            if (result === CONFIRMATION_CANCELLED) return; // user closed the camera modal - stay put, silently
             successEl.textContent = 'Plata a fost trimisă cu succes!';
             successEl.hidden = false;
             form.reset();
@@ -1375,12 +1475,14 @@ function wireProfilePanel(user) {
             document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
             document.getElementById('view-dashboard').classList.add('active');
             document.querySelector('.nav-item[data-view="dashboard"]').classList.add('active');
+            stopFaceCamera(); // no-op if the camera was never started
             refreshDashboard();
         });
     });
 
     wireReferralCode();
     wireChangePasswordForm();
+    wireFaceLoginPanel();
 }
 
 /** Switches to one of the profile menu's own views - not a sidebar nav item,
@@ -1392,6 +1494,105 @@ function goToProfileView(target) {
     document.getElementById(`view-${target}`).classList.add('active');
 
     if (target === 'referral') loadReferralCode();
+    if (target === 'face-login') loadFaceStatus();
+}
+
+/* --- Face login enrollment (profile menu section) ---
+ * DIY, camera-based - see backend/app/modules/face_auth for the caveat that
+ * this is demo-grade biometric auth, not a real security boundary. */
+
+let faceCameraStream = null;
+
+function stopFaceCamera() {
+    if (faceCameraStream) {
+        faceCameraStream.getTracks().forEach(track => track.stop());
+        faceCameraStream = null;
+    }
+    const video = document.getElementById('face-video');
+    if (video) video.srcObject = null;
+    document.getElementById('face-start-camera-btn').hidden = false;
+    document.getElementById('face-capture-btn').hidden = true;
+}
+
+async function loadFaceStatus() {
+    const statusText = document.getElementById('face-status-text');
+    const removeBtn = document.getElementById('face-remove-btn');
+    try {
+        const { enrolled } = await apiFetch('/auth/face/status');
+        statusText.textContent = enrolled
+            ? 'Face Login e activat pe contul tău.'
+            : 'Face Login nu e activat încă. Pornește camera și fă o poză ca să-l activezi.';
+        removeBtn.hidden = !enrolled;
+    } catch (err) {
+        statusText.textContent = `Nu s-a putut verifica starea: ${err.message}`;
+    }
+}
+
+function wireFaceLoginPanel() {
+    const video = document.getElementById('face-video');
+    const canvas = document.getElementById('face-canvas');
+    const startBtn = document.getElementById('face-start-camera-btn');
+    const captureBtn = document.getElementById('face-capture-btn');
+    const removeBtn = document.getElementById('face-remove-btn');
+    const errorEl = document.getElementById('face-enroll-error');
+    const successEl = document.getElementById('face-enroll-success');
+
+    startBtn.addEventListener('click', async () => {
+        errorEl.hidden = true;
+        successEl.hidden = true;
+        try {
+            faceCameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = faceCameraStream;
+            startBtn.hidden = true;
+            captureBtn.hidden = false;
+        } catch {
+            errorEl.textContent = 'Nu s-a putut accesa camera. Verifică permisiunile browserului.';
+            errorEl.hidden = false;
+        }
+    });
+
+    captureBtn.addEventListener('click', () => {
+        errorEl.hidden = true;
+        successEl.hidden = true;
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+
+        canvas.toBlob(async (blob) => {
+            const formData = new FormData();
+            formData.append('file', blob, 'face.jpg');
+            try {
+                await fetch(`${API_BASE_URL}/auth/face/enroll`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    body: formData,
+                }).then(async (res) => {
+                    if (!res.ok) {
+                        const body = await res.json().catch(() => ({}));
+                        throw new Error(body?.error?.message || `Request failed (${res.status})`);
+                    }
+                });
+                successEl.textContent = 'Face Login activat cu succes!';
+                successEl.hidden = false;
+                stopFaceCamera();
+                await loadFaceStatus();
+            } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.hidden = false;
+            }
+        }, 'image/jpeg', 0.92);
+    });
+
+    removeBtn.addEventListener('click', async () => {
+        try {
+            await apiFetch('/auth/face/enroll', { method: 'DELETE' });
+            await loadFaceStatus();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        }
+    });
 }
 
 /* --- Notifications dropdown (bell icon) --- */

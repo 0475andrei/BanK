@@ -24,6 +24,7 @@ from app.core.exceptions import (
 )
 from app.db.supabase_client import map_postgrest_error
 from app.modules.accounts import service as accounts_service
+from app.modules.face_auth import service as face_auth_service
 from app.modules.transfers.schemas import TransferCreate
 from app.modules.users.schemas import UserRead
 
@@ -56,6 +57,7 @@ async def create_transfer(
     user: UserRead,
     payload: TransferCreate,
     idempotency_key: str,
+    face_token: str | None = None,
 ) -> dict:
     existing = await _find_by_idempotency_key(supabase, idempotency_key)
     if existing is not None:
@@ -73,6 +75,8 @@ async def create_transfer(
     currency = payload.currency.upper()
     if from_account["currency"] != currency or to_account["currency"] != currency:
         raise CurrencyMismatchError("Transfer currency must match both accounts' currency.")
+
+    await face_auth_service.enforce_face_confirmation(supabase, user, payload.amount_minor, face_token)
 
     try:
         resp = await supabase.rpc(

@@ -27,6 +27,7 @@ from app.ai.tools.insights import (
     DetectRecurringPaymentsTool,
     GetTransactionsInRangeTool,
 )
+from app.ai.tools.planning import ProjectBalanceTool, SavingsGoalTool, SimulateScenarioTool
 from app.ai.tools.registry import ToolRegistry
 from tests.ai.conftest import OWNED_ACCOUNT_IDS, STUB_BALANCE_MINOR, STUB_CURRENCY
 
@@ -265,3 +266,46 @@ def test_no_write_tools_are_registered_for_insights(supabase):
     from app.ai.service import build_insights_tools
 
     assert all(tool.read_only for tool in build_insights_tools(supabase))
+
+
+# ---------------------------------------------------------------------------
+# The planning tools (Step 10's project_balance, simulate_scenario, and
+# savings_goal), as the model is shown them.
+# ---------------------------------------------------------------------------
+
+#: Every tool the planning agent exposes, in the order build_planning_tools
+#: registers them.
+ALL_PLANNING_TOOL_CLASSES = (
+    ProjectBalanceTool,
+    SimulateScenarioTool,
+    SavingsGoalTool,
+)
+
+
+def test_all_planning_tools_are_registered(supabase):
+    from app.ai.service import build_planning_tools
+
+    assert build_planning_tools(supabase).names() == [
+        "project_balance",
+        "simulate_scenario",
+        "savings_goal",
+    ]
+
+
+def test_every_planning_tool_advertises_a_usable_spec(supabase):
+    """Same structural guard as the banking/insights tools: a named function
+    with a described JSON-Schema parameter object, for every planning tool."""
+    registry = ToolRegistry([cls(supabase) for cls in ALL_PLANNING_TOOL_CLASSES])
+
+    for spec in registry.list_specs():
+        assert spec["type"] == "function"
+        assert spec["function"]["name"]
+        assert spec["function"]["description"]
+        assert spec["function"]["parameters"]["type"] == "object"
+
+
+def test_no_write_tools_are_registered_for_planning(supabase):
+    """Guardrail: the planning agent proposes, it doesn't execute."""
+    from app.ai.service import build_planning_tools
+
+    assert all(tool.read_only for tool in build_planning_tools(supabase))
