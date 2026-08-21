@@ -45,12 +45,12 @@
                     <span>Plăți</span>
                 </button>
             </nav>
-            <section class="conversation-history" id="conversation-history" hidden aria-labelledby="conversation-history-title">
+            <section class="conversation-history sidebar-conversation-history" id="conversation-history-sidebar" hidden aria-hidden="true">
                 <div class="conversation-history-header">
                     <h2 id="conversation-history-title">Conversații recente</h2>
                 </div>
-                <p class="conversation-history-error" id="conversation-history-error" role="alert" hidden></p>
-                <div class="conversation-history-list" id="conversation-history-list"></div>
+                <p class="conversation-history-error" id="conversation-history-sidebar-error" role="alert" hidden></p>
+                <div class="conversation-history-list" id="conversation-history-sidebar-list"></div>
             </section>
         </aside>
 
@@ -77,11 +77,11 @@
                         </div>
                     </div>
 
+                    <button class="logout-btn" id="logout-btn" title="Log out"><i data-lucide="log-out" class="icon"></i></button>
                     <div class="user-profile" id="user-profile-btn" title="Profilul meu">
                         <div id="user-avatar" class="avatar"></div>
                         <span id="user-name"></span>
                     </div>
-                    <button class="logout-btn" id="logout-btn" title="Log out"><i data-lucide="log-out" class="icon"></i></button>
 
                     <!-- Auto-hide profile menu: opens on click of the name/avatar
                          above, closes on outside click or Escape. Each item
@@ -155,15 +155,25 @@
                 <section id="view-chat" class="view hidden">
                     <div class="chat-container">
                         <div class="chat-header">
+                            <button type="button" class="chat-history-toggle" id="chat-history-toggle" aria-label="Arată istoricul conversațiilor" aria-controls="conversation-history" aria-expanded="false">
+                                <i data-lucide="panel-left"></i>
+                            </button>
                             <div class="ai-avatar"><i data-lucide="sparkles"></i></div>
                             <div class="ai-info">
                                 <h2>BanK AI Assistant <span class="demo-badge">Demo</span></h2>
                                 <span class="status">Conectat • poate citi soldurile conturilor tale</span>
                             </div>
-                            <button class="btn btn-secondary" id="new-conversation-btn" style="margin-left: auto;">
+                            <button class="btn btn-secondary" id="new-conversation-btn" title="New chat" aria-label="New chat">
                                 <i data-lucide="plus" class="icon"></i> Conversație nouă
                             </button>
                         </div>
+                        <aside class="conversation-history chat-history-panel" id="conversation-history" hidden aria-label="Conversații recente">
+                            <div class="conversation-history-header">
+                                <h2>Conversații recente</h2>
+                            </div>
+                            <p class="conversation-history-error" id="conversation-history-error" role="alert" hidden></p>
+                            <div class="conversation-history-list" id="conversation-history-list"></div>
+                        </aside>
                         <!-- Empty state: one welcome turn. Everything after this
                              is appended by appendChatBubble() in app.js, so the
                              markup here matches what that function produces. -->

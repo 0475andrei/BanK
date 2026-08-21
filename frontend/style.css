@@ -1689,6 +1689,17 @@ body {
     text-align: center;
 }
 
+/* BanK-themed scrollbars for every scrollable surface. */
+* { scrollbar-color: var(--bg-surface-hover) var(--bg-dark); scrollbar-width: thin; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: var(--bg-dark); }
+*::-webkit-scrollbar-thumb {
+    background-color: var(--bg-surface-hover);
+    border: 2px solid var(--bg-dark);
+    border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover { background-color: var(--primary-teal-hover); }
+
 /* --------------------------------------------------------------------------
    Phone shell
    The application markup, identifiers and scripts deliberately remain the
@@ -1963,3 +1974,116 @@ body {
     .auth-card-comodul-active { padding: 18px 12px; }
     .comodul-chat-container { height: 620px; }
 }
+
+/* AI chat fills the usable phone viewport while leaving the app header and
+   bottom navigation untouched. */
+.views-container:has(#view-chat.active) {
+    overflow: hidden;
+    padding: 0;
+}
+
+#view-chat.active { height: 100%; }
+
+#view-chat.active .chat-container {
+    height: 100%;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    position: relative;
+}
+
+.chat-history-toggle {
+    display: inline-flex;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    align-items: center;
+    justify-content: center;
+    margin-right: 8px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-main);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.chat-history-toggle:hover,
+.chat-history-toggle[aria-expanded="true"] {
+    border-color: rgba(45, 212, 191, 0.5);
+    background: rgba(45, 212, 191, 0.12);
+    color: var(--primary-teal);
+}
+
+.chat-history-toggle svg { width: 19px; height: 19px; }
+
+.chat-history-panel {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    z-index: 5;
+    top: 66px;
+    bottom: 0;
+    left: 0;
+    width: min(82%, 320px);
+    margin: 0;
+    padding: 18px 12px;
+    border: 0;
+    border-right: 1px solid var(--border-color);
+    background-color: var(--bg-surface);
+    box-shadow: 18px 0 36px rgba(0, 0, 0, 0.35);
+}
+
+.chat-history-panel[hidden] { display: none; }
+
+.chat-history-panel {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-104%);
+    transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease;
+}
+
+.chat-history-panel.is-open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+}
+
+/* Keep the profile entry in the phone header's upper-left corner while the
+   remaining actions continue to align on the right. */
+.user-actions .user-profile {
+    position: absolute;
+    left: 0;
+}
+
+.user-actions #profile-panel {
+    right: auto;
+    left: 0;
+}
+
+/* A compact, circular affordance for starting a new conversation. */
+#new-conversation-btn {
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;
+}
+
+#new-conversation-btn .icon {
+    width: 17px;
+    height: 17px;
+    margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chat-history-panel { transition: none; }
+}
+
+/* The old sidebar host is retained only as inactive structural markup. */
+.sidebar-conversation-history { display: none; }

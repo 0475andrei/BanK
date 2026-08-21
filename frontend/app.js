@@ -61,6 +61,14 @@ document.addEventListener('DOMContentLoaded', () => {
         newConversationBtn.addEventListener('click', startNewConversation);
     }
 
+    const chatHistoryToggle = document.getElementById('chat-history-toggle');
+    if (chatHistoryToggle) {
+        chatHistoryToggle.addEventListener('click', () => {
+            const isOpen = chatHistoryToggle.getAttribute('aria-expanded') === 'true';
+            setConversationHistoryOpen(!isOpen);
+        });
+    }
+
     initDashboard();
 });
 
@@ -72,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 let currentConversationId = null;
 let conversationHistory = [];
+let conversationHistoryCloseTimer = null;
 
 const CHAT_WELCOME_TEXT =
     'Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?';
@@ -194,8 +203,30 @@ function setCurrentConversationId(conversationId) {
 }
 
 function toggleConversationHistory(isVisible) {
-    const history = document.getElementById('conversation-history');
-    if (history) history.hidden = !isVisible;
+    if (!isVisible) setConversationHistoryOpen(false);
+}
+
+function getConversationHistoryPanel() {
+    return document.querySelector('#view-chat #conversation-history');
+}
+
+/** Opens or closes the AI view's history drawer without changing its data. */
+function setConversationHistoryOpen(isOpen) {
+    const history = getConversationHistoryPanel();
+    const toggle = document.getElementById('chat-history-toggle');
+    if (!history) return;
+
+    window.clearTimeout(conversationHistoryCloseTimer);
+    if (isOpen) {
+        history.hidden = false;
+        window.requestAnimationFrame(() => history.classList.add('is-open'));
+    } else {
+        history.classList.remove('is-open');
+        conversationHistoryCloseTimer = window.setTimeout(() => {
+            if (!history.classList.contains('is-open')) history.hidden = true;
+        }, 280);
+    }
+    toggle?.setAttribute('aria-expanded', String(isOpen));
 }
 
 function truncateConversationPreview(value) {
@@ -225,14 +256,14 @@ function formatRelativeConversationTime(value) {
 }
 
 function showConversationHistoryError(message = '') {
-    const error = document.getElementById('conversation-history-error');
+    const error = document.querySelector('#view-chat #conversation-history-error');
     if (!error) return;
     error.textContent = message;
     error.hidden = !message;
 }
 
 async function loadConversationHistory() {
-    const list = document.getElementById('conversation-history-list');
+    const list = document.querySelector('#view-chat #conversation-history-list');
     if (!list) return;
 
     showConversationHistoryError();
@@ -269,7 +300,7 @@ async function loadConversationHistory() {
 }
 
 function renderConversationHistory() {
-    const list = document.getElementById('conversation-history-list');
+    const list = document.querySelector('#view-chat #conversation-history-list');
     if (!list) return;
     list.innerHTML = '';
 
