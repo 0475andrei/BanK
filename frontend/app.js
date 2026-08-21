@@ -69,6 +69,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    document.getElementById('chat-history-close')?.addEventListener('click', () => {
+        setConversationHistoryOpen(false);
+    });
+
     initDashboard();
 });
 
@@ -317,7 +321,10 @@ function renderConversationHistory() {
         const selectButton = document.createElement('button');
         selectButton.type = 'button';
         selectButton.className = 'conversation-history-select';
-        selectButton.addEventListener('click', () => openConversation(conversation.id));
+        selectButton.addEventListener('click', () => {
+            setConversationHistoryOpen(false);
+            void openConversation(conversation.id);
+        });
 
         const preview = document.createElement('span');
         preview.className = 'conversation-history-preview';
