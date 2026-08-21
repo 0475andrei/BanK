@@ -13,8 +13,15 @@ from app.ai.agents.banking_agent import BankingAgent
 from app.ai.context import Context
 from app.ai.orchestrator import Orchestrator
 from app.ai.providers.base import ModelProvider
+from app.ai.routing import RoutingDecision
 from app.ai.schemas import Message
-from app.ai.tools.banking import GetBalanceTool
+from app.ai.tools.banking import (
+    GetBalanceTool,
+    ListAccountsTool,
+    ListCardsTool,
+    ListTransactionsTool,
+    ListTransfersTool,
+)
 from app.ai.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
@@ -27,7 +34,15 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
     `supabase` is handed to every tool that reads data; the tools hold it for
     their lifetime (the client is a stateless HTTP client, safe to share).
     """
-    return ToolRegistry([GetBalanceTool(supabase)])
+    return ToolRegistry(
+        [
+            GetBalanceTool(supabase),
+            ListAccountsTool(supabase),
+            ListTransactionsTool(supabase),
+            ListCardsTool(supabase),
+            ListTransfersTool(supabase),
+        ]
+    )
 
 
 class AIService:
@@ -45,8 +60,11 @@ class AIService:
 
             provider = AzureOpenAIProvider()
         self._provider = provider
+        # The provider goes to the orchestrator too: routing's LLM fallback
+        # needs a model of its own once more than one agent is registered.
         self._orchestrator = orchestrator or Orchestrator(
-            [BankingAgent(provider, build_banking_tools(supabase))]
+            [BankingAgent(provider, build_banking_tools(supabase))],
+            provider=provider,
         )
 
     @property
@@ -58,19 +76,29 @@ class AIService:
         history: Sequence[Message],
         user_message: str,
         context: Context,
-    ) -> tuple[str, list[Message]]:
+    ) -> tuple[str, list[Message], RoutingDecision]:
         """Answer `user_message` for the user identified by `context`.
 
         `context` is required and has no default on purpose: forgetting to pass
         an identity must be an error, never a silent fallback to some ambient
         one. Callers build it at the edge (see `app.ai.context`).
 
-        Returns the reply plus the updated history: `history` with the new
-        user turn, any tool-call/tool-result trace the agent produced, and the
-        final assistant reply appended, in that order. Callers persist this
-        (see `app.modules.chat.conversations_service`) so a reload replays the
-        same transcript the model actually saw.
+        Returns `(reply, history, routing)`. `history` is the caller's history
+        with the new user turn, any tool-call/tool-result trace the agent
+        produced, and the final assistant reply appended, in that order;
+        callers persist it (see `app.modules.chat.conversations_service`) so a
+        reload replays the same transcript the model actually saw. `routing`
+        records which agent answered and why.
+
+        TODO: if this grows past 3 elements, switch to a TurnResult Pydantic
+        model rather than widening the tuple again.
         """
         conversation = [*history, Message(role="user", content=user_message)]
-        reply, trace = await self._orchestrator.dispatch(conversation, user_message, context)
-        return reply, [*conversation, *trace, Message(role="assistant", content=reply)]
+        reply, trace, routing = await self._orchestrator.dispatch(
+            conversation, user_message, context
+        )
+        return (
+            reply,
+            [*conversation, *trace, Message(role="assistant", content=reply)],
+            routing,
+        )

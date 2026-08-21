@@ -49,18 +49,216 @@ body {
     padding: 24px;
 }
 
-.logo h2 {
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 40px;
+    width: fit-content;
+    max-width: 100%;
+}
+
+.logo-mark {
+    width: 52px;
+    height: 52px;
+    flex: 0 0 52px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.logo-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    line-height: 1;
+}
+
+.logo-name {
+    color: var(--text-main);
     font-size: 28px;
     font-weight: 700;
-    color: var(--primary-teal);
-    margin-bottom: 40px;
-    letter-spacing: -1px;
+}
+
+.logo-bank {
+    color: #289da4;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 5px;
+    margin-top: 3px;
+}
+
+.logo-tagline {
+    color: #289da4;
+    font-size: 8px;
+    font-weight: 600;
+    margin-top: 4px;
+    white-space: nowrap;
+}
+
+.sidebar .logo {
+    align-self: center;
 }
 
 .nav-menu {
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+.conversation-history {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.conversation-history[hidden] {
+    display: none;
+}
+
+.conversation-history-header {
+    padding: 0 8px 10px;
+}
+
+.conversation-history-header h2 {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.conversation-history-list {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    scrollbar-color: var(--bg-surface-hover) transparent;
+    scrollbar-width: thin;
+}
+
+.conversation-history-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.conversation-history-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.conversation-history-list::-webkit-scrollbar-thumb {
+    background-color: var(--bg-surface-hover);
+    border: 1px solid var(--bg-dark);
+    border-radius: 6px;
+}
+
+.conversation-history-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: var(--border-radius-sm);
+}
+
+.conversation-history-item:hover,
+.conversation-history-item:focus-within {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.conversation-history-item.active {
+    background-color: rgba(45, 212, 191, 0.1);
+}
+
+.conversation-history-select {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    padding: 9px 4px 9px 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-main);
+    cursor: pointer;
+    overflow: hidden;
+    text-align: left;
+}
+
+.conversation-history-preview {
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.conversation-history-time {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.conversation-history-actions {
+    display: flex;
+    gap: 3px;
+    padding-right: 2px;
+    opacity: 0;
+    transition: var(--transition);
+}
+
+.conversation-history-item:hover .conversation-history-actions,
+.conversation-history-item:focus-within .conversation-history-actions,
+.conversation-history-item.active .conversation-history-actions {
+    opacity: 1;
+}
+
+.conversation-history-action {
+    display: inline-flex;
+    width: 22px;
+    height: 22px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.conversation-history-action:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
+}
+
+.conversation-history-action i {
+    width: 11px;
+    height: 11px;
+}
+
+.conversation-history-rename-input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--primary-teal);
+    border-radius: 4px;
+    background-color: var(--bg-surface);
+    color: var(--text-main);
+    font-size: 12px;
+    outline: none;
+    padding: 6px 8px;
+}
+
+.conversation-history-empty,
+.conversation-history-error {
+    padding: 10px 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.conversation-history-error {
+    color: var(--expense-red);
 }
 
 .nav-item {
@@ -650,6 +848,7 @@ body {
 .chat-header .ai-avatar {
     width: 48px;
     height: 48px;
+    flex-shrink: 0;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--primary-teal), #3b82f6);
     display: flex;
@@ -683,6 +882,7 @@ body {
 .message .avatar {
     width: 32px;
     height: 32px;
+    flex-shrink: 0;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--primary-teal), #3b82f6);
     display: flex;
@@ -1135,7 +1335,15 @@ body {
 
 .comodul-upload-box { padding: 0 20px; margin-bottom: 16px; }
 
-.auth-card .logo h2 { margin-bottom: 4px; }
+.auth-card .logo {
+    margin-bottom: 12px;
+}
+
+.auth-card .logo-mark {
+    width: 46px;
+    height: 46px;
+    flex-basis: 46px;
+}
 
 .auth-subtitle {
     color: var(--text-muted);

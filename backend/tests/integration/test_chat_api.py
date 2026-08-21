@@ -158,6 +158,58 @@ async def test_tool_call_turns_are_persisted(authed_client, scripted_provider):
     assert history[3]["content"] == "Soldul tău este disponibil."
 
 
+async def test_chat_endpoint_includes_routing_in_response(authed_client, scripted_provider):
+    """The routing decision travels back to the client, so a UI can show which
+    agent answered (Step 14)."""
+    client, _user = authed_client
+    scripted_provider(ModelResponse(text="salut"))
+
+    resp = await client.post("/api/v1/chat", json={"message": "care este soldul meu?"})
+
+    assert resp.status_code == 200, resp.text
+    routing = resp.json()["routing"]
+
+    assert routing["agent_name"] == "banking"
+    assert routing["confidence"] == 1.0
+    assert routing["matched_rule"] == "banking_keywords"
+    assert "sold" in routing["reason"]
+    # Never echoes what the user typed.
+    assert "care este soldul meu?" not in routing["reason"]
+
+
+async def test_chat_endpoint_persists_routing_metadata_on_assistant_message(
+    authed_client, scripted_provider, supabase
+):
+    """Persisted on the assistant turn the routed agent produced - and on
+    nothing else."""
+    client, _user = authed_client
+    scripted_provider(
+        ModelResponse(tool_calls=[ToolCall(id="c1", name="get_balance", arguments={})]),
+        ModelResponse(text="Soldul tău este disponibil."),
+    )
+
+    resp = await client.post("/api/v1/chat", json={"message": "care este soldul meu?"})
+    assert resp.status_code == 200, resp.text
+    conversation_id = resp.json()["conversation_id"]
+
+    rows = (
+        await supabase.table("messages")
+        .select("role, content, routing_metadata")
+        .eq("conversation_id", conversation_id)
+        .order("created_at")
+        .execute()
+    ).data
+
+    # user, assistant(tool_calls), tool, assistant(final)
+    assert [row["role"] for row in rows] == ["user", "assistant", "tool", "assistant"]
+    assert [row["routing_metadata"] is None for row in rows] == [True, True, True, False]
+
+    stored = rows[-1]["routing_metadata"]
+    assert stored["agent_name"] == "banking"
+    assert stored["matched_rule"] == "banking_keywords"
+    assert stored["confidence"] == 1.0
+
+
 async def test_chat_isolates_users(authed_client_factory, scripted_provider):
     """User B cannot read user A's account, even naming its id explicitly."""
     alice_client, _alice = await authed_client_factory()

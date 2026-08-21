@@ -4,6 +4,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
+from app.ai.routing import RoutingDecision
+
 #: Roughly a long paragraph. Bounds the prompt the model is asked to process.
 MAX_MESSAGE_CHARS = 4000
 
@@ -25,6 +27,9 @@ class ChatResponse(BaseModel):
     #: Always returned, so the client knows what to send on the next turn -
     #: history itself now lives server-side (see conversations_service).
     conversation_id: uuid.UUID
+    #: Which agent answered, and why. Optional so the contract stays
+    #: backward-compatible: clients written before routing existed ignore it.
+    routing: RoutingDecision | None = None
 
 
 class ConversationRead(BaseModel):
