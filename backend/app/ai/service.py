@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from app.ai.agents.banking_agent import BankingAgent
+from app.ai.agents.insights_agent import InsightsAgent
 from app.ai.context import Context
 from app.ai.orchestrator import Orchestrator
 from app.ai.providers.base import ModelProvider
@@ -22,6 +23,7 @@ from app.ai.tools.banking import (
     ListTransactionsTool,
     ListTransfersTool,
 )
+from app.ai.tools.insights import GetTransactionsInRangeTool
 from app.ai.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
@@ -45,6 +47,16 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
     )
 
 
+def build_insights_tools(supabase: AsyncClient) -> ToolRegistry:
+    """The read-only tools the insights agent is allowed to call.
+
+    Deliberately a different registry from `build_banking_tools`: an agent's
+    reach is defined by what it is handed, so the analytical agent cannot read
+    card numbers and the banking agent cannot run an unbounded date sweep.
+    """
+    return ToolRegistry([GetTransactionsInRangeTool(supabase)])
+
+
 class AIService:
     """Holds the orchestrator and hands conversations to the routed agent."""
 
@@ -61,11 +73,29 @@ class AIService:
             provider = AzureOpenAIProvider()
         self._provider = provider
         # The provider goes to the orchestrator too: routing's LLM fallback
-        # needs a model of its own once more than one agent is registered.
-        self._orchestrator = orchestrator or Orchestrator(
-            [BankingAgent(provider, build_banking_tools(supabase))],
-            provider=provider,
+        # needs a model of its own now that more than one agent is registered.
+        self._orchestrator = orchestrator or self._build_orchestrator(supabase, provider)
+
+    @staticmethod
+    def _build_orchestrator(supabase: AsyncClient, provider: ModelProvider) -> Orchestrator:
+        """Register the agents, in the order routing should consider them.
+
+        ORDER MATTERS. `Orchestrator._match_rules` walks agents in registration
+        order and stops at the first rule that claims the message, so the agent
+        registered first gets first refusal. Insights goes first deliberately:
+        it and Banking share the `cheltui` / `bani` keywords (Banking has had
+        them since Step 6), and for a phrase like "cât am cheltuit?" the
+        analytical reading is the more specific one.
+
+        Banking is still the DEFAULT — what an unmatched or unclassifiable
+        message falls back to — which is a separate thing from rule order.
+        """
+        orchestrator = Orchestrator(provider=provider)
+        orchestrator.register(InsightsAgent(provider, build_insights_tools(supabase)))
+        orchestrator.register(
+            BankingAgent(provider, build_banking_tools(supabase)), default=True
         )
+        return orchestrator
 
     @property
     def orchestrator(self) -> Orchestrator:
