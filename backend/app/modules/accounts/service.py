@@ -1,11 +1,18 @@
+import calendar
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from postgrest.exceptions import APIError
 from supabase import AsyncClient
 
 from app.core.audit import record_audit_event
-from app.core.exceptions import AccountNotEmptyError, AccountNotFoundError, ValidationError
+from app.core.exceptions import (
+    AccountNotEmptyError,
+    AccountNotFoundError,
+    IbanNotFoundError,
+    TermDepositLockedError,
+    ValidationError,
+)
 from app.modules.accounts.iban import generate_iban
 from app.modules.accounts.models import AccountStatus
 from app.modules.ledger import service as ledger_service
@@ -14,6 +21,31 @@ from app.modules.users.schemas import UserRead
 
 UNIQUE_VIOLATION = "23505"
 _IBAN_GENERATION_ATTEMPTS = 5
+
+# --------------------------------------------------------------------------
+# Account products (Investiții & Bugetare: "Cont de economii" / "Cont cu
+# dobândă fixă") - see accrue_interest_if_due for how interest actually
+# gets credited, and assert_not_locked_for_debit for the term-deposit lock.
+# --------------------------------------------------------------------------
+PRODUCT_CHECKING = "checking"
+PRODUCT_SAVINGS = "savings"
+PRODUCT_TERM_DEPOSIT = "term_deposit"
+_VALID_PRODUCT_TYPES = {PRODUCT_CHECKING, PRODUCT_SAVINGS, PRODUCT_TERM_DEPOSIT}
+
+#: Flexible - deposit/withdraw anytime, interest still accrues. Rates are
+#: illustrative (this is a fake-money demo app, not a real bank), stored in
+#: basis points (250 = 2.5%) for the same reason money is minor units -
+#: exact integers, no float rounding.
+SAVINGS_INTEREST_RATE_BPS = 250
+
+#: Longer commitment -> higher rate, standard term-deposit shape. Locked via
+#: assert_not_locked_for_debit until maturity_date.
+TERM_DEPOSIT_RATES_BPS: dict[int, int] = {
+    3: 350,
+    6: 400,
+    12: 450,
+    24: 500,
+}
 
 # Only users who registered with the referral code get a welcome balance
 # on every account they open (see auth/service.py::FALLBACK_REFERRAL_CODE) -
@@ -38,7 +70,9 @@ def _validate_currency(currency: str) -> str:
     return currency
 
 
-async def _insert_account_with_iban(supabase: AsyncClient, user: UserRead, name: str, currency: str) -> dict:
+async def _insert_account_with_iban(
+    supabase: AsyncClient, user: UserRead, name: str, currency: str, extra_fields: dict
+) -> dict:
     """A generated IBAN is practically always unique (36^16 possibilities),
     but "practically" isn't a guarantee - retry a few times on a genuine
     collision rather than letting it surface as a confusing 500."""
@@ -54,6 +88,7 @@ async def _insert_account_with_iban(supabase: AsyncClient, user: UserRead, name:
                         "currency": currency,
                         "status": AccountStatus.ACTIVE.value,
                         "iban": generate_iban(),
+                        **extra_fields,
                     }
                 )
                 .execute()
@@ -64,6 +99,95 @@ async def _insert_account_with_iban(supabase: AsyncClient, user: UserRead, name:
                 raise
             last_error = exc
     raise last_error  # pragma: no cover - astronomically unlikely
+
+
+def _add_months(start: date, months: int) -> date:
+    month_index = start.month - 1 + months
+    year = start.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(start.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _full_months_elapsed(start: date, end: date) -> int:
+    """Whole calendar months between two dates, floored - e.g. Jan 15 to
+    Mar 10 is 1 full month (Mar 15 would be the 2nd), never negative."""
+    months = (end.year - start.year) * 12 + (end.month - start.month)
+    if end.day < start.day:
+        months -= 1
+    return max(months, 0)
+
+
+def assert_not_locked_for_debit(account: dict) -> None:
+    """Term deposits can receive money freely (funding one right after
+    opening is the normal flow) but can't send or close until maturity -
+    that commitment is the entire reason they pay a higher rate than a
+    savings account. Called by transfers/payments on the FROM account only,
+    never the TO account."""
+    if account.get("product_type") != PRODUCT_TERM_DEPOSIT:
+        return
+    if date.today() < date.fromisoformat(account["maturity_date"]):
+        raise TermDepositLockedError()
+
+
+async def _accrue_savings_interest(supabase: AsyncClient, account: dict) -> None:
+    opened = datetime.fromisoformat(account["created_at"]).date()
+    elapsed_months = _full_months_elapsed(opened, date.today())
+    rate_bps = account["interest_rate_bps"]
+
+    # One grant call per elapsed month, in order - compounding, since each
+    # later month's interest is computed on the balance after the previous
+    # month's credit. Idempotency keys make already-paid months a cheap
+    # no-op replay rather than a double credit, so this is safe to just
+    # redo in full on every read instead of tracking "last paid period"
+    # separately.
+    for period in range(1, elapsed_months + 1):
+        period_end = _add_months(opened, period)
+        balance = await ledger_service.get_balance(supabase, uuid.UUID(account["id"]))
+        interest_minor = balance * rate_bps // (12 * 10_000)
+        if interest_minor <= 0:
+            continue
+        await ledger_service.grant_interest(
+            supabase,
+            uuid.UUID(account["id"]),
+            interest_minor,
+            account["currency"],
+            idempotency_key=f"interest:{account['id']}:{period_end.isoformat()}",
+        )
+
+
+async def _accrue_term_deposit_interest(supabase: AsyncClient, account: dict) -> None:
+    if date.today() < date.fromisoformat(account["maturity_date"]):
+        return  # not matured yet - nothing to pay out
+
+    balance = await ledger_service.get_balance(supabase, uuid.UUID(account["id"]))
+    rate_bps = account["interest_rate_bps"]
+    term_months = account["term_months"]
+    interest_minor = balance * rate_bps * term_months // (12 * 10_000)
+    if interest_minor <= 0:
+        return
+    await ledger_service.grant_interest(
+        supabase,
+        uuid.UUID(account["id"]),
+        interest_minor,
+        account["currency"],
+        # One-time lump sum at maturity, not per-period like savings - a
+        # term deposit's whole point is a single fixed payout at the end.
+        idempotency_key=f"interest:{account['id']}:maturity",
+    )
+
+
+async def accrue_interest_if_due(supabase: AsyncClient, account: dict) -> None:
+    """Lazy interest crediting: called whenever an account is read/listed
+    (see router.py), so the displayed balance always reflects interest
+    earned so far without needing a cron job/scheduler. Idempotency keys
+    make repeated calls safe."""
+    if account["status"] != AccountStatus.ACTIVE.value:
+        return
+    if account.get("product_type") == PRODUCT_SAVINGS:
+        await _accrue_savings_interest(supabase, account)
+    elif account.get("product_type") == PRODUCT_TERM_DEPOSIT:
+        await _accrue_term_deposit_interest(supabase, account)
 
 
 async def _get_first_active_account(supabase: AsyncClient, user_id: str, currency: str) -> dict | None:
@@ -179,10 +303,32 @@ async def _pay_pending_referral_rewards(supabase: AsyncClient, user: UserRead, a
         await _pay_referral_reward(supabase, reward, account)
 
 
-async def open_account(supabase: AsyncClient, user: UserRead, name: str, currency: str) -> dict:
+async def open_account(
+    supabase: AsyncClient,
+    user: UserRead,
+    name: str,
+    currency: str,
+    *,
+    product_type: str = PRODUCT_CHECKING,
+    term_months: int | None = None,
+) -> dict:
     currency = _validate_currency(currency)
+    if product_type not in _VALID_PRODUCT_TYPES:
+        raise ValidationError(f"Unknown account product: {product_type!r}")
 
-    account = await _insert_account_with_iban(supabase, user, name, currency)
+    extra_fields: dict = {"product_type": product_type}
+    if product_type == PRODUCT_SAVINGS:
+        extra_fields["interest_rate_bps"] = SAVINGS_INTEREST_RATE_BPS
+    elif product_type == PRODUCT_TERM_DEPOSIT:
+        if term_months not in TERM_DEPOSIT_RATES_BPS:
+            raise ValidationError(
+                f"term_months must be one of {sorted(TERM_DEPOSIT_RATES_BPS)}, got {term_months!r}"
+            )
+        extra_fields["interest_rate_bps"] = TERM_DEPOSIT_RATES_BPS[term_months]
+        extra_fields["term_months"] = term_months
+        extra_fields["maturity_date"] = _add_months(date.today(), term_months).isoformat()
+
+    account = await _insert_account_with_iban(supabase, user, name, currency, extra_fields)
 
     await record_audit_event(
         supabase,
@@ -206,6 +352,30 @@ async def open_account(supabase: AsyncClient, user: UserRead, name: str, currenc
     await _pay_pending_referral_rewards(supabase, user, account)
 
     return account
+
+
+async def get_account_holder_by_iban(supabase: AsyncClient, iban: str) -> dict:
+    """Public-within-the-app lookup (no ownership check - the whole point is
+    letting the sender see who a not-yet-owned IBAN belongs to before
+    paying, same as any real bank's payee-name display). Deliberately
+    returns only first/last name, nothing else."""
+    iban = iban.replace(" ", "").upper()
+    resp = await supabase.table("accounts").select("user_id").eq("iban", iban).maybe_single().execute()
+    account = resp.data if resp is not None else None
+    if account is None:
+        raise IbanNotFoundError()
+
+    user_resp = (
+        await supabase.table("users")
+        .select("first_name, last_name")
+        .eq("id", account["user_id"])
+        .maybe_single()
+        .execute()
+    )
+    user_row = user_resp.data if user_resp is not None else None
+    if user_row is None:
+        raise IbanNotFoundError()
+    return user_row
 
 
 async def get_account_for_owner(
@@ -276,6 +446,7 @@ async def close_account(supabase: AsyncClient, user: UserRead, account_id: uuid.
     account = await _get_owned_account(supabase, user, account_id)
     if account["status"] == AccountStatus.CLOSED.value:
         return account
+    assert_not_locked_for_debit(account)
 
     balance = await ledger_service.get_balance(supabase, uuid.UUID(account["id"]))
     if balance != 0:

@@ -10,6 +10,10 @@ class DeviceCheckResponse(BaseModel):
     #: Only set when trusted - lets the login page greet the user and skip
     #: straight to a password-only prompt without them retyping their email.
     email: str | None = None
+    #: Only meaningful when trusted - lets the login page try Face ID first
+    #: (falling back to password) instead of always going straight to
+    #: password on a recognized browser.
+    face_enrolled: bool = False
 
 
 class DeviceLoginRequest(BaseModel):

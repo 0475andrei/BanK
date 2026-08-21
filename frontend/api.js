@@ -55,3 +55,25 @@ async function requireSession() {
     throw err;
   }
 }
+
+/**
+ * Show/hide toggle for every password field on the page. Looks for
+ * `.password-toggle-btn[data-target="<input id>"]` (see register.html,
+ * login.html, forgot-password.html, index.html's change-password form for
+ * the markup) - wired here, once, so any page just needs the markup and
+ * gets the behavior automatically, instead of every page re-wiring it.
+ */
+function wirePasswordToggles() {
+  document.querySelectorAll(".password-toggle-btn").forEach((btn) => {
+    const input = document.getElementById(btn.dataset.target);
+    if (!input) return;
+    btn.addEventListener("click", () => {
+      const showing = input.type === "text";
+      input.type = showing ? "password" : "text";
+      btn.innerHTML = `<i data-lucide="${showing ? "eye" : "eye-off"}"></i>`;
+      if (window.lucide) lucide.createIcons();
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", wirePasswordToggles);

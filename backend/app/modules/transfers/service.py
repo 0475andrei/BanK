@@ -70,12 +70,18 @@ async def create_transfer(
 
     from_account = await accounts_service.get_account(supabase, user, payload.from_account_id)
     to_account = await accounts_service.get_account(supabase, user, payload.to_account_id)
+    accounts_service.assert_not_locked_for_debit(from_account)
 
     currency = payload.currency.upper()
     if from_account["currency"] != currency or to_account["currency"] != currency:
         raise CurrencyMismatchError("Transfer currency must match both accounts' currency.")
 
-    await face_auth_service.enforce_face_confirmation(supabase, user, payload.amount_minor, face_token)
+    await face_auth_service.enforce_face_confirmation(
+        supabase,
+        user,
+        required=face_auth_service.requires_face_confirmation(payload.amount_minor),
+        token=face_token,
+    )
 
     try:
         resp = await supabase.rpc(
@@ -86,7 +92,7 @@ async def create_transfer(
                 "p_amount_minor": payload.amount_minor,
                 "p_currency": currency,
                 "p_description": payload.description
-                or f"Transfer {from_account['id']} -> {to_account['id']}",
+                or f"Transfer: {from_account['name']} → {to_account['name']}",
                 "p_idempotency_key": idempotency_key,
                 "p_actor_user_id": str(user.id),
             },
