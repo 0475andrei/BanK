@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from app.ai.agents.banking_agent import BankingAgent
 from app.ai.agents.insights_agent import InsightsAgent
+from app.ai.agents.planning_agent import PlanningAgent
 from app.ai.context import Context
 from app.ai.orchestrator import Orchestrator
 from app.ai.providers.base import ModelProvider
@@ -30,6 +31,7 @@ from app.ai.tools.insights import (
     DetectRecurringPaymentsTool,
     GetTransactionsInRangeTool,
 )
+from app.ai.tools.planning import ProjectBalanceTool, SavingsGoalTool, SimulateScenarioTool
 from app.ai.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
@@ -71,6 +73,22 @@ def build_insights_tools(supabase: AsyncClient) -> ToolRegistry:
     )
 
 
+def build_planning_tools(supabase: AsyncClient) -> ToolRegistry:
+    """The read-only tools the planning agent is allowed to call.
+
+    A third distinct registry, same reason as insights vs banking: the
+    goal-oriented agent projects and simulates, it does not need (and is not
+    handed) the analytical categorisation/anomaly tools either.
+    """
+    return ToolRegistry(
+        [
+            ProjectBalanceTool(supabase),
+            SimulateScenarioTool(supabase),
+            SavingsGoalTool(supabase),
+        ]
+    )
+
+
 class AIService:
     """Holds the orchestrator and hands conversations to the routed agent."""
 
@@ -101,6 +119,13 @@ class AIService:
         them since Step 6), and for a phrase like "cât am cheltuit?" the
         analytical reading is the more specific one.
 
+        Planning goes LAST deliberately, for the opposite reason: it shares
+        the `econom` stem with Banking's "Economii" account keyword, and here
+        Banking should win - "arată-mi contul de economii" is transactional.
+        That does mean a bare "econom"-only savings-goal phrasing currently
+        mis-routes to Banking (see the KNOWN COLLISION note on
+        `PlanningAgent`'s rules); acceptable for now, revisited in Step 16.
+
         Banking is still the DEFAULT — what an unmatched or unclassifiable
         message falls back to — which is a separate thing from rule order.
         """
@@ -109,6 +134,7 @@ class AIService:
         orchestrator.register(
             BankingAgent(provider, build_banking_tools(supabase)), default=True
         )
+        orchestrator.register(PlanningAgent(provider, build_planning_tools(supabase)))
         return orchestrator
 
     @property
