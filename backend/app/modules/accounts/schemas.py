@@ -34,6 +34,11 @@ class AccountRead(BaseModel):
     created_at: datetime
 
 
+class AccountHolderRead(BaseModel):
+    first_name: str
+    last_name: str
+
+
 class TermDepositOption(BaseModel):
     term_months: int
     interest_rate_bps: int

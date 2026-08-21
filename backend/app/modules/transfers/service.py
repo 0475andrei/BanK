@@ -76,7 +76,12 @@ async def create_transfer(
     if from_account["currency"] != currency or to_account["currency"] != currency:
         raise CurrencyMismatchError("Transfer currency must match both accounts' currency.")
 
-    await face_auth_service.enforce_face_confirmation(supabase, user, payload.amount_minor, face_token)
+    await face_auth_service.enforce_face_confirmation(
+        supabase,
+        user,
+        required=face_auth_service.requires_face_confirmation(payload.amount_minor),
+        token=face_token,
+    )
 
     try:
         resp = await supabase.rpc(

@@ -9,6 +9,7 @@ from app.core.audit import record_audit_event
 from app.core.exceptions import (
     AccountNotEmptyError,
     AccountNotFoundError,
+    IbanNotFoundError,
     TermDepositLockedError,
     ValidationError,
 )
@@ -351,6 +352,30 @@ async def open_account(
     await _pay_pending_referral_rewards(supabase, user, account)
 
     return account
+
+
+async def get_account_holder_by_iban(supabase: AsyncClient, iban: str) -> dict:
+    """Public-within-the-app lookup (no ownership check - the whole point is
+    letting the sender see who a not-yet-owned IBAN belongs to before
+    paying, same as any real bank's payee-name display). Deliberately
+    returns only first/last name, nothing else."""
+    iban = iban.replace(" ", "").upper()
+    resp = await supabase.table("accounts").select("user_id").eq("iban", iban).maybe_single().execute()
+    account = resp.data if resp is not None else None
+    if account is None:
+        raise IbanNotFoundError()
+
+    user_resp = (
+        await supabase.table("users")
+        .select("first_name, last_name")
+        .eq("id", account["user_id"])
+        .maybe_single()
+        .execute()
+    )
+    user_row = user_resp.data if user_resp is not None else None
+    if user_row is None:
+        raise IbanNotFoundError()
+    return user_row
 
 
 async def get_account_for_owner(

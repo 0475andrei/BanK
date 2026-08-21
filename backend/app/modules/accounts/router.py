@@ -8,6 +8,7 @@ from app.db.supabase_client import get_supabase
 from app.modules.accounts import service
 from app.modules.accounts.schemas import (
     AccountCreate,
+    AccountHolderRead,
     AccountProductsRead,
     AccountRead,
     TermDepositOption,
@@ -63,6 +64,16 @@ async def list_accounts(
 ) -> list[AccountRead]:
     accounts = await service.list_accounts(supabase, user)
     return [await _to_read_model(supabase, account) for account in accounts]
+
+
+@router.get("/by-iban/{iban}", response_model=AccountHolderRead)
+async def get_account_holder(
+    iban: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> AccountHolderRead:
+    holder = await service.get_account_holder_by_iban(supabase, iban)
+    return AccountHolderRead(**holder)
 
 
 @router.get("/products", response_model=AccountProductsRead)

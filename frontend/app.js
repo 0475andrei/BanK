@@ -1343,8 +1343,34 @@ function wirePaymentsForm() {
     const errorEl = document.getElementById('payments-error');
     const successEl = document.getElementById('payments-success');
     const accountSelect = document.getElementById('payments-account');
+    const ibanInput = document.getElementById('payments-iban');
+    const ibanHolderEl = document.getElementById('payments-iban-holder');
+    const beneficiaryInput = document.getElementById('payments-beneficiary');
+    const saveBeneficiaryCheckbox = document.getElementById('payments-save-beneficiary');
 
     accountSelect.addEventListener('change', updateMyIbanDisplay);
+
+    // Live IBAN -> holder name lookup, like a real bank's payee-name check
+    // before you send money. Debounced so it doesn't fire on every keystroke.
+    let ibanLookupTimer = null;
+    ibanInput.addEventListener('input', () => {
+        clearTimeout(ibanLookupTimer);
+        ibanHolderEl.textContent = '';
+        const iban = ibanInput.value.replace(/\s+/g, '').toUpperCase();
+        if (iban.length < 15) return;
+
+        ibanLookupTimer = setTimeout(async () => {
+            try {
+                const holder = await apiFetch(`/accounts/by-iban/${encodeURIComponent(iban)}`);
+                ibanHolderEl.textContent = `Titular: ${holder.first_name} ${holder.last_name}`;
+                if (!beneficiaryInput.value) {
+                    beneficiaryInput.value = `${holder.first_name} ${holder.last_name}`;
+                }
+            } catch {
+                ibanHolderEl.textContent = 'Niciun cont găsit cu acest IBAN.';
+            }
+        }, 400);
+    });
 
     document.getElementById('copy-my-iban-btn').addEventListener('click', async () => {
         const iban = document.getElementById('payments-my-iban').textContent;
@@ -1372,6 +1398,7 @@ function wirePaymentsForm() {
             beneficiary_name: document.getElementById('payments-beneficiary').value,
             amount_minor: amountMinor,
             description: document.getElementById('payments-description').value || undefined,
+            save_beneficiary: saveBeneficiaryCheckbox.checked,
         });
 
         try {
@@ -1380,6 +1407,7 @@ function wirePaymentsForm() {
             successEl.textContent = 'Plata a fost trimisă cu succes!';
             successEl.hidden = false;
             form.reset();
+            ibanHolderEl.textContent = '';
             await refreshDashboard();
         } catch (err) {
             errorEl.textContent = err.message;
