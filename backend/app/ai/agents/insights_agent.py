@@ -97,6 +97,23 @@ REGULI:
 INSTRUMENTE DISPONIBILE:
 - get_transactions_in_range: preia tranzacțiile utilizatorului dintr-un interval
   de date, pe toate conturile. Folosește pentru analize, categorii, tendințe.
+- categorize_transactions: împarte cheltuielile într-un interval pe categorii
+  (mâncare, abonamente, transport etc.). Folosește pentru „ce am cheltuit pe
+  mâncare?" sau „categorii de cheltuieli".
+- detect_recurring_payments: găsește plățile recurente / abonamentele din
+  istoricul tranzacțiilor. Folosește pentru „am abonamente recurente?", „ce
+  abonamente am?" sau „cât plătesc pe subscripții?".
+- compute_spending_stats: calculează statistici agregate (venituri, cheltuieli,
+  net, medii, cea mai mare/mică tranzacție, ziua cu cele mai multe cheltuieli)
+  pentru un interval. Folosește pentru „cât am cheltuit luna asta?",
+  „statistici" sau „rezumat financiar".
+- detect_anomalies: semnalează tranzacții neobișnuite (sumă mult peste normal
+  sau comerciant niciodată văzut până acum). Folosește pentru „am cheltuieli
+  neobișnuite?", „ceva suspect?" sau „tranzacții ciudate".
+
+Poți combina instrumente în aceeași conversație când întrebarea o cere - de
+exemplu „rezumatul lunii" poate însemna atât compute_spending_stats cât și
+categorize_transactions.
 """
 
 FALLBACK_REPLY = (
