@@ -38,3 +38,7 @@ class ConversationRead(BaseModel):
     id: uuid.UUID
     title: str | None
     created_at: datetime
+
+
+class ConversationUpdate(BaseModel):
+    title: str

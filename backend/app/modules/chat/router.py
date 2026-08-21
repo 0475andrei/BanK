@@ -28,7 +28,7 @@ from app.core.exceptions import (
 )
 from app.db.supabase_client import get_supabase
 from app.modules.chat import conversations_service
-from app.modules.chat.schemas import ChatRequest, ChatResponse, ConversationRead
+from app.modules.chat.schemas import ChatRequest, ChatResponse, ConversationRead, ConversationUpdate
 from app.modules.users.schemas import UserRead
 
 router = APIRouter()
@@ -123,6 +123,29 @@ async def list_conversations(
     user: UserRead = Depends(get_current_user),
 ) -> list[ConversationRead]:
     return await conversations_service.list_conversations(supabase, user)
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: uuid.UUID,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> dict:
+    await conversations_service.get_conversation(supabase, user, conversation_id)
+    await conversations_service.delete_conversation(supabase, conversation_id)
+    return {"status": "ok"}
+
+
+@router.patch("/conversations/{conversation_id}")
+async def rename_conversation(
+    conversation_id: uuid.UUID,
+    payload: ConversationUpdate,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> dict:
+    await conversations_service.get_conversation(supabase, user, conversation_id)
+    await conversations_service.rename_conversation(supabase, conversation_id, payload.title)
+    return {"status": "ok"}
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=list[Message])
