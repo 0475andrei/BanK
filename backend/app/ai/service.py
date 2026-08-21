@@ -23,7 +23,13 @@ from app.ai.tools.banking import (
     ListTransactionsTool,
     ListTransfersTool,
 )
-from app.ai.tools.insights import GetTransactionsInRangeTool
+from app.ai.tools.insights import (
+    CategorizeTransactionsTool,
+    ComputeSpendingStatsTool,
+    DetectAnomaliesTool,
+    DetectRecurringPaymentsTool,
+    GetTransactionsInRangeTool,
+)
 from app.ai.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
@@ -54,7 +60,15 @@ def build_insights_tools(supabase: AsyncClient) -> ToolRegistry:
     reach is defined by what it is handed, so the analytical agent cannot read
     card numbers and the banking agent cannot run an unbounded date sweep.
     """
-    return ToolRegistry([GetTransactionsInRangeTool(supabase)])
+    return ToolRegistry(
+        [
+            GetTransactionsInRangeTool(supabase),
+            CategorizeTransactionsTool(supabase),
+            DetectRecurringPaymentsTool(supabase),
+            ComputeSpendingStatsTool(supabase),
+            DetectAnomaliesTool(supabase),
+        ]
+    )
 
 
 class AIService:

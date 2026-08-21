@@ -275,7 +275,13 @@ def test_insights_agent_gets_only_its_own_tools():
     to read card numbers."""
     tools = build_insights_tools(FakeSupabase())
 
-    assert tools.names() == ["get_transactions_in_range"]
+    assert tools.names() == [
+        "get_transactions_in_range",
+        "categorize_transactions",
+        "detect_recurring_payments",
+        "compute_spending_stats",
+        "detect_anomalies",
+    ]
     assert tools.get("list_cards") is None
     assert all(tool.read_only for tool in tools)
 
