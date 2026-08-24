@@ -40,5 +40,8 @@ class ConversationRead(BaseModel):
     created_at: datetime
 
 
-class ConversationUpdate(BaseModel):
-    title: str
+class ConversationRenameRequest(BaseModel):
+    # Matches the `title VARCHAR(200)` column (migrations/0006).
+    title: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+    ]

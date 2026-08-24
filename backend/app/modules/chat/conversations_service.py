@@ -36,6 +36,32 @@ async def get_conversation(
     return conversation
 
 
+async def rename_conversation(
+    supabase: AsyncClient, user: UserRead, conversation_id: uuid.UUID, title: str
+) -> dict:
+    """Ownership-checked rename. Reuses `get_conversation`'s check rather than
+    filtering the update by user_id directly, so a foreign or nonexistent id
+    fails the same way (ConversationNotFoundError) in both places."""
+    await get_conversation(supabase, user, conversation_id)
+    resp = (
+        await supabase.table("conversations")
+        .update({"title": title})
+        .eq("id", str(conversation_id))
+        .execute()
+    )
+    return resp.data[0]
+
+
+async def delete_conversation(
+    supabase: AsyncClient, user: UserRead, conversation_id: uuid.UUID
+) -> None:
+    """Ownership-checked delete. `messages` rows cascade via the FK
+    (ON DELETE CASCADE, see migrations/0006) - nothing here deletes them
+    directly."""
+    await get_conversation(supabase, user, conversation_id)
+    await supabase.table("conversations").delete().eq("id", str(conversation_id)).execute()
+
+
 async def list_conversations(supabase: AsyncClient, user: UserRead) -> list[dict]:
     resp = (
         await supabase.table("conversations")

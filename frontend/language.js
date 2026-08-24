@@ -25,8 +25,10 @@
         const bundle = await response.json();
         // Feature bundles keep larger sections (such as Payments) maintainable
         // without delaying the shared authentication/dashboard bundle.
-        const featureResponse = await fetch(`i18n/${language}.payments.json`, { cache: 'force-cache' });
-        if (featureResponse.ok) Object.assign(bundle, await featureResponse.json());
+        for (const feature of ['payments', 'dashboard']) {
+            const featureResponse = await fetch(`i18n/${language}.${feature}.json`, { cache: 'force-cache' });
+            if (featureResponse.ok) Object.assign(bundle, await featureResponse.json());
+        }
         bundles.set(language, bundle);
         try { localStorage.setItem(cacheKey, JSON.stringify(bundle)); } catch { /* Storage is optional. */ }
         return bundle;
@@ -89,7 +91,8 @@
         const logout = actions?.querySelector('.logout-btn');
         if (logout) actions.insertBefore(selector, logout); else document.body.appendChild(selector);
     }
-    window.t = (key, fallback = key) => translate(key) || fallback;
+    window.t = (key, fallback = key, params = {}) => (translate(key) || fallback)
+        .replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? `{${name}}`));
     window.refreshTranslations = () => translatePage();
     document.addEventListener('DOMContentLoaded', async () => {
         addSelector();
