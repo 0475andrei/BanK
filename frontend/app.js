@@ -62,8 +62,64 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     wireStepUpModal();
+    wireChatAttach();
     initDashboard();
 });
+
+/** Lets the user attach a photo/PDF (e.g. "extras de cont") to the chat to
+ * supply an IBAN, instead of typing it - reuses the same /iban-ocr/extract
+ * endpoint as the Payments form's scan button (see wirePaymentsForm). On a
+ * good read, sends the IBAN as the next chat message so the assistant picks
+ * it up in context like any other user-provided IBAN; on a bad read, tells
+ * the user to type it manually instead of guessing. */
+function wireChatAttach() {
+    const attachBtn = document.getElementById('chat-attach-btn');
+    const attachInput = document.getElementById('chat-attach-input');
+    const statusEl = document.getElementById('chat-attach-status');
+    if (!attachBtn || !attachInput) return;
+
+    attachBtn.addEventListener('click', () => attachInput.click());
+
+    attachInput.addEventListener('change', async () => {
+        const file = attachInput.files[0];
+        if (!file) return;
+
+        statusEl.hidden = false;
+        statusEl.className = 'field-hint';
+        statusEl.textContent = 'Se citește fișierul...';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const res = await fetch(`${API_BASE_URL}/iban-ocr/extract`, {
+                method: 'POST',
+                credentials: 'include',
+                body: formData,
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.error?.message || `Request failed (${res.status})`);
+            }
+            const result = await res.json();
+
+            if (result.iban && !result.low_confidence) {
+                statusEl.hidden = true;
+                const chatInput = document.getElementById('chat-input');
+                chatInput.value = `IBAN citit din fișierul atașat: ${result.iban}`;
+                await sendMessage();
+            } else {
+                statusEl.className = 'field-hint ocr-warning';
+                statusEl.textContent = 'Nu am găsit un IBAN clar în fișier - te rog scrie-l manual.';
+            }
+        } catch (err) {
+            statusEl.hidden = false;
+            statusEl.className = 'field-hint ocr-warning';
+            statusEl.textContent = err.message;
+        } finally {
+            attachInput.value = '';
+        }
+    });
+}
 
 /* -------------------------------------------------------------------------
  * AI chat - talks to POST /chat (see backend app/modules/chat/router.py).

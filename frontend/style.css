@@ -1820,6 +1820,10 @@ html.i18n-pending body { visibility: hidden; }
 .field-hint.ocr-success { color: var(--income-green); }
 .field-hint.ocr-warning { color: var(--expense-red); }
 
+#chat-attach-status {
+    margin: -10px 20px 12px;
+}
+
 .ocr-upload-box { margin-bottom: 20px; }
 
 .file-dropzone {

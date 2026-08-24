@@ -178,9 +178,12 @@
                             </div>
                         </div>
                         <div class="chat-input-area">
+                            <button class="card-eye-btn" id="chat-attach-btn" type="button" title="Atașează o poză sau PDF cu extrasul de cont (pt. citit un IBAN)" aria-label="Atașează un fișier"><i data-lucide="paperclip"></i></button>
+                            <input type="file" id="chat-attach-input" accept="image/png,image/jpeg,application/pdf" hidden>
                             <input type="text" placeholder="Întreabă asistentul AI..." class="chat-input" id="chat-input">
                             <button class="btn-send" onclick="sendMessage()">➤</button>
                         </div>
+                        <p class="field-hint" id="chat-attach-status" hidden></p>
                     </div>
                 </section>
 

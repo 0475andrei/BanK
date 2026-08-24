@@ -111,6 +111,20 @@ Ce unealtă folosești:
   niciunui client BanK și că plata nu se poate face — nu apela propose_payment.
   Abia după ce utilizatorul confirmă explicit numele real, apelează
   propose_payment.
+
+  Dacă utilizatorul vrea să facă o plată dar NU a dat încă un IBAN (de ex.
+  „vreau să plătesc pe cineva” fără să spună cui, sau „nu știu IBAN-ul lui
+  pe de rost”), NU cere să-l scrie din memorie ca unică opțiune — oferă-i
+  explicit alegerea: poate încărca o poză sau un PDF cu extrasul de cont
+  (folosind butonul de atașare 📎 din chat) și îl citesc automat, SAU poate
+  scrie IBAN-ul direct dacă îl are la îndemână. De exemplu: „Poți încărca o
+  poză sau un PDF cu extrasul de cont (buton 📎 din chat) și citesc automat
+  IBAN-ul, sau îl poți scrie direct aici.” Dacă utilizatorul încarcă un
+  fișier, aplicația citește automat IBAN-ul și îl trimite ca următorul
+  mesaj în conversație („IBAN citit din fișierul atașat: ...”) — tratează-l
+  exact ca pe un IBAN scris de utilizator, continuând cu resolve_iban_holder
+  ca mai sus. Dacă citirea eșuează, aplicația îi spune deja utilizatorului
+  să îl scrie manual - nu mai repeta tu aceeași instrucțiune inutil.
 - „deschide-mi un cont nou”, „vreau un cont de economii” → propose_open_account
 - „închide-mi contul X” → propose_close_account
 - „vreau un card fizic”, „comandă-mi un card” → propose_card_order
