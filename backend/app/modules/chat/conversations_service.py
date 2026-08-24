@@ -117,3 +117,13 @@ async def load_messages(supabase: AsyncClient, conversation_id: uuid.UUID) -> li
         )
         for row in resp.data
     ]
+
+
+async def delete_conversation(supabase: AsyncClient, conversation_id: uuid.UUID) -> None:
+    """Delete a conversation and all its messages (cascade assumed or done by supabase)."""
+    await supabase.table("conversations").delete().eq("id", str(conversation_id)).execute()
+
+
+async def rename_conversation(supabase: AsyncClient, conversation_id: uuid.UUID, title: str) -> None:
+    """Rename a conversation."""
+    await supabase.table("conversations").update({"title": title}).eq("id", str(conversation_id)).execute()
