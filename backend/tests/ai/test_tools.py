@@ -28,17 +28,35 @@ from app.ai.tools.insights import (
     GetTransactionsInRangeTool,
 )
 from app.ai.tools.planning import ProjectBalanceTool, SavingsGoalTool, SimulateScenarioTool
+from app.ai.tools.propose_tools import (
+    ProposeCancelCardTool,
+    ProposeCloseAccountTool,
+    ProposeOpenAccountTool,
+    ProposePaymentTool,
+    ProposeTransferTool,
+)
 from app.ai.tools.registry import ToolRegistry
 from tests.ai.conftest import OWNED_ACCOUNT_IDS, STUB_BALANCE_MINOR, STUB_CURRENCY
 
-#: Every tool the banking agent exposes, in the order build_banking_tools
-#: registers them.
+#: Every READ-ONLY tool the banking agent exposes, in the order
+#: build_banking_tools registers them. The five propose_* write-adjacent
+#: tools (Step 11) are covered separately below, since they carry
+#: read_only = False.
 ALL_TOOL_CLASSES = (
     GetBalanceTool,
     ListAccountsTool,
     ListTransactionsTool,
     ListCardsTool,
     ListTransfersTool,
+)
+
+#: The five propose_* tools added in Step 11 - see app/ai/tools/propose_tools.py.
+ALL_PROPOSE_TOOL_CLASSES = (
+    ProposeTransferTool,
+    ProposePaymentTool,
+    ProposeOpenAccountTool,
+    ProposeCloseAccountTool,
+    ProposeCancelCardTool,
 )
 
 #: Every tool the insights agent exposes, in the order build_insights_tools
@@ -135,6 +153,11 @@ def test_all_banking_tools_are_registered(supabase):
         "list_transactions",
         "list_cards",
         "list_transfers",
+        "propose_transfer",
+        "propose_payment",
+        "propose_open_account",
+        "propose_close_account",
+        "propose_cancel_card",
     ]
 
 
@@ -224,11 +247,22 @@ def test_registry_subset_narrows_permissions(supabase):
     assert registry.subset([]).names() == []
 
 
-def test_no_write_tools_are_registered(supabase):
-    """Guardrail: the model is untrusted; it may only read in this step."""
+def test_only_the_five_propose_tools_are_write_adjacent(supabase):
+    """Guardrail, updated for Step 11: the model is still untrusted, so every
+    banking tool must be read_only EXCEPT the five propose_* tools - and even
+    those never execute anything themselves (see propose_tools.py's module
+    docstring), they only ever insert a pending `proposals` row."""
     from app.ai.service import build_banking_tools
 
-    assert all(tool.read_only for tool in build_banking_tools(supabase))
+    tools = build_banking_tools(supabase)
+    write_adjacent = {tool.name for tool in tools if not tool.read_only}
+    assert write_adjacent == {
+        "propose_transfer",
+        "propose_payment",
+        "propose_open_account",
+        "propose_close_account",
+        "propose_cancel_card",
+    }
 
 
 # ---------------------------------------------------------------------------

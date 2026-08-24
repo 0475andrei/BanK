@@ -223,6 +223,7 @@ async def test_agent_loop_survives_an_access_denial_and_returns_a_safe_message(
 
 async def test_service_end_to_end_denies_a_model_supplied_foreign_account():
     """SECURITY, end to end: AIService -> agent -> tool refuses to widen."""
+    from app.ai.providers.mock_embedding_provider import MockEmbeddingProvider
     from app.ai.providers.mock_provider import MockProvider
 
     provider = MockProvider(
@@ -231,7 +232,9 @@ async def test_service_end_to_end_denies_a_model_supplied_foreign_account():
             ModelResponse(text="That account isn't yours."),
         ]
     )
-    service = AIService(FakeSupabase(), provider=provider)
+    service = AIService(
+        FakeSupabase(), provider=provider, embedding_provider=MockEmbeddingProvider()
+    )
     caller = Context(user_id="u-1", account_ids=("acc-mine",))
 
     reply, history, _routing = await service.handle_message(
