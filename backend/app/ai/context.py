@@ -62,6 +62,12 @@ class Context(BaseModel):
 
     user_id: str = Field(min_length=1)
     account_ids: tuple[str, ...] = ()
+    #: Set only for a real HTTP chat turn (see `build_context_for_user`'s
+    #: caller in chat/router.py). Propose-tools need it to create a
+    #: `proposals` row (NOT NULL FK to conversations); None for callers with
+    #: no conversation (the CLI's `dev_context`) - a propose-tool used from
+    #: there fails cleanly as a tool error, not a crash.
+    conversation_id: str | None = None
 
     @field_validator("account_ids", mode="before")
     @classmethod
@@ -133,17 +139,21 @@ def dev_context() -> Context:
     return Context(user_id=user_id, account_ids=account_ids)
 
 
-def build_context(user_id: str, account_ids: Sequence[str]) -> Context:
+def build_context(
+    user_id: str, account_ids: Sequence[str], *, conversation_id: str | None = None
+) -> Context:
     """Explicit construction point for callers that already know the user.
 
     Takes both values as given. Callers holding an authenticated user but no
     account list should use `build_context_for_user` instead, which looks the
     accounts up rather than trusting a caller-supplied list.
     """
-    return Context(user_id=user_id, account_ids=tuple(account_ids))
+    return Context(user_id=user_id, account_ids=tuple(account_ids), conversation_id=conversation_id)
 
 
-async def build_context_for_user(user: UserRead, supabase: AsyncClient) -> Context:
+async def build_context_for_user(
+    user: UserRead, supabase: AsyncClient, *, conversation_id: str | None = None
+) -> Context:
     """Build a verified `Context` for an already-authenticated user.
 
     THE trusted way to build a Context for a real HTTP request. `user` must
@@ -170,4 +180,5 @@ async def build_context_for_user(user: UserRead, supabase: AsyncClient) -> Conte
     return Context(
         user_id=str(user.id),
         account_ids=tuple(str(account["id"]) for account in accounts),
+        conversation_id=conversation_id,
     )

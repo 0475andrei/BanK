@@ -34,6 +34,13 @@ from app.ai.tools.insights import (
 )
 from app.ai.tools.knowledge import SearchKnowledgeBaseTool
 from app.ai.tools.planning import ProjectBalanceTool, SavingsGoalTool, SimulateScenarioTool
+from app.ai.tools.propose_tools import (
+    ProposeCancelCardTool,
+    ProposeCloseAccountTool,
+    ProposeOpenAccountTool,
+    ProposePaymentTool,
+    ProposeTransferTool,
+)
 from app.ai.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
@@ -55,6 +62,13 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
             ListTransactionsTool(supabase),
             ListCardsTool(supabase),
             ListTransfersTool(supabase),
+            # Write-adjacent: each only creates a `pending` proposal row, never
+            # executes (see app/ai/tools/propose_tools.py's module docstring).
+            ProposeTransferTool(supabase),
+            ProposePaymentTool(supabase),
+            ProposeOpenAccountTool(supabase),
+            ProposeCloseAccountTool(supabase),
+            ProposeCancelCardTool(supabase),
         ]
     )
 

@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
         newConversationBtn.addEventListener('click', startNewConversation);
     }
 
+    wireStepUpModal();
     initDashboard();
 });
 
@@ -155,7 +156,10 @@ async function sendMessage() {
         });
 
         typingBubble.remove();
-        appendChatBubble('ai', response.reply);
+        const aiBubble = appendChatBubble('ai', response.reply);
+        if (response.proposal) {
+            renderProposalCard(response.proposal, aiBubble);
+        }
         setCurrentConversationId(response.conversation_id);
         void loadConversationHistory();
     } catch (err) {
@@ -435,24 +439,176 @@ function escapeHTML(str) {
     );
 }
 
-// AI Human-in-the-Loop Actions
-function confirmAIAction(buttonElement) {
-    const card = buttonElement.closest('.human-in-the-loop-card');
-    card.innerHTML = `
-        <div style="color: var(--income-green); font-weight: 500; display: flex; align-items: center; gap: 8px;">
-            <i data-lucide="check" style="width: 18px; height: 18px;"></i> Acțiune confirmată cu succes! Transferul a fost programat.
-        </div>
-    `;
+/* -------------------------------------------------------------------------
+ * AI Human-in-the-Loop Actions (Step 11) - a propose_* tool (see backend
+ * app/ai/tools/propose_tools.py) never executes anything itself; it only
+ * creates a pending row in `proposals`. This renders that as a card with
+ * Confirmă/Anulează, and drives the two endpoints
+ * (POST /chat/proposals/{id}/confirm and .../reject) that turn a pending
+ * proposal into a real, executed action - confirm only after step-up auth
+ * (Face ID or password), verified server-side.
+ * ------------------------------------------------------------------------- */
+
+/** Simple toast for background feedback that doesn't belong in the chat
+ * transcript itself (a proposal being confirmed/rejected). Auto-dismisses. */
+function showToast(message) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
+}
+
+/** Appends a confirm/reject card for an AI-proposed action inside the chat
+ * bubble that carried it (see sendMessage's use of response.proposal). */
+function renderProposalCard(proposal, container) {
+    const card = document.createElement('div');
+    card.className = 'human-in-the-loop-card';
+    card.dataset.proposalId = proposal.id;
+
+    const body = document.createElement('div');
+    body.className = 'action-proposal';
+    body.innerHTML = `<strong>Propunere de acțiune</strong><p>${escapeHTML(proposal.summary)}</p>`;
+    card.appendChild(body);
+
+    const actions = document.createElement('div');
+    actions.className = 'hitl-actions';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'btn btn-primary';
+    confirmBtn.textContent = 'Confirmă';
+    confirmBtn.addEventListener('click', () => openStepUpModal(proposal.id, card));
+
+    const rejectBtn = document.createElement('button');
+    rejectBtn.type = 'button';
+    rejectBtn.className = 'btn btn-secondary';
+    rejectBtn.textContent = 'Anulează';
+    rejectBtn.addEventListener('click', () => handleRejectProposal(proposal.id, card));
+
+    actions.appendChild(confirmBtn);
+    actions.appendChild(rejectBtn);
+    card.appendChild(actions);
+
+    container.appendChild(card);
     if (window.lucide) lucide.createIcons();
 }
 
-function cancelAIAction(buttonElement) {
-    const card = buttonElement.closest('.human-in-the-loop-card');
-    card.innerHTML = `
-        <div style="color: var(--text-muted); font-style: italic;">
-            Acțiune anulată. Dacă te răzgândești, anunță-mă.
-        </div>
-    `;
+/** Replaces a proposal card's buttons with a static status label - same
+ * shape for both terminal states, only the class/icon/text differ. */
+function markProposalCardResolved(card, state) {
+    card.classList.add(state === 'confirmed' ? 'proposal-confirmed' : 'proposal-rejected');
+    const actions = card.querySelector('.hitl-actions');
+    if (!actions) return;
+    const label = document.createElement('div');
+    label.className = `proposal-status-label ${state}`;
+    label.innerHTML = state === 'confirmed'
+        ? '<i data-lucide="check-circle"></i> Confirmată'
+        : '<i data-lucide="x-circle"></i> Anulată';
+    actions.replaceWith(label);
+    if (window.lucide) lucide.createIcons();
+}
+
+async function handleRejectProposal(proposalId, card) {
+    const buttons = card.querySelectorAll('button');
+    buttons.forEach(btn => { btn.disabled = true; });
+    try {
+        await apiFetch(`/chat/proposals/${proposalId}/reject`, { method: 'POST' });
+        markProposalCardResolved(card, 'rejected');
+        showToast('Propunerea a fost anulată.');
+    } catch (err) {
+        buttons.forEach(btn => { btn.disabled = false; });
+        showToast('Eroare la anulare.');
+    }
+}
+
+// Set by openStepUpModal, read by the modal's Face ID/password handlers -
+// there is only ever one step-up confirmation in flight at a time (the
+// modal is fully modal: nothing else on the page is reachable while open).
+let stepUpProposalId = null;
+let stepUpCard = null;
+
+function openStepUpModal(proposalId, card) {
+    stepUpProposalId = proposalId;
+    stepUpCard = card;
+
+    const modal = document.getElementById('step-up-auth-modal');
+    const errorEl = document.getElementById('step-up-error');
+    const passwordInput = document.getElementById('step-up-password-input');
+    errorEl.hidden = true;
+    passwordInput.value = '';
+    modal.hidden = false;
+}
+
+function closeStepUpModal() {
+    document.getElementById('step-up-auth-modal').hidden = true;
+    stepUpProposalId = null;
+    stepUpCard = null;
+}
+
+function showStepUpError(message) {
+    const errorEl = document.getElementById('step-up-error');
+    errorEl.textContent = message;
+    errorEl.hidden = false;
+}
+
+async function confirmWithCredential(proposalId, authMethod, credential, card) {
+    try {
+        const proposal = await apiFetch(`/chat/proposals/${proposalId}/confirm`, {
+            method: 'POST',
+            body: JSON.stringify({ auth_method: authMethod, credential }),
+        });
+        closeStepUpModal();
+        markProposalCardResolved(card, 'confirmed');
+        showToast('Acțiunea a fost confirmată și executată cu succes!');
+        return proposal;
+    } catch (err) {
+        if (err.status === 409) {
+            // Already confirmed/rejected/expired elsewhere (e.g. a second
+            // tab) - the card's own buttons are stale, so just reflect it.
+            closeStepUpModal();
+            markProposalCardResolved(card, err.code === 'proposal_expired' ? 'rejected' : 'confirmed');
+            showToast(err.message);
+            return null;
+        }
+        showStepUpError(err.message || 'Autentificare eșuată.');
+        return null;
+    }
+}
+
+function wireStepUpModal() {
+    const modal = document.getElementById('step-up-auth-modal');
+    if (!modal) return;
+
+    document.getElementById('close-step-up-modal').addEventListener('click', closeStepUpModal);
+
+    document.getElementById('step-up-face-btn').addEventListener('click', async () => {
+        if (!stepUpProposalId) return;
+        const proposalId = stepUpProposalId;
+        const card = stepUpCard;
+
+        // requestFaceConfirmationToken() (reused as-is) drives its own modal
+        // (#face-confirm-modal) - hide this one while that's on top, and
+        // bring it back if the user cancels the camera instead of finishing.
+        modal.hidden = true;
+        const token = await requestFaceConfirmationToken();
+        if (!token) {
+            modal.hidden = false;
+            return;
+        }
+        await confirmWithCredential(proposalId, 'face', token, card);
+    });
+
+    document.getElementById('step-up-password-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!stepUpProposalId) return;
+        const passwordInput = document.getElementById('step-up-password-input');
+        const password = passwordInput.value;
+        if (!password) return;
+        await confirmWithCredential(stepUpProposalId, 'password', password, stepUpCard);
+    });
 }
 
 /* =========================================================================
