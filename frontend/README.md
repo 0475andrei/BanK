@@ -9,8 +9,18 @@ index.html      dashboard (accounts, transactions, transfers, cards)
 login.html      /register.html    auth pages
 api.js          apiFetch() wrapper + money formatting + session guard
 app.js          all dashboard behaviour
+language.js     shared Romanian / Ukrainian / English page translator
 style.css       styles
 ```
+
+## Language selector
+
+Every screen includes a top-right language selector. Romanian is the default;
+the selected Romanian, English, Ukrainian, Hungarian, Turkish, Italian,
+Spanish, French, or German option is saved in browser
+`localStorage` under `bank_preferred_language`. `language.js` loads a local
+JSON bundle from `i18n/`, translates the page in place, and caches bundles in
+browser storage for instant return visits. No translation service is used.
 
 ## Running it
 

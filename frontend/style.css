@@ -357,8 +357,9 @@ body {
 .user-actions {
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: 14px;
     position: relative;
+    flex-shrink: 0;
 }
 
 /* --- Profile menu: auto-hide dropdown opened from the header name/avatar --- */
@@ -536,6 +537,10 @@ body {
     font-size: 14px;
     font-weight: 500;
     color: var(--text-main);
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Views Container */
@@ -1398,6 +1403,120 @@ body {
     align-items: center;
     justify-content: center;
     min-height: 100vh;
+}
+
+/* Machine-translation control. On auth screens it is fixed; the dashboard
+   places the same component naturally in the header action row. */
+.language-selector {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.language-selector-trigger {
+    display: inline-flex;
+    align-items: center;
+    height: 38px;
+    gap: 8px;
+    padding: 0 12px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.96));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 14px rgba(0, 0, 0, 0.18);
+    color: var(--text-main);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.language-selector-icon {
+    color: var(--primary-teal);
+    font-size: 19px;
+    line-height: 1;
+}
+
+.language-selector-current { white-space: nowrap; }
+
+.language-selector-chevron {
+    width: 7px;
+    height: 7px;
+    margin-left: 2px;
+    border-right: 1.5px solid var(--text-muted);
+    border-bottom: 1.5px solid var(--text-muted);
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 160ms ease;
+}
+
+.language-selector-trigger[aria-expanded="true"] .language-selector-chevron {
+    transform: translateY(2px) rotate(225deg);
+}
+
+.language-selector-trigger:hover,
+.language-selector-trigger:focus-visible {
+    border-color: rgba(45, 212, 191, 0.72);
+    background: linear-gradient(135deg, rgba(35, 63, 72, 0.96), rgba(15, 38, 43, 0.96));
+    outline: none;
+}
+
+.language-selector-menu {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    z-index: 500;
+    width: 178px;
+    padding: 6px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 14px;
+    background: #111c2b;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+}
+
+.language-selector-menu[hidden] { display: none; }
+
+.language-selector-option {
+    display: block;
+    width: 100%;
+    border: 0;
+    border-radius: 9px;
+    padding: 10px 11px;
+    background: transparent;
+    color: var(--text-main);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.language-selector-option:hover,
+.language-selector-option:focus-visible,
+.language-selector-option[aria-selected="true"] {
+    background: rgba(45, 212, 191, 0.13);
+    color: var(--primary-teal);
+    outline: none;
+}
+
+.auth-body .language-selector {
+    position: fixed;
+    top: 20px;
+    right: 24px;
+    z-index: 1000;
+}
+
+/* Returning visitors never see the old language before their cached bundle
+   is applied. Romanian is the source language and remains visible. */
+html.i18n-pending body { visibility: hidden; }
+
+/* Returning visitors never see the old language before their cached bundle
+   is applied. Romanian is the source language and stays visible. */
+html.i18n-pending body { visibility: hidden; }
+
+@media (max-width: 640px) {
+    .auth-body .language-selector { top: 12px; right: 12px; }
+    .top-header { padding: 0 16px; }
+    .search-bar { width: min(220px, 38vw); }
+    .user-actions { gap: 8px; }
+    .user-profile span { display: none; }
 }
 
 .auth-page {
