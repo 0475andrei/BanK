@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
@@ -22,13 +22,32 @@ class ChatRequest(BaseModel):
     conversation_id: uuid.UUID | None = None
 
 
-class ChatProposal(BaseModel):
-    """A structured action the model prepared but did not execute (see
-    app/ai/tools/banking/propose_card_order.py) - the frontend renders this
-    as a confirmation card whose button calls the real endpoint."""
+class ProposalRead(BaseModel):
+    """An AI-proposed write action, pending (or past) human confirmation.
 
-    type: str
-    data: dict[str, Any]
+    Mirrors the `proposals` table row - see
+    backend/supabase/migrations/0013_proposals.sql and
+    app/modules/chat/proposals_service.py.
+    """
+
+    id: str
+    status: str
+    proposal_type: str
+    payload: dict[str, Any]
+    summary: str
+    created_at: datetime
+
+
+class ProposalConfirmRequest(BaseModel):
+    """Step-up auth proof, verified server-side before a proposal executes.
+
+    `credential` is either a face-confirmation token (see
+    face_auth_service.create_face_confirmation) or a plaintext password -
+    never logged, never stored (see proposals_service.confirm_proposal).
+    """
+
+    auth_method: Literal["face", "password"]
+    credential: str
 
 
 class ChatResponse(BaseModel):
@@ -39,9 +58,15 @@ class ChatResponse(BaseModel):
     #: Which agent answered, and why. Optional so the contract stays
     #: backward-compatible: clients written before routing existed ignore it.
     routing: RoutingDecision | None = None
-    #: Set only when a propose_* tool ran this turn (see chat/router.py).
-    #: Optional so the contract stays backward-compatible.
-    proposal: ChatProposal | None = None
+    #: Set only when this turn's agent called a propose_* tool (see
+    #: app/ai/tools/propose_tools.py) - same "optional, additive" pattern as
+    #: `routing`. None means no action was proposed this turn. NOTE:
+    #: propose_card_order (a separate, older propose-only tool - see
+    #: app/ai/tools/banking/propose_card_order.py) does NOT write into the
+    #: `proposals` table and so never populates this field; its result
+    #: currently only reaches the user as prose in the reply, not as a
+    #: confirm/reject card. Follow-up: migrate it onto proposals_service.
+    proposal: ProposalRead | None = None
 
 
 class ConversationRead(BaseModel):

@@ -51,6 +51,7 @@ _TABLES_IN_FK_ORDER = (
     "journal_transactions",
     "audit_log",
     "messages",
+    "proposals",
     "conversations",
     "accounts",
     "users",

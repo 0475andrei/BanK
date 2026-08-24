@@ -1,0 +1,374 @@
+"""The five write-adjacent tools: propose_transfer, propose_payment,
+propose_open_account, propose_close_account, propose_cancel_card.
+
+None of these move money, open/close an account, or cancel a card. Each one
+only ever inserts a `pending` row into `proposals` (see
+app/modules/chat/proposals_service.py::create_proposal) and hands the model a
+human-readable summary to relay. The real action only ever happens later, from
+`proposals_service.confirm_proposal`, after the user has proven their identity
+via step-up auth (face token or password) - never from here.
+
+`read_only = False` on every tool in this file: it is the first time that flag
+is set anywhere in the codebase (see app/ai/tools/base.py's docstring, written
+back when "no write tools exist yet"). It marks "this tool has a side effect",
+not "this tool moves money" - the side effect is always just a proposal row.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING, Literal
+
+from pydantic import BaseModel, Field, model_validator
+
+from app.ai.context import AccessDeniedError, Context, IdentityError
+from app.ai.schemas import ToolResult
+from app.ai.tools.base import Tool
+
+if TYPE_CHECKING:
+    from supabase import AsyncClient
+
+logger = logging.getLogger(__name__)
+
+#: Every tool name in this file - chat/router.py uses this to recognise a
+#: propose_* tool result in the trace and attach the proposal to ChatResponse.
+PROPOSE_TOOL_NAMES = frozenset(
+    {
+        "propose_transfer",
+        "propose_payment",
+        "propose_open_account",
+        "propose_close_account",
+        "propose_cancel_card",
+    }
+)
+
+_PRODUCT_LABELS_RO = {
+    "checking": "curent",
+    "savings": "economii",
+    "term_deposit": "depozit la termen",
+}
+
+
+def _format_amount(amount_minor: int, currency: str) -> str:
+    """Romanian formatting, same convention as BankingAgent's SYSTEM_PROMPT:
+    comma decimal separator, two decimals. 50000 RON -> "500,00 RON"."""
+    return f"{amount_minor / 100:.2f}".replace(".", ",") + f" {currency}"
+
+
+async def _resolve_owned_account(
+    supabase: AsyncClient, context: Context, account_id: str
+) -> dict:
+    """The ONLY place an account is decided, same pattern as every read tool:
+    `context.resolve_account` can only narrow to something the context user
+    already owns, never widen. Raises IdentityError (never leaking which
+    account was refused) rather than returning something the caller might
+    mistake for success."""
+    from app.modules.accounts import service as accounts_service
+
+    resolved_id = context.resolve_account(account_id)
+    return await accounts_service.get_account_for_owner(supabase, context.user_id, resolved_id)
+
+
+class ProposeTransferInput(BaseModel):
+    from_account_id: str = Field(description="One of the user's own account identifiers.")
+    to_account_id: str = Field(description="Another of the user's own account identifiers.")
+    amount_minor: int = Field(gt=0, description="Amount in integer minor units (e.g. cents).")
+    currency: str = Field(min_length=3, max_length=3)
+    description: str | None = Field(default=None, max_length=500)
+
+
+class ProposeTransferTool(Tool):
+    name = "propose_transfer"
+    description = (
+        "Pregătește o propunere de transfer între conturile proprii ale "
+        "utilizatorului. Transferul NU se execută - utilizatorul trebuie să "
+        "confirme, cu Face ID sau parolă, înainte ca banii să se miște. "
+        "Apelează list_accounts înainte, ca să obții id-uri reale de cont - "
+        "nu ghici și nu inventa niciodată un id de cont."
+    )
+    input_schema = ProposeTransferInput
+    read_only = False
+
+    def __init__(self, supabase: AsyncClient) -> None:
+        self._supabase = supabase
+
+    async def run(self, validated_input: BaseModel, context: Context) -> ToolResult:
+        assert isinstance(validated_input, ProposeTransferInput)
+
+        try:
+            from_account = await _resolve_owned_account(
+                self._supabase, context, validated_input.from_account_id
+            )
+            to_account = await _resolve_owned_account(
+                self._supabase, context, validated_input.to_account_id
+            )
+        except IdentityError:
+            logger.warning(
+                "access denied user_id=%s tool=%s", context.user_id, self.name
+            )
+            raise
+
+        amount_str = _format_amount(validated_input.amount_minor, validated_input.currency)
+        summary = (
+            f"Transfer de {amount_str} din {from_account['name']} în {to_account['name']}"
+        )
+
+        proposal = await self._create_proposal(context, validated_input, summary)
+        return ToolResult(
+            name=self.name, data={"proposal_id": proposal["id"], "summary": summary}
+        )
+
+    async def _create_proposal(
+        self, context: Context, validated_input: ProposeTransferInput, summary: str
+    ) -> dict:
+        from app.modules.chat.proposals_service import create_proposal
+
+        return await create_proposal(
+            self._supabase,
+            user_id=context.user_id,
+            conversation_id=_require_conversation(context, self.name),
+            proposal_type="transfer",
+            payload={
+                "from_account_id": validated_input.from_account_id,
+                "to_account_id": validated_input.to_account_id,
+                "amount_minor": validated_input.amount_minor,
+                "currency": validated_input.currency,
+                "description": validated_input.description,
+            },
+            summary=summary,
+        )
+
+
+class ProposePaymentInput(BaseModel):
+    from_account_id: str = Field(description="One of the user's own account identifiers.")
+    to_iban: str = Field(min_length=15, max_length=34)
+    beneficiary_name: str = Field(
+        min_length=1, max_length=200, description="The recipient's name, as told by the user."
+    )
+    amount_minor: int = Field(gt=0, description="Amount in integer minor units (e.g. cents).")
+    description: str | None = Field(default=None, max_length=500)
+
+
+class ProposePaymentTool(Tool):
+    name = "propose_payment"
+    description = (
+        "Pregătește o propunere de plată către un alt cont prin IBAN. Plata "
+        "NU se execută - utilizatorul trebuie să confirme, cu Face ID sau "
+        "parolă. Apelează list_accounts înainte pentru contul sursă - nu "
+        "ghici și nu inventa niciodată un id de cont."
+    )
+    input_schema = ProposePaymentInput
+    read_only = False
+
+    def __init__(self, supabase: AsyncClient) -> None:
+        self._supabase = supabase
+
+    async def run(self, validated_input: BaseModel, context: Context) -> ToolResult:
+        assert isinstance(validated_input, ProposePaymentInput)
+
+        try:
+            from_account = await _resolve_owned_account(
+                self._supabase, context, validated_input.from_account_id
+            )
+        except IdentityError:
+            logger.warning(
+                "access denied user_id=%s tool=%s", context.user_id, self.name
+            )
+            raise
+
+        amount_str = _format_amount(validated_input.amount_minor, from_account["currency"])
+        summary = f"Plată de {amount_str} către {validated_input.beneficiary_name}"
+
+        from app.modules.chat.proposals_service import create_proposal
+
+        proposal = await create_proposal(
+            self._supabase,
+            user_id=context.user_id,
+            conversation_id=_require_conversation(context, self.name),
+            proposal_type="payment",
+            payload={
+                "from_account_id": validated_input.from_account_id,
+                "to_iban": validated_input.to_iban,
+                "beneficiary_name": validated_input.beneficiary_name,
+                "amount_minor": validated_input.amount_minor,
+                "description": validated_input.description,
+            },
+            summary=summary,
+        )
+        return ToolResult(
+            name=self.name, data={"proposal_id": proposal["id"], "summary": summary}
+        )
+
+
+class ProposeOpenAccountInput(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    currency: str = Field(default="RON", min_length=3, max_length=3)
+    product_type: Literal["checking", "savings", "term_deposit"] = "checking"
+    term_months: int | None = Field(
+        default=None, description="Required only when product_type is term_deposit."
+    )
+
+    @model_validator(mode="after")
+    def _term_months_required_for_term_deposit(self) -> ProposeOpenAccountInput:
+        if self.product_type == "term_deposit" and self.term_months is None:
+            raise ValueError("term_months is required when product_type is term_deposit")
+        return self
+
+
+class ProposeOpenAccountTool(Tool):
+    name = "propose_open_account"
+    description = (
+        "Pregătește o propunere de deschidere a unui cont nou (curent, "
+        "economii sau depozit la termen). Contul NU se deschide - "
+        "utilizatorul trebuie să confirme, cu Face ID sau parolă."
+    )
+    input_schema = ProposeOpenAccountInput
+    read_only = False
+
+    def __init__(self, supabase: AsyncClient) -> None:
+        self._supabase = supabase
+
+    async def run(self, validated_input: BaseModel, context: Context) -> ToolResult:
+        assert isinstance(validated_input, ProposeOpenAccountInput)
+
+        label = _PRODUCT_LABELS_RO[validated_input.product_type]
+        summary = (
+            f"Deschidere cont {label} «{validated_input.name}» în {validated_input.currency}"
+        )
+
+        from app.modules.chat.proposals_service import create_proposal
+
+        proposal = await create_proposal(
+            self._supabase,
+            user_id=context.user_id,
+            conversation_id=_require_conversation(context, self.name),
+            proposal_type="open_account",
+            payload={
+                "name": validated_input.name,
+                "currency": validated_input.currency,
+                "product_type": validated_input.product_type,
+                "term_months": validated_input.term_months,
+            },
+            summary=summary,
+        )
+        return ToolResult(
+            name=self.name, data={"proposal_id": proposal["id"], "summary": summary}
+        )
+
+
+class ProposeCloseAccountInput(BaseModel):
+    account_id: str = Field(description="One of the user's own account identifiers.")
+
+
+class ProposeCloseAccountTool(Tool):
+    name = "propose_close_account"
+    description = (
+        "Pregătește o propunere de închidere a unui cont. Contul trebuie să "
+        "aibă sold zero. Contul NU se închide - utilizatorul trebuie să "
+        "confirme, cu Face ID sau parolă."
+    )
+    input_schema = ProposeCloseAccountInput
+    read_only = False
+
+    def __init__(self, supabase: AsyncClient) -> None:
+        self._supabase = supabase
+
+    async def run(self, validated_input: BaseModel, context: Context) -> ToolResult:
+        assert isinstance(validated_input, ProposeCloseAccountInput)
+
+        try:
+            account = await _resolve_owned_account(
+                self._supabase, context, validated_input.account_id
+            )
+        except IdentityError:
+            logger.warning(
+                "access denied user_id=%s tool=%s", context.user_id, self.name
+            )
+            raise
+
+        summary = f"Închidere cont «{account['name']}»"
+
+        from app.modules.chat.proposals_service import create_proposal
+
+        proposal = await create_proposal(
+            self._supabase,
+            user_id=context.user_id,
+            conversation_id=_require_conversation(context, self.name),
+            proposal_type="close_account",
+            payload={"account_id": validated_input.account_id},
+            summary=summary,
+        )
+        return ToolResult(
+            name=self.name, data={"proposal_id": proposal["id"], "summary": summary}
+        )
+
+
+class ProposeCancelCardInput(BaseModel):
+    card_id: str = Field(description="One of the user's own card identifiers.")
+
+
+class ProposeCancelCardTool(Tool):
+    name = "propose_cancel_card"
+    description = (
+        "Pregătește o propunere de ANULARE PERMANENTĂ a unui card. Cardul nu "
+        "poate fi reactivat după anulare. Aceasta NU este o blocare "
+        "temporară - nu există nicio unealtă pentru blocare temporară. "
+        "Cardul NU se anulează prin acest apel - utilizatorul trebuie să "
+        "confirme, cu Face ID sau parolă."
+    )
+    input_schema = ProposeCancelCardInput
+    read_only = False
+
+    def __init__(self, supabase: AsyncClient) -> None:
+        self._supabase = supabase
+
+    async def run(self, validated_input: BaseModel, context: Context) -> ToolResult:
+        assert isinstance(validated_input, ProposeCancelCardInput)
+
+        card = await self._get_owned_card(context, validated_input.card_id)
+        summary = f"Anulare permanentă card •••• {card['last4']}"
+
+        from app.modules.chat.proposals_service import create_proposal
+
+        proposal = await create_proposal(
+            self._supabase,
+            user_id=context.user_id,
+            conversation_id=_require_conversation(context, self.name),
+            proposal_type="cancel_card",
+            payload={"card_id": validated_input.card_id},
+            summary=summary,
+        )
+        return ToolResult(
+            name=self.name, data={"proposal_id": proposal["id"], "summary": summary}
+        )
+
+    async def _get_owned_card(self, context: Context, card_id: str) -> dict:
+        """Cards have no direct entry in `Context.account_ids` - ownership is
+        the card's account being one the context user owns, same chain
+        cards/service.py::cancel_card checks (card -> account -> user)."""
+        resp = (
+            await self._supabase.table("cards")
+            .select("*")
+            .eq("id", card_id)
+            .maybe_single()
+            .execute()
+        )
+        card = resp.data if resp is not None else None
+        if card is None or not context.owns(str(card["account_id"])):
+            logger.warning(
+                "access denied user_id=%s tool=%s", context.user_id, self.name
+            )
+            raise AccessDeniedError()
+        return card
+
+
+def _require_conversation(context: Context, tool_name: str) -> str:
+    """propose_* tools always run inside a real chat turn, which always has a
+    conversation_id (see chat/router.py) - the only exception is the CLI's
+    dev_context, which has none. Fails as a clean tool error rather than a
+    NOT NULL constraint violation bubbling up as a raw 500."""
+    if context.conversation_id is None:
+        raise IdentityError(
+            f"{tool_name} requires an active conversation, which this caller has none of"
+        )
+    return context.conversation_id

@@ -35,11 +35,20 @@ from app.ai.tools.insights import (
     GetTransactionsInRangeTool,
 )
 from app.ai.tools.planning import ProjectBalanceTool, SavingsGoalTool, SimulateScenarioTool
+from app.ai.tools.propose_tools import (
+    ProposeCancelCardTool,
+    ProposeCloseAccountTool,
+    ProposeOpenAccountTool,
+    ProposePaymentTool,
+    ProposeTransferTool,
+)
 from app.ai.tools.registry import ToolRegistry
 from tests.ai.conftest import OWNED_ACCOUNT_IDS, STUB_BALANCE_MINOR, STUB_CURRENCY
 
-#: Every tool the banking agent exposes, in the order build_banking_tools
-#: registers them.
+#: Every READ-ONLY tool the banking agent exposes, in the order
+#: build_banking_tools registers them. The five propose_* write-adjacent
+#: tools (Step 11) are covered separately below, since they carry
+#: read_only = False.
 ALL_TOOL_CLASSES = (
     GetBalanceTool,
     ListAccountsTool,
@@ -53,6 +62,15 @@ ALL_TOOL_CLASSES = (
     RemoveBeneficiaryTool,
     CreateScheduledTransferTool,
     ProposeCardOrderTool,
+)
+
+#: The five propose_* tools added in Step 11 - see app/ai/tools/propose_tools.py.
+ALL_PROPOSE_TOOL_CLASSES = (
+    ProposeTransferTool,
+    ProposePaymentTool,
+    ProposeOpenAccountTool,
+    ProposeCloseAccountTool,
+    ProposeCancelCardTool,
 )
 
 #: Every tool the insights agent exposes, in the order build_insights_tools
@@ -156,6 +174,11 @@ def test_all_banking_tools_are_registered(supabase):
         "remove_beneficiary",
         "create_scheduled_transfer",
         "propose_card_order",
+        "propose_transfer",
+        "propose_payment",
+        "propose_open_account",
+        "propose_close_account",
+        "propose_cancel_card",
     ]
 
 
@@ -245,11 +268,15 @@ def test_registry_subset_narrows_permissions(supabase):
     assert registry.subset([]).names() == []
 
 
-#: The only write tools the banking agent may expose - each is low-stakes and
-#: reversible (see its own module docstring for why). This is the successor
-#: to the old test_no_write_tools_are_registered, back when there were none:
-#: it still catches an ACCIDENTAL new write tool showing up unreviewed, it
-#: just no longer assumes there are zero on purpose.
+#: The only write / write-adjacent tools the banking agent may expose - each
+#: is either low-stakes and reversible enough to execute directly (see its
+#: own module docstring for why), or a propose_* tool that never executes
+#: anything itself, only ever inserting a pending `proposals` row (see
+#: propose_tools.py's module docstring; propose_card_order is the one
+#: exception - it stays read_only, see its own docstring). This guardrail is
+#: the successor to the old test_no_write_tools_are_registered, back when
+#: there were none: it still catches an ACCIDENTAL new write tool showing up
+#: unreviewed, it just no longer assumes there are zero on purpose.
 _ALLOWED_WRITE_TOOL_NAMES = frozenset(
     {
         "freeze_card",
@@ -258,21 +285,25 @@ _ALLOWED_WRITE_TOOL_NAMES = frozenset(
         "add_beneficiary",
         "remove_beneficiary",
         "create_scheduled_transfer",
+        "propose_transfer",
+        "propose_payment",
+        "propose_open_account",
+        "propose_close_account",
+        "propose_cancel_card",
     }
 )
 
 
 def test_only_the_reviewed_write_tools_are_registered(supabase):
     """Guardrail: the model is untrusted. Every banking tool must be either
-    read-only, or one of the small, deliberately-reviewed write tools above
-    (propose_card_order stays read_only on purpose - see its docstring)."""
+    read-only, or one of the small, deliberately-reviewed write/write-adjacent
+    tools above (propose_card_order stays read_only on purpose - see its
+    docstring)."""
     from app.ai.service import build_banking_tools
 
-    for tool in build_banking_tools(supabase):
-        if not tool.read_only:
-            assert tool.name in _ALLOWED_WRITE_TOOL_NAMES, (
-                f"{tool.name} is a write tool but isn't in the reviewed allow-list"
-            )
+    tools = build_banking_tools(supabase)
+    write_adjacent = {tool.name for tool in tools if not tool.read_only}
+    assert write_adjacent == _ALLOWED_WRITE_TOOL_NAMES
 
 
 # ---------------------------------------------------------------------------

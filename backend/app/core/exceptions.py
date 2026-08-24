@@ -182,6 +182,28 @@ class TermDepositLockedError(AppError):
     default_message = "This account is locked until its maturity date."
 
 
+class ProposalNotPendingError(AppError):
+    """The proposal was already confirmed, rejected, or expired - see
+    app/modules/chat/proposals_service.py. 409 Conflict, same reasoning as
+    IdempotencyKeyConflictError: the request isn't invalid, it's just too
+    late to apply."""
+
+    status_code = 409
+    error_code = "proposal_not_pending"
+    default_message = "This proposal has already been confirmed, rejected, or expired."
+
+
+class ProposalExpiredError(AppError):
+    """The proposal is past its confirmation window (see
+    PROPOSAL_EXPIRY_MINUTES) - a more specific case of "not pending" so the
+    frontend can show a distinct message ("Propunerea a expirat.") rather
+    than a generic conflict."""
+
+    status_code = 409
+    error_code = "proposal_expired"
+    default_message = "This proposal has expired."
+
+
 class AIServiceUnavailableError(AppError):
     """The AI layer could not be constructed - typically missing credentials.
 

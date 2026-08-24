@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
         newConversationBtn.addEventListener('click', startNewConversation);
     }
 
+    wireStepUpModal();
     initDashboard();
 });
 
@@ -155,9 +156,9 @@ async function sendMessage() {
         });
 
         typingBubble.remove();
-        appendChatBubble('ai', response.reply);
-        if (response.proposal && response.proposal.type === 'card_order') {
-            renderCardOrderProposal(response.proposal.data);
+        const aiBubble = appendChatBubble('ai', response.reply);
+        if (response.proposal) {
+            renderProposalCard(response.proposal, aiBubble);
         }
         setCurrentConversationId(response.conversation_id);
         void loadConversationHistory();
@@ -175,64 +176,6 @@ async function sendMessage() {
     } finally {
         if (sendButton) sendButton.disabled = false;
     }
-}
-
-/** Renders a confirmation card for a card-order proposal the AI assistant
- * prepared (see backend/app/ai/tools/banking/propose_card_order.py). The
- * assistant only gathered and validated the fields - this is the one place
- * the order actually gets placed, via the same POST /card-orders the manual
- * "Comandă Card Fizic" modal uses. */
-function renderCardOrderProposal(data) {
-    const html = `
-        <div class="human-in-the-loop-card">
-            <div class="action-proposal">
-                <strong>Comandă card fizic</strong>
-                <div class="proposal-field"><span>Nume</span><span>${escapeHTML(data.full_name)}</span></div>
-                <div class="proposal-field"><span>Telefon</span><span>${escapeHTML(data.phone)}</span></div>
-                <div class="proposal-field"><span>Adresă</span><span>${escapeHTML(data.address)}</span></div>
-                <div class="proposal-field"><span>Oraș</span><span>${escapeHTML(data.city)}</span></div>
-                <div class="proposal-field"><span>Cod poștal</span><span>${escapeHTML(data.postal_code)}</span></div>
-                <div class="proposal-field"><span>Țară</span><span>${escapeHTML(data.country)}</span></div>
-                <div class="proposal-actions">
-                    <button type="button" class="btn btn-secondary" id="cancel-card-order-proposal">Renunță</button>
-                    <button type="button" class="btn btn-primary" id="confirm-card-order-proposal">Confirmă comanda</button>
-                </div>
-            </div>
-        </div>
-    `;
-    const bubble = appendChatBubble('ai', '', { html, bubbleClass: 'proposal-bubble' });
-    const card = bubble.querySelector('.human-in-the-loop-card');
-
-    card.querySelector('#cancel-card-order-proposal').addEventListener('click', () => {
-        card.innerHTML = '<div class="proposal-cancelled">Comandă anulată. Dacă te răzgândești, anunță-mă.</div>';
-    });
-
-    card.querySelector('#confirm-card-order-proposal').addEventListener('click', async (event) => {
-        const btn = event.currentTarget;
-        btn.disabled = true;
-        btn.textContent = 'Se trimite...';
-        try {
-            await apiFetch('/card-orders', {
-                method: 'POST',
-                body: JSON.stringify({
-                    account_id: data.account_id,
-                    full_name: data.full_name,
-                    phone: data.phone,
-                    address: data.address,
-                    city: data.city,
-                    postal_code: data.postal_code,
-                    country: data.country,
-                }),
-            });
-            card.innerHTML =
-                '<div class="proposal-confirmed"><i data-lucide="check" class="icon"></i> Comandă plasată cu succes!</div>';
-            if (window.lucide) lucide.createIcons();
-        } catch (err) {
-            btn.disabled = false;
-            btn.textContent = 'Confirmă comanda';
-            alert(err.message);
-        }
-    });
 }
 
 /** Clears the chat panel back to the empty-state welcome bubble and detaches
@@ -496,6 +439,177 @@ function escapeHTML(str) {
     );
 }
 
+/* -------------------------------------------------------------------------
+ * AI Human-in-the-Loop Actions (Step 11) - a propose_* tool (see backend
+ * app/ai/tools/propose_tools.py) never executes anything itself; it only
+ * creates a pending row in `proposals`. This renders that as a card with
+ * Confirmă/Anulează, and drives the two endpoints
+ * (POST /chat/proposals/{id}/confirm and .../reject) that turn a pending
+ * proposal into a real, executed action - confirm only after step-up auth
+ * (Face ID or password), verified server-side.
+ * ------------------------------------------------------------------------- */
+
+/** Simple toast for background feedback that doesn't belong in the chat
+ * transcript itself (a proposal being confirmed/rejected). Auto-dismisses. */
+function showToast(message) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
+}
+
+/** Appends a confirm/reject card for an AI-proposed action inside the chat
+ * bubble that carried it (see sendMessage's use of response.proposal). */
+function renderProposalCard(proposal, container) {
+    const card = document.createElement('div');
+    card.className = 'human-in-the-loop-card';
+    card.dataset.proposalId = proposal.id;
+
+    const body = document.createElement('div');
+    body.className = 'action-proposal';
+    body.innerHTML = `<strong>Propunere de acțiune</strong><p>${escapeHTML(proposal.summary)}</p>`;
+    card.appendChild(body);
+
+    const actions = document.createElement('div');
+    actions.className = 'hitl-actions';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'btn btn-primary';
+    confirmBtn.textContent = 'Confirmă';
+    confirmBtn.addEventListener('click', () => openStepUpModal(proposal.id, card));
+
+    const rejectBtn = document.createElement('button');
+    rejectBtn.type = 'button';
+    rejectBtn.className = 'btn btn-secondary';
+    rejectBtn.textContent = 'Anulează';
+    rejectBtn.addEventListener('click', () => handleRejectProposal(proposal.id, card));
+
+    actions.appendChild(confirmBtn);
+    actions.appendChild(rejectBtn);
+    card.appendChild(actions);
+
+    container.appendChild(card);
+    if (window.lucide) lucide.createIcons();
+}
+
+/** Replaces a proposal card's buttons with a static status label - same
+ * shape for both terminal states, only the class/icon/text differ. */
+function markProposalCardResolved(card, state) {
+    card.classList.add(state === 'confirmed' ? 'proposal-confirmed' : 'proposal-rejected');
+    const actions = card.querySelector('.hitl-actions');
+    if (!actions) return;
+    const label = document.createElement('div');
+    label.className = `proposal-status-label ${state}`;
+    label.innerHTML = state === 'confirmed'
+        ? '<i data-lucide="check-circle"></i> Confirmată'
+        : '<i data-lucide="x-circle"></i> Anulată';
+    actions.replaceWith(label);
+    if (window.lucide) lucide.createIcons();
+}
+
+async function handleRejectProposal(proposalId, card) {
+    const buttons = card.querySelectorAll('button');
+    buttons.forEach(btn => { btn.disabled = true; });
+    try {
+        await apiFetch(`/chat/proposals/${proposalId}/reject`, { method: 'POST' });
+        markProposalCardResolved(card, 'rejected');
+        showToast('Propunerea a fost anulată.');
+    } catch (err) {
+        buttons.forEach(btn => { btn.disabled = false; });
+        showToast('Eroare la anulare.');
+    }
+}
+
+// Set by openStepUpModal, read by the modal's Face ID/password handlers -
+// there is only ever one step-up confirmation in flight at a time (the
+// modal is fully modal: nothing else on the page is reachable while open).
+let stepUpProposalId = null;
+let stepUpCard = null;
+
+function openStepUpModal(proposalId, card) {
+    stepUpProposalId = proposalId;
+    stepUpCard = card;
+
+    const modal = document.getElementById('step-up-auth-modal');
+    const errorEl = document.getElementById('step-up-error');
+    const passwordInput = document.getElementById('step-up-password-input');
+    errorEl.hidden = true;
+    passwordInput.value = '';
+    modal.hidden = false;
+}
+
+function closeStepUpModal() {
+    document.getElementById('step-up-auth-modal').hidden = true;
+    stepUpProposalId = null;
+    stepUpCard = null;
+}
+
+function showStepUpError(message) {
+    const errorEl = document.getElementById('step-up-error');
+    errorEl.textContent = message;
+    errorEl.hidden = false;
+}
+
+async function confirmWithCredential(proposalId, authMethod, credential, card) {
+    try {
+        const proposal = await apiFetch(`/chat/proposals/${proposalId}/confirm`, {
+            method: 'POST',
+            body: JSON.stringify({ auth_method: authMethod, credential }),
+        });
+        closeStepUpModal();
+        markProposalCardResolved(card, 'confirmed');
+        showToast('Acțiunea a fost confirmată și executată cu succes!');
+        return proposal;
+    } catch (err) {
+        if (err.status === 409) {
+            // Already confirmed/rejected/expired elsewhere (e.g. a second
+            // tab) - the card's own buttons are stale, so just reflect it.
+            closeStepUpModal();
+            markProposalCardResolved(card, err.code === 'proposal_expired' ? 'rejected' : 'confirmed');
+            showToast(err.message);
+            return null;
+        }
+        showStepUpError(err.message || 'Autentificare eșuată.');
+        return null;
+    }
+}
+
+function wireStepUpModal() {
+    const modal = document.getElementById('step-up-auth-modal');
+    if (!modal) return;
+
+    document.getElementById('close-step-up-modal').addEventListener('click', closeStepUpModal);
+
+    document.getElementById('step-up-face-btn').addEventListener('click', async () => {
+        if (!stepUpProposalId) return;
+        const proposalId = stepUpProposalId;
+        const card = stepUpCard;
+
+        // requestFaceConfirmationToken() (reused as-is) drives its own modal
+        // (#face-confirm-modal) - hide this one while that's on top, and
+        // bring it back if the user cancels the camera instead of finishing.
+        modal.hidden = true;
+        const token = await requestFaceConfirmationToken();
+        if (!token) {
+            modal.hidden = false;
+            return;
+        }
+        await confirmWithCredential(proposalId, 'face', token, card);
+    });
+
+    document.getElementById('step-up-password-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!stepUpProposalId) return;
+        const passwordInput = document.getElementById('step-up-password-input');
+        const password = passwordInput.value;
+        if (!password) return;
+        await confirmWithCredential(stepUpProposalId, 'password', password, stepUpCard);
+    });
+}
 
 /* =========================================================================
  * Live backend wiring (accounts, transactions, transfers). Everything above

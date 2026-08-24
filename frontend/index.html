@@ -654,6 +654,41 @@
         </div>
     </div>
 
+    <!-- Step-up auth modal - confirms an AI-proposed action (see
+         app/modules/chat/proposals_service.py) with Face ID or password
+         before the backend executes it. Opened by openStepUpModal() in
+         app.js from a propose_* proposal card's "Confirmă" button. -->
+    <div class="modal-overlay" id="step-up-auth-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Confirmă identitatea</h3>
+                <button class="modal-close" id="close-step-up-modal"><i data-lucide="x"></i></button>
+            </div>
+            <div class="auth-error" id="step-up-error" hidden></div>
+
+            <div class="step-up-option">
+                <button type="button" class="btn btn-primary" id="step-up-face-btn" style="width:100%;">
+                    <i data-lucide="scan-face"></i> Confirmare cu Face ID
+                </button>
+            </div>
+
+            <div class="step-up-divider"><span>sau</span></div>
+
+            <form id="step-up-password-form" class="step-up-option">
+                <label class="field-label" for="step-up-password-input">Confirmare cu parolă</label>
+                <input class="field-input" type="password" id="step-up-password-input"
+                       placeholder="Introdu parola contului" required autocomplete="current-password">
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-secondary" style="width:100%;">Confirmă</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lightweight toast for background action feedback (proposal
+         confirmed/rejected) - see showToast() in app.js. -->
+    <div id="toast-container" aria-live="polite"></div>
+
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="api.js"></script>
     <script src="app.js"></script>

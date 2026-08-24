@@ -145,6 +145,7 @@ async def create_payment(
     payload: PaymentCreate,
     idempotency_key: str,
     face_token: str | None = None,
+    proposal_pre_authorized: bool = False,
 ) -> dict:
     existing = await _find_by_idempotency_key(supabase, idempotency_key)
     if existing is not None:
@@ -184,12 +185,17 @@ async def create_payment(
             )
 
     is_new_person = await _is_first_payment_to_person(supabase, user.id, to_account["user_id"])
-    await face_auth_service.enforce_face_confirmation(
-        supabase,
-        user,
-        required=face_auth_service.requires_face_confirmation(payload.amount_minor) or is_new_person,
-        token=face_token,
-    )
+    # proposal_pre_authorized=True: identity already verified by the proposal
+    # confirmation flow (face token or password). Only set by proposals_service.
+    # Existing callers (payments/router.py) never set this flag.
+    if not proposal_pre_authorized:
+        await face_auth_service.enforce_face_confirmation(
+            supabase,
+            user,
+            required=face_auth_service.requires_face_confirmation(payload.amount_minor)
+            or is_new_person,
+            token=face_token,
+        )
 
     try:
         resp = await supabase.rpc(

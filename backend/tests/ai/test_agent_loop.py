@@ -96,6 +96,11 @@ async def test_tools_are_advertised_to_the_provider(make_agent, context):
         "remove_beneficiary",
         "create_scheduled_transfer",
         "propose_card_order",
+        "propose_transfer",
+        "propose_payment",
+        "propose_open_account",
+        "propose_close_account",
+        "propose_cancel_card",
     ]
 
     params = specs[0]["function"]["parameters"]
@@ -103,14 +108,24 @@ async def test_tools_are_advertised_to_the_provider(make_agent, context):
     # account_id is optional now — the model is not asked to supply identity.
     assert not params.get("required")
 
-    # Account IDENTITY specifically is never mandatory: the application
-    # resolves "my account" itself, so any tool that accepts account_id
-    # must never require it. Other action-specific parameters legitimately
-    # can be required (e.g. freeze_card needs `last4` - there's no way to
-    # resolve WHICH card without the model naming one).
-    for spec in specs:
+    # Nothing the read-only tools show is ever mandatory: identity is supplied
+    # by the application, so the model never has to produce (or guess) an
+    # identifier.
+    for spec in specs[:5]:
+        assert not spec["function"]["parameters"].get("required"), spec["function"]["name"]
+
+    # Beyond the read-only set, `account_id` specifically is still never
+    # mandatory - EXCEPT propose_close_account, which inherently needs to
+    # know which account to close and has no sane default to guess at (unlike
+    # every other tool here, where "the default account" is a reasonable
+    # fallback). Other required fields (last4, from_account_id/to_account_id,
+    # amount, ...) are the content of the action itself, not identity.
+    for spec in specs[5:]:
         required = spec["function"]["parameters"].get("required") or []
-        assert "account_id" not in required, spec["function"]["name"]
+        if spec["function"]["name"] == "propose_close_account":
+            assert "account_id" in required
+        else:
+            assert "account_id" not in required, spec["function"]["name"]
 
 
 @pytest.mark.parametrize(

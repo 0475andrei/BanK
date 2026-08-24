@@ -58,6 +58,7 @@ async def create_transfer(
     payload: TransferCreate,
     idempotency_key: str,
     face_token: str | None = None,
+    proposal_pre_authorized: bool = False,
 ) -> dict:
     existing = await _find_by_idempotency_key(supabase, idempotency_key)
     if existing is not None:
@@ -76,12 +77,16 @@ async def create_transfer(
     if from_account["currency"] != currency or to_account["currency"] != currency:
         raise CurrencyMismatchError("Transfer currency must match both accounts' currency.")
 
-    await face_auth_service.enforce_face_confirmation(
-        supabase,
-        user,
-        required=face_auth_service.requires_face_confirmation(payload.amount_minor),
-        token=face_token,
-    )
+    # proposal_pre_authorized=True: identity already verified by the proposal
+    # confirmation flow (face token or password). Only set by proposals_service.
+    # Existing callers (transfers/router.py) never set this flag.
+    if not proposal_pre_authorized:
+        await face_auth_service.enforce_face_confirmation(
+            supabase,
+            user,
+            required=face_auth_service.requires_face_confirmation(payload.amount_minor),
+            token=face_token,
+        )
 
     try:
         resp = await supabase.rpc(

@@ -22,6 +22,7 @@ from app.ai.providers.mock_embedding_provider import MockEmbeddingProvider
 from app.ai.providers.mock_provider import MockProvider
 from app.ai.schemas import Message, ModelResponse
 from app.ai.service import AIService
+from app.ai.tools.propose_tools import PROPOSE_TOOL_NAMES
 from app.config import ConfigurationError, Settings, get_settings
 from app.core.dependencies import get_current_user
 from app.core.exceptions import (
@@ -30,13 +31,14 @@ from app.core.exceptions import (
     AIServiceUnavailableError,
 )
 from app.db.supabase_client import get_supabase
-from app.modules.chat import conversations_service
+from app.modules.chat import conversations_service, proposals_service
 from app.modules.chat.schemas import (
-    ChatProposal,
     ChatRequest,
     ChatResponse,
     ConversationRead,
     ConversationRenameRequest,
+    ProposalConfirmRequest,
+    ProposalRead,
 )
 from app.modules.users.schemas import UserRead
 
@@ -45,28 +47,6 @@ router = APIRouter()
 PROVIDER_MOCK = "mock"
 PROVIDER_AZURE = "azure"
 _VALID_PROVIDERS = (PROVIDER_MOCK, PROVIDER_AZURE)
-
-#: tool name -> proposal type, for tools that only propose an action instead
-#: of executing it (see app/ai/tools/banking/propose_card_order.py). Add an
-#: entry here for any future propose_* tool.
-_PROPOSAL_TOOLS = {"propose_card_order": "card_order"}
-
-
-def _extract_proposal(new_messages: list[Message]) -> ChatProposal | None:
-    """The last successful propose_* tool result this turn, if any - scanned
-    from the trace rather than threaded through the agent/orchestrator, so
-    this stays a router-level concern and Orchestrator.dispatch's return
-    shape doesn't need to widen for one tool family."""
-    for message in reversed(new_messages):
-        if message.role != "tool" or message.name not in _PROPOSAL_TOOLS:
-            continue
-        try:
-            payload = json.loads(message.content or "{}")
-        except json.JSONDecodeError:
-            continue
-        if payload.get("ok"):
-            return ChatProposal(type=_PROPOSAL_TOOLS[message.name], data=payload.get("result", {}))
-    return None
 
 MOCK_REPLY = (
     "AI provider is set to mock — set AI_PROVIDER=azure in .env to use the real model."
@@ -135,9 +115,6 @@ async def chat(
     provider: ModelProvider = Depends(get_model_provider),
     embedding_provider: EmbeddingProvider = Depends(get_embedding_provider),
 ) -> ChatResponse:
-    # THE EDGE. Built from the authenticated session, never from the payload.
-    context = await build_context_for_user(user, supabase)
-
     if payload.conversation_id is None:
         conversation = await conversations_service.create_conversation(supabase, user)
     else:
@@ -147,6 +124,12 @@ async def chat(
             supabase, user, payload.conversation_id
         )
     conversation_id = uuid.UUID(conversation["id"])
+
+    # THE EDGE. Built from the authenticated session, never from the payload.
+    # conversation_id is resolved above so propose_* tools can attach a
+    # proposal to this turn's conversation (proposals.conversation_id is
+    # NOT NULL - see backend/supabase/migrations/0013_proposals.sql).
+    context = await build_context_for_user(user, supabase, conversation_id=str(conversation_id))
 
     history = await conversations_service.load_messages(supabase, conversation_id)
 
@@ -173,11 +156,39 @@ async def chat(
             routing=routing if is_final_reply else None,
         )
 
-    proposal = _extract_proposal(new_messages)
+    proposal = await _extract_proposal(supabase, user, new_messages)
 
     return ChatResponse(
         reply=reply, conversation_id=conversation_id, routing=routing, proposal=proposal
     )
+
+
+async def _extract_proposal(
+    supabase: AsyncClient, user: UserRead, new_messages: list[Message]
+) -> ProposalRead | None:
+    """If this turn called a propose_* tool and it succeeded, surface the
+    proposal it created on the response (see ChatResponse.proposal) so the
+    frontend can render a confirm/reject card without a second round trip.
+
+    Scans the tool-result trace rather than threading a return value through
+    handle_message/dispatch - same reasoning as `routing`: the trace is
+    already the single source of truth for what happened this turn.
+
+    NOTE: propose_card_order (see app/ai/tools/banking/propose_card_order.py)
+    is NOT in PROPOSE_TOOL_NAMES and does not write a `proposals` row, so it
+    never surfaces here - its result currently only reaches the user as
+    prose in the reply. Follow-up: migrate it onto proposals_service so it
+    gets the same confirm/reject card as the other propose_* tools."""
+    for message in new_messages:
+        if message.role != "tool" or message.name not in PROPOSE_TOOL_NAMES:
+            continue
+        content = json.loads(message.content or "{}")
+        if not content.get("ok"):
+            continue
+        proposal_id = content["result"]["proposal_id"]
+        proposal = await proposals_service.get_proposal(supabase, user, proposal_id)
+        return ProposalRead.model_validate(proposal)
+    return None
 
 
 @router.get("/conversations", response_model=list[ConversationRead])
@@ -217,3 +228,26 @@ async def delete_conversation(
     user: UserRead = Depends(get_current_user),
 ) -> None:
     await conversations_service.delete_conversation(supabase, user, conversation_id)
+
+
+@router.post("/proposals/{proposal_id}/confirm", response_model=ProposalRead)
+async def confirm_proposal(
+    proposal_id: uuid.UUID,
+    payload: ProposalConfirmRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> ProposalRead:
+    proposal = await proposals_service.confirm_proposal(
+        supabase, user, str(proposal_id), payload.auth_method, payload.credential
+    )
+    return ProposalRead.model_validate(proposal)
+
+
+@router.post("/proposals/{proposal_id}/reject", response_model=ProposalRead)
+async def reject_proposal(
+    proposal_id: uuid.UUID,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> ProposalRead:
+    proposal = await proposals_service.reject_proposal(supabase, user, str(proposal_id))
+    return ProposalRead.model_validate(proposal)
