@@ -1281,14 +1281,14 @@ async function loadBeneficiaries() {
         const contacts = await apiFetch('/beneficiaries');
         renderBeneficiariesList(contacts);
     } catch (err) {
-        list.innerHTML = `<div class="empty-state">Nu s-au putut încărca contactele: ${escapeHTML(err.message)}</div>`;
+        list.innerHTML = `<div class="empty-state">${t('payments.contacts_load_error')}: ${escapeHTML(err.message)}</div>`;
     }
 }
 
 function renderBeneficiariesList(contacts) {
     const list = document.getElementById('beneficiaries-list');
     if (contacts.length === 0) {
-        list.innerHTML = '<div class="empty-state">Niciun contact încă - apare automat după prima plată.</div>';
+        list.innerHTML = `<div class="empty-state">${t('payments.no_contacts')}</div>`;
         return;
     }
     list.innerHTML = contacts.map(c => `
@@ -1317,14 +1317,14 @@ async function loadPayments() {
         const payments = await apiFetch('/payments');
         renderPaymentsList(payments);
     } catch (err) {
-        list.innerHTML = `<div class="empty-state">Nu s-a putut încărca istoricul: ${escapeHTML(err.message)}</div>`;
+        list.innerHTML = `<div class="empty-state">${t('payments.history_load_error')}: ${escapeHTML(err.message)}</div>`;
     }
 }
 
 function renderPaymentsList(payments) {
     const list = document.getElementById('payments-list');
     if (payments.length === 0) {
-        list.innerHTML = '<div class="empty-state">Nicio plată încă.</div>';
+        list.innerHTML = `<div class="empty-state">${t('payments.no_payments')}</div>`;
         return;
     }
     list.innerHTML = payments.map(p => `
@@ -1362,12 +1362,12 @@ function wirePaymentsForm() {
         ibanLookupTimer = setTimeout(async () => {
             try {
                 const holder = await apiFetch(`/accounts/by-iban/${encodeURIComponent(iban)}`);
-                ibanHolderEl.textContent = `Titular: ${holder.first_name} ${holder.last_name}`;
+                ibanHolderEl.textContent = `${t('payments.account_holder')}: ${holder.first_name} ${holder.last_name}`;
                 if (!beneficiaryInput.value) {
                     beneficiaryInput.value = `${holder.first_name} ${holder.last_name}`;
                 }
             } catch {
-                ibanHolderEl.textContent = 'Niciun cont găsit cu acest IBAN.';
+                ibanHolderEl.textContent = t('payments.iban_not_found');
             }
         }, 400);
     });
@@ -1404,7 +1404,7 @@ function wirePaymentsForm() {
         try {
             const result = await submitWithFaceConfirmation('/payments', idempotencyKey, body);
             if (result === CONFIRMATION_CANCELLED) return; // user closed the camera modal - stay put, silently
-            successEl.textContent = 'Plata a fost trimisă cu succes!';
+            successEl.textContent = t('payments.sent_success');
             successEl.hidden = false;
             form.reset();
             ibanHolderEl.textContent = '';
