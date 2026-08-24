@@ -27,6 +27,12 @@ dependencies = [
     # (81+) dropped pkg_resources entirely as part of its own deprecation -
     # so this needs pinning below that, not just "setuptools" unpinned.
     "setuptools<81",
+    # app/ai/knowledge: RAG ingestion for the docs agent. Document
+    # Intelligence extracts structured text (tables as rows, not flattened
+    # prose) from a PDF; embeddings + storage reuse Azure OpenAI (via
+    # `openai` above) and Supabase's pgvector (via `supabase` above) - no
+    # extra dependency needed for either of those two.
+    "azure-ai-documentintelligence>=1.0.0",
 ]
 
 [project.optional-dependencies]
