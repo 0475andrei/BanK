@@ -50,3 +50,10 @@ class ConversationRead(BaseModel):
     id: uuid.UUID
     title: str | None
     created_at: datetime
+
+
+class ConversationRenameRequest(BaseModel):
+    # Matches the `title VARCHAR(200)` column (migrations/0006).
+    title: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+    ]

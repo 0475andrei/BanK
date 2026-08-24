@@ -17,6 +17,8 @@ from supabase import AsyncClient
 
 from app.ai.context import build_context_for_user
 from app.ai.providers.base import ModelProvider, ProviderError
+from app.ai.providers.embedding_base import EmbeddingProvider
+from app.ai.providers.mock_embedding_provider import MockEmbeddingProvider
 from app.ai.providers.mock_provider import MockProvider
 from app.ai.schemas import Message, ModelResponse
 from app.ai.service import AIService
@@ -29,7 +31,13 @@ from app.core.exceptions import (
 )
 from app.db.supabase_client import get_supabase
 from app.modules.chat import conversations_service
-from app.modules.chat.schemas import ChatProposal, ChatRequest, ChatResponse, ConversationRead
+from app.modules.chat.schemas import (
+    ChatProposal,
+    ChatRequest,
+    ChatResponse,
+    ConversationRead,
+    ConversationRenameRequest,
+)
 from app.modules.users.schemas import UserRead
 
 router = APIRouter()
@@ -92,12 +100,40 @@ def get_model_provider(settings: Settings = Depends(get_settings)) -> ModelProvi
     )
 
 
+def get_embedding_provider(settings: Settings = Depends(get_settings)) -> EmbeddingProvider:
+    """Same provider-selection contract as `get_model_provider`, for embeddings.
+
+    Kept as a separate dependency (not folded into `get_model_provider`)
+    because a deployment can have chat configured without embeddings - only
+    the docs agent's tool actually calls this one, so only asking for
+    documentation should be able to fail on it.
+    """
+    choice = settings.AI_PROVIDER.strip().lower()
+
+    if choice == PROVIDER_MOCK:
+        return MockEmbeddingProvider()
+
+    if choice == PROVIDER_AZURE:
+        from app.ai.providers.azure_embedding_provider import AzureEmbeddingProvider
+
+        try:
+            return AzureEmbeddingProvider(settings)
+        except ConfigurationError as exc:
+            raise AIServiceUnavailableError() from exc
+
+    raise AIProviderMisconfiguredError(
+        f"AI_PROVIDER={settings.AI_PROVIDER!r} is not a known provider. "
+        f"Valid values: {', '.join(_VALID_PROVIDERS)}."
+    )
+
+
 @router.post("", response_model=ChatResponse)
 async def chat(
     payload: ChatRequest,
     supabase: AsyncClient = Depends(get_supabase),
     user: UserRead = Depends(get_current_user),
     provider: ModelProvider = Depends(get_model_provider),
+    embedding_provider: EmbeddingProvider = Depends(get_embedding_provider),
 ) -> ChatResponse:
     # THE EDGE. Built from the authenticated session, never from the payload.
     context = await build_context_for_user(user, supabase)
@@ -114,7 +150,7 @@ async def chat(
 
     history = await conversations_service.load_messages(supabase, conversation_id)
 
-    service = AIService(supabase, provider=provider)
+    service = AIService(supabase, provider=provider, embedding_provider=embedding_provider)
     try:
         reply, updated_history, routing = await service.handle_message(
             history, payload.message, context
@@ -160,3 +196,24 @@ async def get_conversation_messages(
 ) -> list[Message]:
     await conversations_service.get_conversation(supabase, user, conversation_id)
     return await conversations_service.load_messages(supabase, conversation_id)
+
+
+@router.patch("/conversations/{conversation_id}", response_model=ConversationRead)
+async def rename_conversation(
+    conversation_id: uuid.UUID,
+    payload: ConversationRenameRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> dict:
+    return await conversations_service.rename_conversation(
+        supabase, user, conversation_id, payload.title
+    )
+
+
+@router.delete("/conversations/{conversation_id}", status_code=204)
+async def delete_conversation(
+    conversation_id: uuid.UUID,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> None:
+    await conversations_service.delete_conversation(supabase, user, conversation_id)

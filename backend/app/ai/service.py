@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from app.ai.agents.banking_agent import BankingAgent
+from app.ai.agents.docs_agent import DocsAgent
 from app.ai.agents.insights_agent import InsightsAgent
 from app.ai.agents.planning_agent import PlanningAgent
 from app.ai.context import Context
@@ -38,11 +39,14 @@ from app.ai.tools.insights import (
     DetectRecurringPaymentsTool,
     GetTransactionsInRangeTool,
 )
+from app.ai.tools.knowledge import SearchKnowledgeBaseTool
 from app.ai.tools.planning import ProjectBalanceTool, SavingsGoalTool, SimulateScenarioTool
 from app.ai.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
     from supabase import AsyncClient
+
+    from app.ai.providers.embedding_base import EmbeddingProvider
 
 
 def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
@@ -108,6 +112,17 @@ def build_planning_tools(supabase: AsyncClient) -> ToolRegistry:
     )
 
 
+def build_docs_tools(
+    supabase: AsyncClient, embedding_provider: EmbeddingProvider
+) -> ToolRegistry:
+    """The docs agent's one tool: semantic search over ingested documentation.
+
+    Unlike the other three registries, this one also needs an embedding
+    provider (to embed the query) - the tool holds both.
+    """
+    return ToolRegistry([SearchKnowledgeBaseTool(supabase, embedding_provider)])
+
+
 class AIService:
     """Holds the orchestrator and hands conversations to the routed agent."""
 
@@ -115,20 +130,29 @@ class AIService:
         self,
         supabase: AsyncClient,
         provider: ModelProvider | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
         orchestrator: Orchestrator | None = None,
     ) -> None:
-        # Real provider by default; tests inject the mock.
+        # Real providers by default; tests inject mocks.
         if provider is None:
             from app.ai.providers.azure_provider import AzureOpenAIProvider
 
             provider = AzureOpenAIProvider()
+        if embedding_provider is None:
+            from app.ai.providers.azure_embedding_provider import AzureEmbeddingProvider
+
+            embedding_provider = AzureEmbeddingProvider()
         self._provider = provider
         # The provider goes to the orchestrator too: routing's LLM fallback
         # needs a model of its own now that more than one agent is registered.
-        self._orchestrator = orchestrator or self._build_orchestrator(supabase, provider)
+        self._orchestrator = orchestrator or self._build_orchestrator(
+            supabase, provider, embedding_provider
+        )
 
     @staticmethod
-    def _build_orchestrator(supabase: AsyncClient, provider: ModelProvider) -> Orchestrator:
+    def _build_orchestrator(
+        supabase: AsyncClient, provider: ModelProvider, embedding_provider: EmbeddingProvider
+    ) -> Orchestrator:
         """Register the agents, in the order routing should consider them.
 
         ORDER MATTERS. `Orchestrator._match_rules` walks agents in registration
@@ -137,6 +161,11 @@ class AIService:
         it and Banking share the `cheltui` / `bani` keywords (Banking has had
         them since Step 6), and for a phrase like "cât am cheltuit?" the
         analytical reading is the more specific one.
+
+        Docs goes right after Insights, for the same kind of reason: a message
+        like "ce comision are contul curent" contains Banking's `cont` stem
+        too, but the more specific reading is "what does the fee schedule say"
+        - a documentation question, not a request to read the account's data.
 
         Planning goes LAST deliberately, for the opposite reason: it shares
         the `econom` stem with Banking's "Economii" account keyword, and here
@@ -150,6 +179,7 @@ class AIService:
         """
         orchestrator = Orchestrator(provider=provider)
         orchestrator.register(InsightsAgent(provider, build_insights_tools(supabase)))
+        orchestrator.register(DocsAgent(provider, build_docs_tools(supabase, embedding_provider)))
         orchestrator.register(
             BankingAgent(provider, build_banking_tools(supabase)), default=True
         )
