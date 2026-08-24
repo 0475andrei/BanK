@@ -10,6 +10,7 @@ from app.ai.tools.banking.list_transactions import ListTransactionsTool
 from app.ai.tools.banking.list_transfers import ListTransfersTool
 from app.ai.tools.banking.manage_beneficiary import AddBeneficiaryTool, RemoveBeneficiaryTool
 from app.ai.tools.banking.propose_card_order import ProposeCardOrderTool
+from app.ai.tools.banking.resolve_iban_holder import ResolveIbanHolderTool
 from app.ai.tools.banking.set_card_spending_limit import SetCardSpendingLimitTool
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "ListTransfersTool",
     "ProposeCardOrderTool",
     "RemoveBeneficiaryTool",
+    "ResolveIbanHolderTool",
     "SetCardSpendingLimitTool",
     "UnfreezeCardTool",
 ]

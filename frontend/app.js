@@ -797,7 +797,7 @@ async function loadTransactions() {
     const list = document.getElementById('transactions-list');
     const active = currentAccounts.filter(a => a.status === 'active');
     if (active.length === 0) {
-        list.innerHTML = '<div class="empty-state">Fără activitate încă.</div>';
+        list.innerHTML = `<div class="empty-state">${t('dashboard.no_activity')}</div>`;
         return;
     }
 
@@ -811,7 +811,7 @@ async function loadTransactions() {
         const entries = perAccount.flat().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
 
         if (entries.length === 0) {
-            list.innerHTML = '<div class="empty-state">Fără activitate încă.</div>';
+            list.innerHTML = `<div class="empty-state">${t('dashboard.no_activity')}</div>`;
             return;
         }
 
@@ -843,7 +843,7 @@ async function loadAllTransactions() {
 
     const active = currentAccounts.filter(a => a.status === 'active');
     if (active.length === 0) {
-        container.innerHTML = '<div class="empty-state">Fără activitate încă.</div>';
+        container.innerHTML = `<div class="empty-state">${t('dashboard.no_activity')}</div>`;
         return;
     }
 
@@ -862,7 +862,7 @@ async function loadAllTransactions() {
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
         if (entries.length === 0) {
-            container.innerHTML = '<div class="empty-state">Fără activitate încă.</div>';
+            container.innerHTML = `<div class="empty-state">${t('dashboard.no_activity')}</div>`;
             return;
         }
 
@@ -972,7 +972,7 @@ async function loadAccountProducts() {
         }
         if (termLabel && accountProducts.term_deposit_options.length) {
             const maxRate = Math.max(...accountProducts.term_deposit_options.map((o) => o.interest_rate_bps));
-            termLabel.textContent = `până la ${(maxRate / 100).toFixed(1)}% p.a.`;
+            termLabel.textContent = t('savings.up_to_rate', 'până la {rate}% p.a.', { rate: (maxRate / 100).toFixed(1) });
         }
     } catch {
         // The product picker just keeps its placeholder labels - not
@@ -1557,11 +1557,11 @@ function renderCardsList(cards) {
             ${!isCancelled ? `
                 <div class="card-actions-row">
                     ${card.status === 'frozen'
-                        ? `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="unfreeze">Deblochează</button>`
-                        : `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="freeze">Blochează</button>`
+                        ? `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="unfreeze">${t('cards.unfreeze', 'Deblochează')}</button>`
+                        : `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="freeze">${t('cards.freeze', 'Blochează')}</button>`
                     }
-                    <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}">Limită</button>
-                    <button class="card-cancel-btn" data-card-id="${card.id}">Anulează</button>
+                    <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}">${t('cards.limit', 'Limită')}</button>
+                    <button class="card-cancel-btn" data-card-id="${card.id}">${t('cards.cancel')}</button>
                 </div>
             ` : ''}
         </div>
@@ -1755,14 +1755,14 @@ async function loadBeneficiaries() {
         const contacts = await apiFetch('/beneficiaries');
         renderBeneficiariesList(contacts);
     } catch (err) {
-        list.innerHTML = `<div class="empty-state">Nu s-au putut încărca contactele: ${escapeHTML(err.message)}</div>`;
+        list.innerHTML = `<div class="empty-state">${t('payments.contacts_load_error')}: ${escapeHTML(err.message)}</div>`;
     }
 }
 
 function renderBeneficiariesList(contacts) {
     const list = document.getElementById('beneficiaries-list');
     if (contacts.length === 0) {
-        list.innerHTML = '<div class="empty-state">Niciun contact încă - apare automat după prima plată, sau adaugă unul cu +.</div>';
+        list.innerHTML = `<div class="empty-state">${t('payments.no_contacts')}</div>`;
         return;
     }
     list.innerHTML = contacts.map(c => `
@@ -1842,14 +1842,14 @@ async function loadPayments() {
         const payments = await apiFetch('/payments');
         renderPaymentsList(payments);
     } catch (err) {
-        list.innerHTML = `<div class="empty-state">Nu s-a putut încărca istoricul: ${escapeHTML(err.message)}</div>`;
+        list.innerHTML = `<div class="empty-state">${t('payments.history_load_error')}: ${escapeHTML(err.message)}</div>`;
     }
 }
 
 function renderPaymentsList(payments) {
     const list = document.getElementById('payments-list');
     if (payments.length === 0) {
-        list.innerHTML = '<div class="empty-state">Nicio plată încă.</div>';
+        list.innerHTML = `<div class="empty-state">${t('payments.no_payments')}</div>`;
         return;
     }
     list.innerHTML = payments.map(p => `
@@ -1931,12 +1931,12 @@ function wirePaymentsForm() {
         ibanLookupTimer = setTimeout(async () => {
             try {
                 const holder = await apiFetch(`/accounts/by-iban/${encodeURIComponent(iban)}`);
-                ibanHolderEl.textContent = `Titular: ${holder.first_name} ${holder.last_name}`;
+                ibanHolderEl.textContent = `${t('payments.account_holder')}: ${holder.first_name} ${holder.last_name}`;
                 if (!beneficiaryInput.value) {
                     beneficiaryInput.value = `${holder.first_name} ${holder.last_name}`;
                 }
             } catch {
-                ibanHolderEl.textContent = 'Niciun cont găsit cu acest IBAN.';
+                ibanHolderEl.textContent = t('payments.iban_not_found');
             }
         }, 400);
     });
@@ -1973,7 +1973,7 @@ function wirePaymentsForm() {
         try {
             const result = await submitPayment(idempotencyKey, bodyObj);
             if (result === CONFIRMATION_CANCELLED) return; // user closed the camera modal - stay put, silently
-            successEl.textContent = 'Plata a fost trimisă cu succes!';
+            successEl.textContent = t('payments.sent_success');
             successEl.hidden = false;
             form.reset();
             ibanHolderEl.textContent = '';

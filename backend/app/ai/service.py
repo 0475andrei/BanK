@@ -29,6 +29,7 @@ from app.ai.tools.banking import (
     ListTransfersTool,
     ProposeCardOrderTool,
     RemoveBeneficiaryTool,
+    ResolveIbanHolderTool,
     SetCardSpendingLimitTool,
     UnfreezeCardTool,
 )
@@ -76,6 +77,7 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
             ListTransactionsTool(supabase),
             ListCardsTool(supabase),
             ListTransfersTool(supabase),
+            ResolveIbanHolderTool(supabase),
             # Low-stakes and reversible: execute directly (see each tool's
             # own docstring for why it doesn't need a UI-level confirm step).
             FreezeCardTool(supabase),
