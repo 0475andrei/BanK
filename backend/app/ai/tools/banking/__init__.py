@@ -5,6 +5,7 @@ from app.ai.tools.banking.list_accounts import ListAccountsTool
 from app.ai.tools.banking.list_cards import ListCardsTool
 from app.ai.tools.banking.list_transactions import ListTransactionsTool
 from app.ai.tools.banking.list_transfers import ListTransfersTool
+from app.ai.tools.banking.resolve_iban_holder import ResolveIbanHolderTool
 
 __all__ = [
     "GetBalanceTool",
@@ -12,4 +13,5 @@ __all__ = [
     "ListCardsTool",
     "ListTransactionsTool",
     "ListTransfersTool",
+    "ResolveIbanHolderTool",
 ]

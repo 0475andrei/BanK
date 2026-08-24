@@ -24,6 +24,7 @@ from app.ai.tools.banking import (
     ListCardsTool,
     ListTransactionsTool,
     ListTransfersTool,
+    ResolveIbanHolderTool,
 )
 from app.ai.tools.insights import (
     CategorizeTransactionsTool,
@@ -62,6 +63,7 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
             ListTransactionsTool(supabase),
             ListCardsTool(supabase),
             ListTransfersTool(supabase),
+            ResolveIbanHolderTool(supabase),
             # Write-adjacent: each only creates a `pending` proposal row, never
             # executes (see app/ai/tools/propose_tools.py's module docstring).
             ProposeTransferTool(supabase),
