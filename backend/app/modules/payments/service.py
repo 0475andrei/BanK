@@ -17,6 +17,7 @@ from app.core.exceptions import (
     CurrencyMismatchError,
     IbanNotFoundError,
     IdempotencyKeyConflictError,
+    SubscriptionPriceIncreaseError,
     ValidationError,
 )
 from app.db.supabase_client import map_postgrest_error
@@ -56,6 +57,55 @@ async def _is_first_payment_to_person(
         .execute()
     )
     return not resp.data
+
+
+async def _detect_subscription_price_increase(
+    supabase: AsyncClient,
+    user_id: uuid.UUID,
+    from_account_id: uuid.UUID | str,
+    to_iban: str,
+    new_amount_minor: int,
+) -> dict | None:
+    """A "this subscription raised its price" signal: the recipient IBAN is
+    saved as a contact explicitly marked is_subscription (see
+    beneficiaries/service.py - a friend paid a recurring amount twice is
+    NOT a subscription just because the pattern looks similar; only a
+    contact the user deliberately classified this way can ever trigger
+    this), this exact account has paid it at least twice before (a
+    recurring pattern - same 2-occurrence threshold
+    app/ai/tools/insights/detect_recurring_payments.py uses to call
+    something "recurring"), and the new amount is higher than the most
+    recent of those. Returns None when any of that isn't true.
+
+    Deliberately only checks THIS sender account, not every account the user
+    owns - one account per subscription is the common real-world case, and
+    checking all of them would need a cross-account join for a demo-grade
+    heuristic. See design_decisions for the general "good enough" bar."""
+    beneficiary = await beneficiaries_service.get_beneficiary_by_iban(supabase, user_id, to_iban)
+    if beneficiary is None or not beneficiary["is_subscription"]:
+        return None
+
+    resp = (
+        await supabase.table("payments")
+        .select("amount_minor")
+        .eq("from_account_id", str(from_account_id))
+        .eq("to_iban", to_iban)
+        .eq("status", "completed")
+        .order("created_at", desc=True)
+        .limit(2)
+        .execute()
+    )
+    history = resp.data
+    if len(history) < 2:
+        return None
+    previous_amount_minor = history[0]["amount_minor"]
+    if new_amount_minor <= previous_amount_minor:
+        return None
+    return {
+        "previous_amount_minor": previous_amount_minor,
+        "new_amount_minor": new_amount_minor,
+        "website": beneficiary["website"],
+    }
 
 
 async def _find_by_idempotency_key(supabase: AsyncClient, idempotency_key: str) -> dict | None:
@@ -119,6 +169,19 @@ async def create_payment(
             "Payments can't cross currencies - sender and recipient accounts must "
             "share one."
         )
+
+    if not payload.confirm_price_increase:
+        price_increase = await _detect_subscription_price_increase(
+            supabase, user.id, from_account["id"], to_iban, payload.amount_minor
+        )
+        if price_increase is not None:
+            raise SubscriptionPriceIncreaseError(
+                details={
+                    **price_increase,
+                    "currency": currency,
+                    "beneficiary_name": payload.beneficiary_name,
+                }
+            )
 
     is_new_person = await _is_first_payment_to_person(supabase, user.id, to_account["user_id"])
     await face_auth_service.enforce_face_confirmation(

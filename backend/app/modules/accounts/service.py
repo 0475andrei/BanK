@@ -47,11 +47,14 @@ TERM_DEPOSIT_RATES_BPS: dict[int, int] = {
     24: 500,
 }
 
-# Only users who registered with the referral code get a welcome balance
-# on every account they open (see auth/service.py::FALLBACK_REFERRAL_CODE) -
-# there's no deposit/funding endpoint anywhere else in this app (see
-# design_decisions), so this is a deliberate "welcome balance" rather than
-# a real bank giving out free money, and it's gated so it isn't unlimited.
+# Only users who registered with the referral code get a welcome balance,
+# and only once - on the very first account they ever open (see
+# auth/service.py::FALLBACK_REFERRAL_CODE) - there's no deposit/funding
+# endpoint anywhere else in this app (see design_decisions), so this is a
+# deliberate one-time "welcome balance" rather than a real bank giving out
+# free money on every account. See open_account's is_first_account check -
+# user.referral_bonus_eligible alone is NOT enough to gate this, since that
+# flag stays true for the account's whole lifetime, not just the first one.
 OPENING_BALANCE_MINOR = 50_000
 
 # The referrer's side of the same deal (see 0009_referral_rewards.sql): paid
@@ -316,6 +319,12 @@ async def open_account(
     if product_type not in _VALID_PRODUCT_TYPES:
         raise ValidationError(f"Unknown account product: {product_type!r}")
 
+    # Checked BEFORE inserting the new account below, so it reflects
+    # whether the user had any account at all prior to this call - not
+    # "prior to this call, excluding the one we're about to create" (which
+    # would always be true and defeat the point).
+    is_first_account = len(await list_accounts_for_owner(supabase, user.id)) == 0
+
     extra_fields: dict = {"product_type": product_type}
     if product_type == PRODUCT_SAVINGS:
         extra_fields["interest_rate_bps"] = SAVINGS_INTEREST_RATE_BPS
@@ -338,7 +347,7 @@ async def open_account(
         metadata={"name": name, "currency": currency, "iban": account["iban"]},
     )
 
-    if user.referral_bonus_eligible:
+    if user.referral_bonus_eligible and is_first_account:
         await ledger_service.grant_opening_balance(
             supabase,
             uuid.UUID(account["id"]),

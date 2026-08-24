@@ -14,6 +14,7 @@ from app.modules.accounts.schemas import (
     TermDepositOption,
 )
 from app.modules.ledger import service as ledger_service
+from app.modules.scheduled_transfers import service as scheduled_transfers_service
 from app.modules.users.schemas import UserRead
 
 router = APIRouter()
@@ -62,6 +63,10 @@ async def list_accounts(
     supabase: AsyncClient = Depends(get_supabase),
     user: UserRead = Depends(get_current_user),
 ) -> list[AccountRead]:
+    # Lazy execution: any scheduled transfer due for this user fires here,
+    # before balances are read - same "no cron" pattern as interest accrual
+    # above. See scheduled_transfers/service.py's module docstring.
+    await scheduled_transfers_service.run_due_transfers_for_owner(supabase, str(user.id))
     accounts = await service.list_accounts(supabase, user)
     return [await _to_read_model(supabase, account) for account in accounts]
 

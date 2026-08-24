@@ -18,11 +18,18 @@ from app.ai.providers.base import ModelProvider
 from app.ai.routing import RoutingDecision
 from app.ai.schemas import Message
 from app.ai.tools.banking import (
+    AddBeneficiaryTool,
+    CreateScheduledTransferTool,
+    FreezeCardTool,
     GetBalanceTool,
     ListAccountsTool,
     ListCardsTool,
     ListTransactionsTool,
     ListTransfersTool,
+    ProposeCardOrderTool,
+    RemoveBeneficiaryTool,
+    SetCardSpendingLimitTool,
+    UnfreezeCardTool,
 )
 from app.ai.tools.insights import (
     CategorizeTransactionsTool,
@@ -39,10 +46,15 @@ if TYPE_CHECKING:
 
 
 def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
-    """The read-only tools the banking agent is allowed to call.
+    """The tools the banking agent is allowed to call: the original read-only
+    set, plus a handful of low-stakes write tools (see each write tool's
+    docstring for why it executes directly instead of needing a UI-level
+    confirm step) and one propose-only tool for the higher-stakes physical
+    card order flow.
 
-    `supabase` is handed to every tool that reads data; the tools hold it for
-    their lifetime (the client is a stateless HTTP client, safe to share).
+    `supabase` is handed to every tool that reads/writes data; the tools hold
+    it for their lifetime (the client is a stateless HTTP client, safe to
+    share).
     """
     return ToolRegistry(
         [
@@ -51,6 +63,13 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
             ListTransactionsTool(supabase),
             ListCardsTool(supabase),
             ListTransfersTool(supabase),
+            FreezeCardTool(supabase),
+            UnfreezeCardTool(supabase),
+            SetCardSpendingLimitTool(supabase),
+            AddBeneficiaryTool(supabase),
+            RemoveBeneficiaryTool(supabase),
+            CreateScheduledTransferTool(supabase),
+            ProposeCardOrderTool(supabase),
         ]
     )
 

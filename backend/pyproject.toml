@@ -16,6 +16,11 @@ dependencies = [
     # the Dockerfile, apt package tesseract-ocr + tesseract-ocr-ron).
     "pytesseract>=0.3.10",
     "Pillow>=10.4",
+    # iban_ocr module: renders each PDF page to an image so a bank
+    # statement/invoice PDF (not just a photo) can be OCR'd. Pure-Python
+    # wheel (bundles its own PDF renderer) - no system package needed,
+    # unlike the pdf2image+poppler alternative.
+    "pymupdf>=1.24",
     # Required by FastAPI's UploadFile/File(...) to parse multipart/form-data.
     "python-multipart>=0.0.12",
     # face_auth module: local face enrollment/verification (DIY, not

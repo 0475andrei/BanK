@@ -11,6 +11,12 @@ class CardCreate(BaseModel):
     spending_limit_minor: int | None = Field(default=None, gt=0)
 
 
+class CardSpendingLimitUpdate(BaseModel):
+    #: None removes the limit entirely - same nullable semantics as
+    #: CardCreate.spending_limit_minor above.
+    spending_limit_minor: int | None = Field(default=None, gt=0)
+
+
 class CardRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

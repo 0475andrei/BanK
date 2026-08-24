@@ -89,6 +89,13 @@ async def test_tools_are_advertised_to_the_provider(make_agent, context):
         "list_transactions",
         "list_cards",
         "list_transfers",
+        "freeze_card",
+        "unfreeze_card",
+        "set_card_spending_limit",
+        "add_beneficiary",
+        "remove_beneficiary",
+        "create_scheduled_transfer",
+        "propose_card_order",
     ]
 
     params = specs[0]["function"]["parameters"]
@@ -96,10 +103,14 @@ async def test_tools_are_advertised_to_the_provider(make_agent, context):
     # account_id is optional now — the model is not asked to supply identity.
     assert not params.get("required")
 
-    # Nothing the model is shown is ever mandatory: identity is supplied by the
-    # application, so it never has to produce (or guess) an identifier.
+    # Account IDENTITY specifically is never mandatory: the application
+    # resolves "my account" itself, so any tool that accepts account_id
+    # must never require it. Other action-specific parameters legitimately
+    # can be required (e.g. freeze_card needs `last4` - there's no way to
+    # resolve WHICH card without the model naming one).
     for spec in specs:
-        assert not spec["function"]["parameters"].get("required"), spec["function"]["name"]
+        required = spec["function"]["parameters"].get("required") or []
+        assert "account_id" not in required, spec["function"]["name"]
 
 
 @pytest.mark.parametrize(

@@ -13,11 +13,18 @@ from pydantic import BaseModel
 from app.ai.context import Context
 from app.ai.schemas import ToolCall, ToolResult
 from app.ai.tools.banking import (
+    AddBeneficiaryTool,
+    CreateScheduledTransferTool,
+    FreezeCardTool,
     GetBalanceTool,
     ListAccountsTool,
     ListCardsTool,
     ListTransactionsTool,
     ListTransfersTool,
+    ProposeCardOrderTool,
+    RemoveBeneficiaryTool,
+    SetCardSpendingLimitTool,
+    UnfreezeCardTool,
 )
 from app.ai.tools.base import Tool
 from app.ai.tools.insights import (
@@ -39,6 +46,13 @@ ALL_TOOL_CLASSES = (
     ListTransactionsTool,
     ListCardsTool,
     ListTransfersTool,
+    FreezeCardTool,
+    UnfreezeCardTool,
+    SetCardSpendingLimitTool,
+    AddBeneficiaryTool,
+    RemoveBeneficiaryTool,
+    CreateScheduledTransferTool,
+    ProposeCardOrderTool,
 )
 
 #: Every tool the insights agent exposes, in the order build_insights_tools
@@ -135,6 +149,13 @@ def test_all_banking_tools_are_registered(supabase):
         "list_transactions",
         "list_cards",
         "list_transfers",
+        "freeze_card",
+        "unfreeze_card",
+        "set_card_spending_limit",
+        "add_beneficiary",
+        "remove_beneficiary",
+        "create_scheduled_transfer",
+        "propose_card_order",
     ]
 
 
@@ -224,11 +245,34 @@ def test_registry_subset_narrows_permissions(supabase):
     assert registry.subset([]).names() == []
 
 
-def test_no_write_tools_are_registered(supabase):
-    """Guardrail: the model is untrusted; it may only read in this step."""
+#: The only write tools the banking agent may expose - each is low-stakes and
+#: reversible (see its own module docstring for why). This is the successor
+#: to the old test_no_write_tools_are_registered, back when there were none:
+#: it still catches an ACCIDENTAL new write tool showing up unreviewed, it
+#: just no longer assumes there are zero on purpose.
+_ALLOWED_WRITE_TOOL_NAMES = frozenset(
+    {
+        "freeze_card",
+        "unfreeze_card",
+        "set_card_spending_limit",
+        "add_beneficiary",
+        "remove_beneficiary",
+        "create_scheduled_transfer",
+    }
+)
+
+
+def test_only_the_reviewed_write_tools_are_registered(supabase):
+    """Guardrail: the model is untrusted. Every banking tool must be either
+    read-only, or one of the small, deliberately-reviewed write tools above
+    (propose_card_order stays read_only on purpose - see its docstring)."""
     from app.ai.service import build_banking_tools
 
-    assert all(tool.read_only for tool in build_banking_tools(supabase))
+    for tool in build_banking_tools(supabase):
+        if not tool.read_only:
+            assert tool.name in _ALLOWED_WRITE_TOOL_NAMES, (
+                f"{tool.name} is a write tool but isn't in the reviewed allow-list"
+            )
 
 
 # ---------------------------------------------------------------------------

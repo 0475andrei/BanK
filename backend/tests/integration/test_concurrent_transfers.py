@@ -62,12 +62,13 @@ async def test_concurrent_transfers_conserve_total_balance(authed_client, seed_b
     a_after = (await client.get(f"/api/v1/accounts/{a['id']}")).json()
     b_after = (await client.get(f"/api/v1/accounts/{b['id']}")).json()
 
-    # Every new account starts with a welcome balance (see accounts/service.py).
+    # Only the user's first-ever account gets the welcome balance (see
+    # accounts/service.py) - "a" was opened first, "b" second.
     assert a_after["balance_minor"] == OPENING_BALANCE_MINOR + 100_000 - n * amount
-    assert b_after["balance_minor"] == OPENING_BALANCE_MINOR + n * amount
+    assert b_after["balance_minor"] == n * amount
     assert (
         a_after["balance_minor"] + b_after["balance_minor"]
-        == 2 * OPENING_BALANCE_MINOR + 100_000
+        == OPENING_BALANCE_MINOR + 100_000
     )
 
 
@@ -103,9 +104,9 @@ async def test_concurrent_transfers_cannot_overdraw(authed_client, seed_balance_
     b_after = (await client.get(f"/api/v1/accounts/{b['id']}")).json()
 
     assert a_after["balance_minor"] == 0  # drained exactly, never negative
-    # b started from _open_account (not the zero-balance helper), so it
-    # still carries its own welcome balance on top of what it received.
-    assert b_after["balance_minor"] == OPENING_BALANCE_MINOR + amount * affordable
+    # b is this user's 3rd account (after a and a's own drain-sink), so it
+    # gets no welcome balance of its own - only the very first account does.
+    assert b_after["balance_minor"] == amount * affordable
 
 
 async def test_concurrent_bidirectional_transfers_do_not_deadlock(
@@ -136,12 +137,13 @@ async def test_concurrent_bidirectional_transfers_do_not_deadlock(
     a_after = (await client.get(f"/api/v1/accounts/{a['id']}")).json()
     b_after = (await client.get(f"/api/v1/accounts/{b['id']}")).json()
 
-    # Equal amounts flowed both ways, so both balances are unchanged (still
-    # their welcome balance + the 50_000 each was seeded with), and the
-    # total is conserved.
+    # Equal amounts flowed both ways, so both balances are unchanged from
+    # what they started with - "a" (opened first) has its welcome balance
+    # plus the 50_000 it was seeded with; "b" (opened second, no welcome
+    # balance of its own) has just its 50_000 seed. Total is conserved.
     assert a_after["balance_minor"] == OPENING_BALANCE_MINOR + 50_000
-    assert b_after["balance_minor"] == OPENING_BALANCE_MINOR + 50_000
+    assert b_after["balance_minor"] == 50_000
     assert (
         a_after["balance_minor"] + b_after["balance_minor"]
-        == 2 * OPENING_BALANCE_MINOR + 100_000
+        == OPENING_BALANCE_MINOR + 100_000
     )

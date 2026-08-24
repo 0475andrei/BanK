@@ -9,6 +9,7 @@ The server owns conversation history (see `conversations_service`): the client
 only ever holds a `conversation_id`, so the transcript survives a page reload.
 """
 
+import json
 import uuid
 
 from fastapi import APIRouter, Depends
@@ -28,7 +29,7 @@ from app.core.exceptions import (
 )
 from app.db.supabase_client import get_supabase
 from app.modules.chat import conversations_service
-from app.modules.chat.schemas import ChatRequest, ChatResponse, ConversationRead
+from app.modules.chat.schemas import ChatProposal, ChatRequest, ChatResponse, ConversationRead
 from app.modules.users.schemas import UserRead
 
 router = APIRouter()
@@ -36,6 +37,28 @@ router = APIRouter()
 PROVIDER_MOCK = "mock"
 PROVIDER_AZURE = "azure"
 _VALID_PROVIDERS = (PROVIDER_MOCK, PROVIDER_AZURE)
+
+#: tool name -> proposal type, for tools that only propose an action instead
+#: of executing it (see app/ai/tools/banking/propose_card_order.py). Add an
+#: entry here for any future propose_* tool.
+_PROPOSAL_TOOLS = {"propose_card_order": "card_order"}
+
+
+def _extract_proposal(new_messages: list[Message]) -> ChatProposal | None:
+    """The last successful propose_* tool result this turn, if any - scanned
+    from the trace rather than threaded through the agent/orchestrator, so
+    this stays a router-level concern and Orchestrator.dispatch's return
+    shape doesn't need to widen for one tool family."""
+    for message in reversed(new_messages):
+        if message.role != "tool" or message.name not in _PROPOSAL_TOOLS:
+            continue
+        try:
+            payload = json.loads(message.content or "{}")
+        except json.JSONDecodeError:
+            continue
+        if payload.get("ok"):
+            return ChatProposal(type=_PROPOSAL_TOOLS[message.name], data=payload.get("result", {}))
+    return None
 
 MOCK_REPLY = (
     "AI provider is set to mock — set AI_PROVIDER=azure in .env to use the real model."
@@ -114,7 +137,11 @@ async def chat(
             routing=routing if is_final_reply else None,
         )
 
-    return ChatResponse(reply=reply, conversation_id=conversation_id, routing=routing)
+    proposal = _extract_proposal(new_messages)
+
+    return ChatResponse(
+        reply=reply, conversation_id=conversation_id, routing=routing, proposal=proposal
+    )
 
 
 @router.get("/conversations", response_model=list[ConversationRead])

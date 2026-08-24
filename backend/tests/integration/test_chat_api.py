@@ -67,6 +67,50 @@ async def test_chat_threads_context_into_the_ai_service(authed_client, scripted_
     assert payload["result"]["source"] == "ledger"
 
 
+async def test_chat_surfaces_a_card_order_proposal(authed_client, scripted_provider):
+    """propose_card_order (app/ai/tools/banking/propose_card_order.py) never
+    writes anything itself - the router lifts its result onto
+    ChatResponse.proposal, and the frontend's confirm button is what actually
+    calls POST /card-orders. This proves that lift happens correctly."""
+    client, _user = authed_client
+    account = (
+        await client.post("/api/v1/accounts", json={"name": "Checking", "currency": "USD"})
+    ).json()
+
+    scripted_provider(
+        ModelResponse(
+            tool_calls=[
+                ToolCall(
+                    id="c1",
+                    name="propose_card_order",
+                    arguments={
+                        "full_name": "Ana Pop",
+                        "phone": "0712345678",
+                        "address": "Str. Exemplu 1",
+                        "city": "Cluj-Napoca",
+                        "postal_code": "400000",
+                        "country": "Romania",
+                    },
+                )
+            ]
+        ),
+        ModelResponse(text="Iată comanda pregătită pentru confirmare."),
+    )
+
+    resp = await client.post("/api/v1/chat", json={"message": "vreau un card fizic nou"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    assert body["proposal"] is not None
+    assert body["proposal"]["type"] == "card_order"
+    assert body["proposal"]["data"]["full_name"] == "Ana Pop"
+    assert body["proposal"]["data"]["account_id"] == account["id"]
+
+    # No card order was actually placed - the tool only proposed one.
+    orders = (await client.get("/api/v1/card-orders")).json()
+    assert orders == []
+
+
 @pytest.mark.parametrize("message", ["", "   ", "\n\t "])
 async def test_chat_rejects_empty_message(authed_client, scripted_provider, message):
     """Blank and whitespace-only alike - never let an empty prompt reach the model."""

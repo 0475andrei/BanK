@@ -65,8 +65,8 @@ async def test_categorize_assigns_correct_categories(supabase, user_factory, acc
 
     assert result.ok, result.error
     by_name = {c["name"]: c for c in result.data["categories"]}
-    assert by_name["Abonamente / Streaming"]["count"] == 1
-    assert by_name["Abonamente / Streaming"]["total_minor"] == 3_000
+    assert by_name["Divertisment"]["count"] == 1
+    assert by_name["Divertisment"]["total_minor"] == 3_000
     assert by_name["Cumpărături alimentare"]["count"] == 1
     assert by_name["Cumpărături alimentare"]["total_minor"] == 15_000
     assert by_name["Altele"]["count"] == 1
@@ -119,4 +119,4 @@ async def test_categorize_is_case_insensitive(supabase, user_factory, account_fa
 
     assert result.ok, result.error
     by_name = {c["name"]: c for c in result.data["categories"]}
-    assert by_name["Abonamente / Streaming"]["count"] == 2
+    assert by_name["Divertisment"]["count"] == 2

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
@@ -22,6 +22,15 @@ class ChatRequest(BaseModel):
     conversation_id: uuid.UUID | None = None
 
 
+class ChatProposal(BaseModel):
+    """A structured action the model prepared but did not execute (see
+    app/ai/tools/banking/propose_card_order.py) - the frontend renders this
+    as a confirmation card whose button calls the real endpoint."""
+
+    type: str
+    data: dict[str, Any]
+
+
 class ChatResponse(BaseModel):
     reply: str
     #: Always returned, so the client knows what to send on the next turn -
@@ -30,6 +39,9 @@ class ChatResponse(BaseModel):
     #: Which agent answered, and why. Optional so the contract stays
     #: backward-compatible: clients written before routing existed ignore it.
     routing: RoutingDecision | None = None
+    #: Set only when a propose_* tool ran this turn (see chat/router.py).
+    #: Optional so the contract stays backward-compatible.
+    proposal: ChatProposal | None = None
 
 
 class ConversationRead(BaseModel):

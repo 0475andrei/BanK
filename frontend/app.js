@@ -156,6 +156,9 @@ async function sendMessage() {
 
         typingBubble.remove();
         appendChatBubble('ai', response.reply);
+        if (response.proposal && response.proposal.type === 'card_order') {
+            renderCardOrderProposal(response.proposal.data);
+        }
         setCurrentConversationId(response.conversation_id);
         void loadConversationHistory();
     } catch (err) {
@@ -172,6 +175,64 @@ async function sendMessage() {
     } finally {
         if (sendButton) sendButton.disabled = false;
     }
+}
+
+/** Renders a confirmation card for a card-order proposal the AI assistant
+ * prepared (see backend/app/ai/tools/banking/propose_card_order.py). The
+ * assistant only gathered and validated the fields - this is the one place
+ * the order actually gets placed, via the same POST /card-orders the manual
+ * "Comandă Card Fizic" modal uses. */
+function renderCardOrderProposal(data) {
+    const html = `
+        <div class="human-in-the-loop-card">
+            <div class="action-proposal">
+                <strong>Comandă card fizic</strong>
+                <div class="proposal-field"><span>Nume</span><span>${escapeHTML(data.full_name)}</span></div>
+                <div class="proposal-field"><span>Telefon</span><span>${escapeHTML(data.phone)}</span></div>
+                <div class="proposal-field"><span>Adresă</span><span>${escapeHTML(data.address)}</span></div>
+                <div class="proposal-field"><span>Oraș</span><span>${escapeHTML(data.city)}</span></div>
+                <div class="proposal-field"><span>Cod poștal</span><span>${escapeHTML(data.postal_code)}</span></div>
+                <div class="proposal-field"><span>Țară</span><span>${escapeHTML(data.country)}</span></div>
+                <div class="proposal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-card-order-proposal">Renunță</button>
+                    <button type="button" class="btn btn-primary" id="confirm-card-order-proposal">Confirmă comanda</button>
+                </div>
+            </div>
+        </div>
+    `;
+    const bubble = appendChatBubble('ai', '', { html, bubbleClass: 'proposal-bubble' });
+    const card = bubble.querySelector('.human-in-the-loop-card');
+
+    card.querySelector('#cancel-card-order-proposal').addEventListener('click', () => {
+        card.innerHTML = '<div class="proposal-cancelled">Comandă anulată. Dacă te răzgândești, anunță-mă.</div>';
+    });
+
+    card.querySelector('#confirm-card-order-proposal').addEventListener('click', async (event) => {
+        const btn = event.currentTarget;
+        btn.disabled = true;
+        btn.textContent = 'Se trimite...';
+        try {
+            await apiFetch('/card-orders', {
+                method: 'POST',
+                body: JSON.stringify({
+                    account_id: data.account_id,
+                    full_name: data.full_name,
+                    phone: data.phone,
+                    address: data.address,
+                    city: data.city,
+                    postal_code: data.postal_code,
+                    country: data.country,
+                }),
+            });
+            card.innerHTML =
+                '<div class="proposal-confirmed"><i data-lucide="check" class="icon"></i> Comandă plasată cu succes!</div>';
+            if (window.lucide) lucide.createIcons();
+        } catch (err) {
+            btn.disabled = false;
+            btn.textContent = 'Confirmă comanda';
+            alert(err.message);
+        }
+    });
 }
 
 /** Clears the chat panel back to the empty-state welcome bubble and detaches
@@ -435,25 +496,6 @@ function escapeHTML(str) {
     );
 }
 
-// AI Human-in-the-Loop Actions
-function confirmAIAction(buttonElement) {
-    const card = buttonElement.closest('.human-in-the-loop-card');
-    card.innerHTML = `
-        <div style="color: var(--income-green); font-weight: 500; display: flex; align-items: center; gap: 8px;">
-            <i data-lucide="check" style="width: 18px; height: 18px;"></i> Acțiune confirmată cu succes! Transferul a fost programat.
-        </div>
-    `;
-    if (window.lucide) lucide.createIcons();
-}
-
-function cancelAIAction(buttonElement) {
-    const card = buttonElement.closest('.human-in-the-loop-card');
-    card.innerHTML = `
-        <div style="color: var(--text-muted); font-style: italic;">
-            Acțiune anulată. Dacă te răzgândești, anunță-mă.
-        </div>
-    `;
-}
 
 /* =========================================================================
  * Live backend wiring (accounts, transactions, transfers). Everything above
@@ -500,6 +542,8 @@ async function initDashboard() {
     wirePaymentsForm();
     wireProfilePanel(user);
     wireNotificationsPanel();
+    wireAddBeneficiaryForm();
+    wireScheduledTransfersModal();
 
     await loadAccountProducts();
     await refreshDashboard();
@@ -511,6 +555,74 @@ async function refreshDashboard() {
     await loadCards();
     await loadBeneficiaries();
     await loadPayments();
+    await loadSpendingByCategory();
+    await loadScheduledTransfers();
+}
+
+//: Cycled through in order for however many categories come back - the
+//: backend doesn't assign colors (it's just names/amounts), so the mapping
+//: is purely a frontend rendering concern.
+const SPENDING_CATEGORY_COLORS = [
+    '#2DD4BF', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444',
+    '#ec4899', '#22c55e', '#06b6d4', '#a855f7', '#f97316',
+    '#84cc16', '#e11d48', '#64748b',
+];
+
+async function loadSpendingByCategory() {
+    const donut = document.getElementById('spending-category-donut');
+    const legend = document.getElementById('spending-category-legend');
+
+    const active = currentAccounts.filter(a => a.status === 'active');
+    if (active.length === 0) {
+        donut.style.background = 'var(--bg-dark)';
+        legend.innerHTML = '<div class="empty-state">Niciun cont activ încă.</div>';
+        return;
+    }
+
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const endDate = now.toISOString().slice(0, 10);
+
+    let data;
+    try {
+        data = await apiFetch(
+            `/insights/spending-by-category?start_date=${startDate}&end_date=${endDate}`
+        );
+    } catch (err) {
+        legend.innerHTML = `<div class="empty-state">Nu s-au putut încărca categoriile: ${escapeHTML(err.message)}</div>`;
+        return;
+    }
+
+    const categories = data.categories.filter(c => c.total_minor > 0);
+    if (categories.length === 0) {
+        donut.style.background = 'var(--bg-dark)';
+        legend.innerHTML = '<div class="empty-state">Nicio cheltuială luna aceasta încă.</div>';
+        return;
+    }
+
+    // Same "mixed currencies can't be summed" simplification as
+    // renderHeadlineBalance - amounts are shown in the first active
+    // account's currency, since the backend has no "home currency" concept.
+    const primaryCurrency = active[0].currency;
+
+    let cumulativePercent = 0;
+    const gradientStops = categories.map((cat, i) => {
+        const color = SPENDING_CATEGORY_COLORS[i % SPENDING_CATEGORY_COLORS.length];
+        const start = cumulativePercent;
+        cumulativePercent += cat.percentage;
+        return `${color} ${start}% ${cumulativePercent}%`;
+    });
+    donut.style.background = `conic-gradient(${gradientStops.join(', ')})`;
+
+    legend.innerHTML = categories.map((cat, i) => {
+        const color = SPENDING_CATEGORY_COLORS[i % SPENDING_CATEGORY_COLORS.length];
+        return `
+            <div class="legend-item">
+                <span class="dot" style="background-color: ${color};"></span>
+                ${escapeHTML(cat.name)} (${cat.percentage.toFixed(0)}%) &middot; ${formatMoney(cat.total_minor, primaryCurrency)}
+            </div>
+        `;
+    }).join('');
 }
 
 async function loadAccounts() {
@@ -950,6 +1062,144 @@ function wireTransferModal() {
     });
 }
 
+/* --- Scheduled/recurring transfers --- */
+
+const SCHEDULED_TRANSFER_FREQUENCY_LABELS = { weekly: 'Săptămânal', monthly: 'Lunar' };
+const SCHEDULED_TRANSFER_STATUS_LABELS = {
+    active: 'Activ', paused: 'Pauzat', cancelled: 'Anulat', completed: 'Finalizat',
+};
+
+function populateScheduledTransferAccountSelects() {
+    const fromSelect = document.getElementById('scheduled-transfer-from');
+    if (!fromSelect) return;
+    const spendable = currentAccounts.filter(isSpendable);
+    fromSelect.innerHTML = spendable.map(acc =>
+        `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`
+    ).join('');
+    populateScheduledTransferToOptions();
+}
+
+function populateScheduledTransferToOptions() {
+    const fromSelect = document.getElementById('scheduled-transfer-from');
+    const toSelect = document.getElementById('scheduled-transfer-to');
+    if (!fromSelect || !toSelect) return;
+    const active = currentAccounts.filter(a => a.status === 'active');
+    const fromCurrency = active.find(a => a.id === fromSelect.value)?.currency;
+    const eligible = active.filter(a => a.id !== fromSelect.value && a.currency === fromCurrency);
+    toSelect.innerHTML = eligible.length
+        ? eligible.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
+        : '<option value="" disabled selected>Niciun alt cont în aceeași monedă</option>';
+}
+
+function wireScheduledTransfersModal() {
+    const modal = document.getElementById('scheduled-transfer-modal');
+    const form = document.getElementById('scheduled-transfer-form');
+    const errorEl = document.getElementById('scheduled-transfer-error');
+    const fromSelect = document.getElementById('scheduled-transfer-from');
+    if (!modal || !form) return;
+
+    document.getElementById('open-scheduled-transfer-btn').addEventListener('click', () => {
+        errorEl.hidden = true;
+        form.reset();
+        populateScheduledTransferAccountSelects();
+        modal.hidden = false;
+    });
+    document.getElementById('close-scheduled-transfer-modal').addEventListener('click', () => { modal.hidden = true; });
+    document.getElementById('cancel-scheduled-transfer').addEventListener('click', () => { modal.hidden = true; });
+
+    fromSelect.addEventListener('change', () => populateScheduledTransferToOptions());
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorEl.hidden = true;
+
+        const fromAccount = currentAccounts.find(a => a.id === fromSelect.value);
+        const amountMajor = parseFloat(document.getElementById('scheduled-transfer-amount').value);
+        if (!fromAccount || !Number.isFinite(amountMajor) || amountMajor <= 0) {
+            errorEl.textContent = 'Completează toate câmpurile obligatorii.';
+            errorEl.hidden = false;
+            return;
+        }
+
+        const frequency = document.getElementById('scheduled-transfer-frequency').value || null;
+        const startInDays = parseInt(document.getElementById('scheduled-transfer-start-days').value, 10) || 0;
+
+        try {
+            await apiFetch('/scheduled-transfers', {
+                method: 'POST',
+                body: JSON.stringify({
+                    from_account_id: fromSelect.value,
+                    to_account_id: document.getElementById('scheduled-transfer-to').value,
+                    amount_minor: Math.round(amountMajor * 100),
+                    currency: fromAccount.currency,
+                    frequency,
+                    start_at: new Date(Date.now() + startInDays * 86400000).toISOString(),
+                    description: document.getElementById('scheduled-transfer-description').value || undefined,
+                }),
+            });
+            modal.hidden = true;
+            await loadScheduledTransfers();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        }
+    });
+}
+
+async function loadScheduledTransfers() {
+    const list = document.getElementById('scheduled-transfers-list');
+    if (!list) return;
+    try {
+        const scheduled = await apiFetch('/scheduled-transfers');
+        renderScheduledTransfersList(scheduled);
+    } catch (err) {
+        list.innerHTML = `<div class="empty-state">Nu s-au putut încărca transferurile programate: ${escapeHTML(err.message)}</div>`;
+    }
+}
+
+function renderScheduledTransfersList(scheduled) {
+    const list = document.getElementById('scheduled-transfers-list');
+    if (scheduled.length === 0) {
+        list.innerHTML = '<div class="empty-state">Niciun transfer programat.</div>';
+        return;
+    }
+    list.innerHTML = scheduled.map(s => {
+        const fromAccount = currentAccounts.find(a => a.id === s.from_account_id);
+        const toAccount = currentAccounts.find(a => a.id === s.to_account_id);
+        const freqLabel = s.frequency ? SCHEDULED_TRANSFER_FREQUENCY_LABELS[s.frequency] : 'O singură dată';
+        const canAct = s.status === 'active' || s.status === 'paused';
+        return `
+        <div class="scheduled-transfer-item">
+            <div>
+                <div class="name">${escapeHTML(fromAccount ? fromAccount.name : '?')} → ${escapeHTML(toAccount ? toAccount.name : '?')}</div>
+                <div class="meta">${formatMoney(s.amount_minor, s.currency)} &middot; ${freqLabel} &middot; ${SCHEDULED_TRANSFER_STATUS_LABELS[s.status] || s.status}</div>
+                ${s.last_error ? `<div class="meta scheduled-transfer-error-note">${escapeHTML(s.last_error)}</div>` : ''}
+            </div>
+            ${canAct ? `
+                <div class="scheduled-transfer-actions">
+                    ${s.status === 'active'
+                        ? `<button class="link-btn" data-id="${s.id}" data-action="pause">Pauză</button>`
+                        : `<button class="link-btn" data-id="${s.id}" data-action="resume">Reia</button>`
+                    }
+                    <button class="link-btn" data-id="${s.id}" data-action="cancel">Anulează</button>
+                </div>
+            ` : ''}
+        </div>
+        `;
+    }).join('');
+
+    list.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            try {
+                await apiFetch(`/scheduled-transfers/${btn.dataset.id}/${btn.dataset.action}`, { method: 'POST' });
+                await loadScheduledTransfers();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+}
+
 // Sentinel returned by submitWithFaceConfirmation when the user cancels the
 // face-confirm modal - distinguishes "cancelled, do nothing" from a real
 // response, without resorting to throwing a non-Error value.
@@ -979,6 +1229,65 @@ async function submitWithFaceConfirmation(path, idempotencyKey, body) {
             body,
         });
     }
+}
+
+/** Payment-only wrapper around submitWithFaceConfirmation: if the backend
+ * blocks the payment with 409 subscription_price_increase (see
+ * payments/service.py::_detect_subscription_price_increase), asks the user
+ * whether to continue anyway - mentioning the merchant's cancel URL if one
+ * was saved on that contact - and retries once with confirm_price_increase
+ * set, which can itself still hit the face-confirmation step above. */
+async function submitPayment(idempotencyKey, bodyObj) {
+    try {
+        return await submitWithFaceConfirmation('/payments', idempotencyKey, JSON.stringify(bodyObj));
+    } catch (err) {
+        if (err.status !== 409 || err.code !== 'subscription_price_increase') throw err;
+
+        const wantsToContinue = await showPriceIncreaseModal(err.details || {});
+        if (!wantsToContinue) return CONFIRMATION_CANCELLED;
+
+        bodyObj.confirm_price_increase = true;
+        return await submitWithFaceConfirmation('/payments', idempotencyKey, JSON.stringify(bodyObj));
+    }
+}
+
+/** In-app replacement for window.confirm() when a payment is blocked as a
+ * likely subscription price hike - resolves true ("Continuă oricum") or
+ * false (cancel/close), never rejects. */
+function showPriceIncreaseModal(details) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('price-increase-modal');
+        const merchantEl = document.getElementById('price-increase-merchant');
+        const oldEl = document.getElementById('price-increase-old');
+        const newEl = document.getElementById('price-increase-new');
+        const websiteLink = document.getElementById('price-increase-website-link');
+        const confirmBtn = document.getElementById('price-increase-confirm');
+        const cancelBtn = document.getElementById('price-increase-cancel');
+
+        merchantEl.textContent = details.beneficiary_name || 'Acest abonament';
+        oldEl.textContent = formatMoney(details.previous_amount_minor, details.currency);
+        newEl.textContent = formatMoney(details.new_amount_minor, details.currency);
+
+        if (details.website) {
+            websiteLink.href = details.website;
+            websiteLink.hidden = false;
+        } else {
+            websiteLink.hidden = true;
+        }
+
+        modal.hidden = false;
+        if (window.lucide) lucide.createIcons();
+
+        function cleanup(result) {
+            modal.hidden = true;
+            confirmBtn.onclick = null;
+            cancelBtn.onclick = null;
+            resolve(result);
+        }
+
+        confirmBtn.onclick = () => cleanup(true);
+        cancelBtn.onclick = () => cleanup(false);
+    });
 }
 
 /** Opens the face-confirm modal, captures a photo, exchanges it for a
@@ -1131,7 +1440,16 @@ function renderCardsList(cards) {
                 </div>
                 <div class="status-indicator ${card.status}">${CARD_STATUS_LABELS[card.status] || card.status}</div>
             </div>
-            ${!isCancelled ? `<button class="card-cancel-btn" data-card-id="${card.id}">Anulează cardul</button>` : ''}
+            ${!isCancelled ? `
+                <div class="card-actions-row">
+                    ${card.status === 'frozen'
+                        ? `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="unfreeze">Deblochează</button>`
+                        : `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="freeze">Blochează</button>`
+                    }
+                    <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}">Limită</button>
+                    <button class="card-cancel-btn" data-card-id="${card.id}">Anulează</button>
+                </div>
+            ` : ''}
         </div>
         `;
     }).join('');
@@ -1155,6 +1473,48 @@ function renderCardsList(cards) {
             if (!confirm('Sigur anulezi acest card? Nu poate fi reactivat.')) return;
             try {
                 await apiFetch(`/cards/${btn.dataset.cardId}`, { method: 'DELETE' });
+                await loadCards();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+
+    list.querySelectorAll('.card-freeze-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const path = btn.dataset.action === 'freeze' ? 'freeze' : 'unfreeze';
+            try {
+                await apiFetch(`/cards/${btn.dataset.cardId}/${path}`, { method: 'POST' });
+                await loadCards();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+
+    list.querySelectorAll('.card-limit-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const currentLimit = btn.dataset.currentLimit
+                ? (Number(btn.dataset.currentLimit) / 100).toString()
+                : '';
+            const input = prompt(
+                'Noua limită de cheltuieli (lasă gol pentru a elimina limita):',
+                currentLimit
+            );
+            if (input === null) return;
+
+            const trimmed = input.trim();
+            const spendingLimitMinor = trimmed ? Math.round(parseFloat(trimmed) * 100) : null;
+            if (trimmed && (!Number.isFinite(spendingLimitMinor) || spendingLimitMinor <= 0)) {
+                alert('Introdu o sumă validă, mai mare decât 0.');
+                return;
+            }
+
+            try {
+                await apiFetch(`/cards/${btn.dataset.cardId}/spending-limit`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ spending_limit_minor: spendingLimitMinor }),
+                });
                 await loadCards();
             } catch (err) {
                 alert(err.message);
@@ -1288,25 +1648,76 @@ async function loadBeneficiaries() {
 function renderBeneficiariesList(contacts) {
     const list = document.getElementById('beneficiaries-list');
     if (contacts.length === 0) {
-        list.innerHTML = '<div class="empty-state">Niciun contact încă - apare automat după prima plată.</div>';
+        list.innerHTML = '<div class="empty-state">Niciun contact încă - apare automat după prima plată, sau adaugă unul cu +.</div>';
         return;
     }
     list.innerHTML = contacts.map(c => `
-        <div class="contact-item" data-iban="${escapeHTML(c.iban)}" data-name="${escapeHTML(c.display_name)}">
-            <div>
-                <div class="name">${escapeHTML(c.display_name)}</div>
+        <div class="contact-item" data-id="${c.id}" data-iban="${escapeHTML(c.iban)}" data-name="${escapeHTML(c.display_name)}">
+            <div class="contact-item-fill">
+                <div class="name">${escapeHTML(c.display_name)}${c.is_subscription ? ' <span class="contact-subscription-badge">Abonament</span>' : ''}</div>
                 <div class="iban">${escapeHTML(c.iban)}</div>
+                ${c.website ? `<a class="contact-website" href="${escapeHTML(c.website)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHTML(c.website)}</a>` : ''}
             </div>
+            <button type="button" class="contact-remove-btn" data-id="${c.id}" title="Șterge contactul" aria-label="Șterge contactul"><i data-lucide="x"></i></button>
             <i data-lucide="chevron-right" class="icon"></i>
         </div>
     `).join('');
     if (window.lucide) lucide.createIcons();
 
-    list.querySelectorAll('.contact-item').forEach(el => {
+    list.querySelectorAll('.contact-item-fill').forEach(el => {
         el.addEventListener('click', () => {
-            document.getElementById('payments-iban').value = el.dataset.iban;
-            document.getElementById('payments-beneficiary').value = el.dataset.name;
+            const item = el.closest('.contact-item');
+            document.getElementById('payments-iban').value = item.dataset.iban;
+            document.getElementById('payments-beneficiary').value = item.dataset.name;
         });
+    });
+
+    list.querySelectorAll('.contact-remove-btn').forEach(btn => {
+        btn.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            if (!confirm('Ștergi acest contact salvat?')) return;
+            try {
+                await apiFetch(`/beneficiaries/${btn.dataset.id}`, { method: 'DELETE' });
+                await loadBeneficiaries();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+}
+
+function wireAddBeneficiaryForm() {
+    const toggleBtn = document.getElementById('add-beneficiary-btn');
+    const form = document.getElementById('add-beneficiary-form');
+    const errorEl = document.getElementById('add-beneficiary-error');
+    if (!toggleBtn || !form) return;
+
+    toggleBtn.addEventListener('click', () => {
+        form.hidden = !form.hidden;
+        errorEl.hidden = true;
+        if (!form.hidden) document.getElementById('add-beneficiary-name').focus();
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorEl.hidden = true;
+        try {
+            await apiFetch('/beneficiaries', {
+                method: 'POST',
+                body: JSON.stringify({
+                    display_name: document.getElementById('add-beneficiary-name').value,
+                    iban: document.getElementById('add-beneficiary-iban').value.replace(/\s+/g, '').toUpperCase(),
+                    website: document.getElementById('add-beneficiary-website').value || undefined,
+                    is_subscription: document.getElementById('add-beneficiary-is-subscription').checked,
+                }),
+            });
+            form.reset();
+            form.hidden = true;
+            await loadBeneficiaries();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        }
     });
 }
 
@@ -1347,8 +1758,52 @@ function wirePaymentsForm() {
     const ibanHolderEl = document.getElementById('payments-iban-holder');
     const beneficiaryInput = document.getElementById('payments-beneficiary');
     const saveBeneficiaryCheckbox = document.getElementById('payments-save-beneficiary');
+    const ibanScanBtn = document.getElementById('iban-scan-btn');
+    const ibanScanInput = document.getElementById('iban-scan-input');
+    const ibanScanStatus = document.getElementById('iban-scan-status');
 
     accountSelect.addEventListener('change', updateMyIbanDisplay);
+
+    // Scan a photo (card, invoice, screenshot) instead of typing/pasting
+    // the IBAN - see backend/app/modules/iban_ocr.
+    ibanScanBtn.addEventListener('click', () => ibanScanInput.click());
+    ibanScanInput.addEventListener('change', async () => {
+        const file = ibanScanInput.files[0];
+        if (!file) return;
+
+        ibanScanStatus.hidden = false;
+        ibanScanStatus.className = 'field-hint';
+        ibanScanStatus.textContent = 'Se citește fișierul...';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const res = await fetch(`${API_BASE_URL}/iban-ocr/extract`, {
+                method: 'POST',
+                credentials: 'include',
+                body: formData,
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.error?.message || `Request failed (${res.status})`);
+            }
+            const result = await res.json();
+            if (result.iban && !result.low_confidence) {
+                ibanInput.value = result.iban;
+                ibanInput.dispatchEvent(new Event('input'));
+                ibanScanStatus.className = 'field-hint ocr-success';
+                ibanScanStatus.textContent = `IBAN citit: ${result.iban}`;
+            } else {
+                ibanScanStatus.className = 'field-hint ocr-warning';
+                ibanScanStatus.textContent = 'Nu am găsit un IBAN clar în fișier - introdu-l manual.';
+            }
+        } catch (err) {
+            ibanScanStatus.className = 'field-hint ocr-warning';
+            ibanScanStatus.textContent = err.message;
+        } finally {
+            ibanScanInput.value = '';
+        }
+    });
 
     // Live IBAN -> holder name lookup, like a real bank's payee-name check
     // before you send money. Debounced so it doesn't fire on every keystroke.
@@ -1392,17 +1847,17 @@ function wirePaymentsForm() {
         const iban = document.getElementById('payments-iban').value.replace(/\s+/g, '').toUpperCase();
 
         const idempotencyKey = crypto.randomUUID();
-        const body = JSON.stringify({
+        const bodyObj = {
             from_account_id: accountSelect.value,
             to_iban: iban,
             beneficiary_name: document.getElementById('payments-beneficiary').value,
             amount_minor: amountMinor,
             description: document.getElementById('payments-description').value || undefined,
             save_beneficiary: saveBeneficiaryCheckbox.checked,
-        });
+        };
 
         try {
-            const result = await submitWithFaceConfirmation('/payments', idempotencyKey, body);
+            const result = await submitPayment(idempotencyKey, bodyObj);
             if (result === CONFIRMATION_CANCELLED) return; // user closed the camera modal - stay put, silently
             successEl.textContent = 'Plata a fost trimisă cu succes!';
             successEl.hidden = false;
