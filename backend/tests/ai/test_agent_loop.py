@@ -89,6 +89,7 @@ async def test_tools_are_advertised_to_the_provider(make_agent, context):
         "list_transactions",
         "list_cards",
         "list_transfers",
+        "resolve_iban_holder",
         "freeze_card",
         "unfreeze_card",
         "set_card_spending_limit",
@@ -108,19 +109,26 @@ async def test_tools_are_advertised_to_the_provider(make_agent, context):
     # account_id is optional now — the model is not asked to supply identity.
     assert not params.get("required")
 
-    # Nothing the read-only tools show is ever mandatory: identity is supplied
-    # by the application, so the model never has to produce (or guess) an
-    # identifier.
+    # Nothing the first 5 (pure list/get) tools show is ever mandatory:
+    # identity is supplied by the application, so the model never has to
+    # produce (or guess) an identifier.
     for spec in specs[:5]:
         assert not spec["function"]["parameters"].get("required"), spec["function"]["name"]
 
-    # Beyond the read-only set, `account_id` specifically is still never
-    # mandatory - EXCEPT propose_close_account, which inherently needs to
-    # know which account to close and has no sane default to guess at (unlike
-    # every other tool here, where "the default account" is a reasonable
+    # resolve_iban_holder is also read-only, but genuinely needs an `iban` to
+    # look up - there's no "default" IBAN to fall back to, same category of
+    # exception as propose_close_account below, just for a read.
+    resolve_iban_required = specs[5]["function"]["parameters"].get("required") or []
+    assert specs[5]["function"]["name"] == "resolve_iban_holder"
+    assert resolve_iban_required == ["iban"]
+
+    # Beyond that, `account_id` specifically is still never mandatory -
+    # EXCEPT propose_close_account, which inherently needs to know which
+    # account to close and has no sane default to guess at (unlike every
+    # other tool here, where "the default account" is a reasonable
     # fallback). Other required fields (last4, from_account_id/to_account_id,
     # amount, ...) are the content of the action itself, not identity.
-    for spec in specs[5:]:
+    for spec in specs[6:]:
         required = spec["function"]["parameters"].get("required") or []
         if spec["function"]["name"] == "propose_close_account":
             assert "account_id" in required

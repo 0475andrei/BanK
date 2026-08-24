@@ -23,6 +23,7 @@ from app.ai.tools.banking import (
     ListTransfersTool,
     ProposeCardOrderTool,
     RemoveBeneficiaryTool,
+    ResolveIbanHolderTool,
     SetCardSpendingLimitTool,
     UnfreezeCardTool,
 )
@@ -55,6 +56,7 @@ ALL_TOOL_CLASSES = (
     ListTransactionsTool,
     ListCardsTool,
     ListTransfersTool,
+    ResolveIbanHolderTool,
     FreezeCardTool,
     UnfreezeCardTool,
     SetCardSpendingLimitTool,
@@ -167,6 +169,7 @@ def test_all_banking_tools_are_registered(supabase):
         "list_transactions",
         "list_cards",
         "list_transfers",
+        "resolve_iban_holder",
         "freeze_card",
         "unfreeze_card",
         "set_card_spending_limit",

@@ -1557,10 +1557,10 @@ function renderCardsList(cards) {
             ${!isCancelled ? `
                 <div class="card-actions-row">
                     ${card.status === 'frozen'
-                        ? `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="unfreeze">${t('cards.unfreeze', 'Deblochează')}</button>`
-                        : `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="freeze">${t('cards.freeze', 'Blochează')}</button>`
+                        ? `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="unfreeze">${t('cards.unfreeze')}</button>`
+                        : `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="freeze">${t('cards.freeze')}</button>`
                     }
-                    <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}">${t('cards.limit', 'Limită')}</button>
+                    <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}">${t('cards.limit')}</button>
                     <button class="card-cancel-btn" data-card-id="${card.id}">${t('cards.cancel')}</button>
                 </div>
             ` : ''}

@@ -144,9 +144,19 @@ async def test_propose_transfer_rejects_unowned_account(
     assert resp.json()["proposal"] is None
 
 
-async def test_propose_payment_creates_pending_proposal(authed_client, scripted_provider, supabase):
+async def test_propose_payment_creates_pending_proposal(
+    authed_client, authed_client_factory, user_factory, scripted_provider, supabase
+):
+    """Uses a REAL recipient account, not a placeholder IBAN - propose_payment
+    re-resolves the actual account holder from the IBAN server-side (see
+    ProposePaymentInput's beneficiary_name docstring) and would otherwise
+    correctly reject an IBAN with no account behind it."""
     client, user = authed_client
     from_account = await _open_account(client)
+
+    recipient_user = await user_factory(first_name="Ion", last_name="Popescu")
+    recipient_client, _ = await authed_client_factory(recipient_user)
+    recipient_account = await _open_account(recipient_client, "Cont Ion")
 
     provider = scripted_provider(
         ModelResponse(
@@ -156,7 +166,7 @@ async def test_propose_payment_creates_pending_proposal(authed_client, scripted_
                     name="propose_payment",
                     arguments={
                         "from_account_id": from_account["id"],
-                        "to_iban": "RO49AAAA1B31007593840000",
+                        "to_iban": recipient_account["iban"],
                         "beneficiary_name": "Ion Popescu",
                         "amount_minor": 5_000,
                     },
@@ -179,7 +189,8 @@ async def test_propose_payment_creates_pending_proposal(authed_client, scripted_
     assert row["status"] == "pending"
     assert row["user_id"] == str(user.id)
     assert row["proposal_type"] == "payment"
-    assert row["payload"]["to_iban"] == "RO49AAAA1B31007593840000"
+    assert row["payload"]["to_iban"] == recipient_account["iban"]
+    # The re-resolved real holder name, not whatever the model claimed.
     assert row["payload"]["beneficiary_name"] == "Ion Popescu"
 
 
