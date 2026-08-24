@@ -93,6 +93,23 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("AZURE_OPENAI_DEPLOYMENT", "AZURE_AI_CHAT_DEPLOYMENT"),
     )
 
+    # Separate deployment for the knowledge-base agent's retrieval (app/ai/knowledge):
+    # embeddings are a different model family from chat, so they need their own
+    # deployment name even though they share the endpoint/key above.
+    AZURE_OPENAI_EMBEDDING_DEPLOYMENT: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "AZURE_AI_EMBEDDING_DEPLOYMENT"
+        ),
+    )
+
+    # Azure AI Document Intelligence - a different Azure resource from Azure
+    # OpenAI, used only by scripts/ingest_knowledge_base.py to turn a PDF's
+    # `prebuilt-layout` extraction (tables as structured rows, not flattened
+    # prose) into chunks. Never used on the request path.
+    AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT: str | None = None
+    AZURE_DOCUMENT_INTELLIGENCE_KEY: str | None = None
+
     @field_validator("AZURE_OPENAI_ENDPOINT")
     @classmethod
     def _normalise_endpoint(cls, value: str | None) -> str | None:
@@ -143,6 +160,60 @@ class Settings(BaseSettings):
             deployment=self.AZURE_OPENAI_DEPLOYMENT,
         )
 
+    def require_azure_embedding(self) -> "AzureOpenAIConfig":
+        """Same contract as `require_azure`, for the embedding deployment.
+
+        Kept separate rather than folded into `require_azure` because a
+        deployment can have chat configured without embeddings (or vice
+        versa) - the knowledge-base agent is the only thing that needs this
+        one, and it should fail on its own rather than blocking chat.
+        """
+        missing = [
+            name
+            for name, value in (
+                ("AZURE_OPENAI_ENDPOINT", self.AZURE_OPENAI_ENDPOINT),
+                ("AZURE_OPENAI_API_KEY", self.AZURE_OPENAI_API_KEY),
+                ("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", self.AZURE_OPENAI_EMBEDDING_DEPLOYMENT),
+            )
+            if not value
+        ]
+        if missing:
+            raise ConfigurationError(
+                "Missing Azure embedding configuration: "
+                + ", ".join(missing)
+                + f". Add them to {_BACKEND_DIR / '.env'} (see .env.example)."
+            )
+        assert self.AZURE_OPENAI_ENDPOINT and self.AZURE_OPENAI_API_KEY
+        assert self.AZURE_OPENAI_EMBEDDING_DEPLOYMENT
+        return AzureOpenAIConfig(
+            endpoint=self.AZURE_OPENAI_ENDPOINT,
+            api_key=self.AZURE_OPENAI_API_KEY,
+            api_version=self.AZURE_OPENAI_API_VERSION,
+            deployment=self.AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
+        )
+
+    def require_document_intelligence(self) -> "DocumentIntelligenceConfig":
+        """Validated Document Intelligence config for the ingestion script only."""
+        missing = [
+            name
+            for name, value in (
+                ("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT", self.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT),
+                ("AZURE_DOCUMENT_INTELLIGENCE_KEY", self.AZURE_DOCUMENT_INTELLIGENCE_KEY),
+            )
+            if not value
+        ]
+        if missing:
+            raise ConfigurationError(
+                "Missing Document Intelligence configuration: "
+                + ", ".join(missing)
+                + f". Add them to {_BACKEND_DIR / '.env'} (see .env.example)."
+            )
+        assert self.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT and self.AZURE_DOCUMENT_INTELLIGENCE_KEY
+        return DocumentIntelligenceConfig(
+            endpoint=self.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
+            key=self.AZURE_DOCUMENT_INTELLIGENCE_KEY,
+        )
+
 
 class AzureOpenAIConfig(BaseSettings):
     """The Azure values, proven present. Never logged."""
@@ -153,6 +224,15 @@ class AzureOpenAIConfig(BaseSettings):
     api_key: str
     api_version: str
     deployment: str
+
+
+class DocumentIntelligenceConfig(BaseSettings):
+    """The Document Intelligence values, proven present. Never logged."""
+
+    model_config = SettingsConfigDict(extra="forbid")
+
+    endpoint: str
+    key: str
 
 
 settings = Settings()

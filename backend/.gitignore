@@ -9,3 +9,7 @@ __pycache__/
 *.egg-info/
 htmlcov/
 .coverage
+
+# Generated from knowledge_base/*.html by app/ai/knowledge/pdf_export.py -
+# derived, regenerated on ingest, not source of truth.
+knowledge_base/*.pdf
