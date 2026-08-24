@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.ai.context import AccessDeniedError, Context, IdentityError
 from app.ai.schemas import ToolResult
 from app.ai.tools.base import Tool
+from app.core.exceptions import IbanNotFoundError
 
 if TYPE_CHECKING:
     from supabase import AsyncClient
@@ -143,7 +144,14 @@ class ProposePaymentInput(BaseModel):
     from_account_id: str = Field(description="One of the user's own account identifiers.")
     to_iban: str = Field(min_length=15, max_length=34)
     beneficiary_name: str = Field(
-        min_length=1, max_length=200, description="The recipient's name, as told by the user."
+        min_length=1,
+        max_length=200,
+        description=(
+            "The recipient's name, as the user believes it to be. Advisory only - "
+            "this tool independently re-resolves the real account holder from the "
+            "IBAN and uses THAT name on the proposal, never this one, so a wrong "
+            "assumption here can't end up on a real payment."
+        ),
     )
     amount_minor: int = Field(gt=0, description="Amount in integer minor units (e.g. cents).")
     description: str | None = Field(default=None, max_length=500)
@@ -154,8 +162,11 @@ class ProposePaymentTool(Tool):
     description = (
         "Pregătește o propunere de plată către un alt cont prin IBAN. Plata "
         "NU se execută - utilizatorul trebuie să confirme, cu Face ID sau "
-        "parolă. Apelează list_accounts înainte pentru contul sursă - nu "
-        "ghici și nu inventa niciodată un id de cont."
+        "parolă. Apelează list_accounts înainte pentru contul sursă, și "
+        "resolve_iban_holder înainte pentru IBAN-ul destinatarului - arată "
+        "numele real găsit utilizatorului și cere-i să confirme că e persoana "
+        "potrivită, înainte de a apela acest tool. Nu ghici și nu inventa "
+        "niciodată un id de cont sau un nume de titular."
     )
     input_schema = ProposePaymentInput
     read_only = False
@@ -176,8 +187,32 @@ class ProposePaymentTool(Tool):
             )
             raise
 
+        # THE GUARDRAIL: re-resolve the real account holder from the IBAN
+        # here, server-side, rather than trusting `beneficiary_name` (model-
+        # authored, ultimately traceable back to whatever the user typed in
+        # conversation). The proposal - what the user actually sees and
+        # confirms with Face ID/password - is built from this verified name,
+        # never from the conversational one. See resolve_iban_holder.py for
+        # the read-only tool that lets the model show this name and get
+        # confirmation *before* calling this tool in the first place.
+        from app.modules.accounts import service as accounts_service
+
+        try:
+            holder = await accounts_service.get_account_holder_by_iban(
+                self._supabase, validated_input.to_iban
+            )
+        except IbanNotFoundError:
+            return ToolResult.failure(
+                name=self.name,
+                error=(
+                    "IBAN-ul nu aparține niciunui client BanK - nu se poate face "
+                    "o plată către el."
+                ),
+            )
+        real_beneficiary_name = f"{holder['first_name']} {holder['last_name']}"
+
         amount_str = _format_amount(validated_input.amount_minor, from_account["currency"])
-        summary = f"Plată de {amount_str} către {validated_input.beneficiary_name}"
+        summary = f"Plată de {amount_str} către {real_beneficiary_name}"
 
         from app.modules.chat.proposals_service import create_proposal
 
@@ -189,14 +224,19 @@ class ProposePaymentTool(Tool):
             payload={
                 "from_account_id": validated_input.from_account_id,
                 "to_iban": validated_input.to_iban,
-                "beneficiary_name": validated_input.beneficiary_name,
+                "beneficiary_name": real_beneficiary_name,
                 "amount_minor": validated_input.amount_minor,
                 "description": validated_input.description,
             },
             summary=summary,
         )
         return ToolResult(
-            name=self.name, data={"proposal_id": proposal["id"], "summary": summary}
+            name=self.name,
+            data={
+                "proposal_id": proposal["id"],
+                "summary": summary,
+                "resolved_holder_name": real_beneficiary_name,
+            },
         )
 
 
