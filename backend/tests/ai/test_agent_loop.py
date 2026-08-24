@@ -89,6 +89,11 @@ async def test_tools_are_advertised_to_the_provider(make_agent, context):
         "list_transactions",
         "list_cards",
         "list_transfers",
+        "propose_transfer",
+        "propose_payment",
+        "propose_open_account",
+        "propose_close_account",
+        "propose_cancel_card",
     ]
 
     params = specs[0]["function"]["parameters"]
@@ -96,9 +101,12 @@ async def test_tools_are_advertised_to_the_provider(make_agent, context):
     # account_id is optional now — the model is not asked to supply identity.
     assert not params.get("required")
 
-    # Nothing the model is shown is ever mandatory: identity is supplied by the
-    # application, so it never has to produce (or guess) an identifier.
-    for spec in specs:
+    # Nothing the read-only tools show is ever mandatory: identity is supplied
+    # by the application, so the model never has to produce (or guess) an
+    # identifier. The propose_* tools are different: their required fields
+    # (amount, target account, ...) are the content of the proposed action
+    # itself, not identity, so they legitimately declare `required`.
+    for spec in specs[:5]:
         assert not spec["function"]["parameters"].get("required"), spec["function"]["name"]
 
 

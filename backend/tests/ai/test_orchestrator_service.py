@@ -8,6 +8,7 @@ from app.ai.agents.banking_agent import BankingAgent
 from app.ai.agents.insights_agent import InsightsAgent
 from app.ai.agents.planning_agent import PlanningAgent
 from app.ai.orchestrator import Orchestrator
+from app.ai.providers.mock_embedding_provider import MockEmbeddingProvider
 from app.ai.providers.mock_provider import MockProvider
 from app.ai.schemas import Message, ModelResponse
 from app.ai.service import (
@@ -21,7 +22,10 @@ from tests.ai.conftest import OWNED_ACCOUNT_IDS, FakeSupabase, balance_call
 
 def _service(script: list[ModelResponse]) -> tuple[AIService, MockProvider]:
     provider = MockProvider(script)
-    return AIService(FakeSupabase(), provider=provider), provider
+    return (
+        AIService(FakeSupabase(), provider=provider, embedding_provider=MockEmbeddingProvider()),
+        provider,
+    )
 
 
 def test_route_always_returns_the_banking_agent(context):
@@ -39,12 +43,13 @@ def test_route_always_returns_the_banking_agent(context):
 
 def test_service_wires_a_default_orchestrator_with_all_agents(context):
     """Insights is registered FIRST (it wins shared keywords with Banking),
-    Planning is registered LAST (it loses the shared `econom` keyword to
-    Banking), Banking is the default (it takes anything unclaimed). All
-    three of those are different things."""
+    Docs goes right after Insights (it wins the shared `cont` stem with
+    Banking too), Planning is registered LAST (it loses the shared `econom`
+    keyword to Banking), Banking is the default (it takes anything
+    unclaimed). All of those are different things."""
     service, _ = _service([ModelResponse(text="ok")])
 
-    assert service.orchestrator.names() == ["insights", "banking", "planning"]
+    assert service.orchestrator.names() == ["insights", "docs", "banking", "planning"]
 
     # A banking-only keyword still reaches banking despite insights being first.
     decision = service.orchestrator.route("care este soldul meu?", context)

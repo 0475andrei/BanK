@@ -237,6 +237,21 @@ async def _consume_face_confirmation(supabase: AsyncClient, user: UserRead, toke
     )
 
 
+async def consume_face_confirmation_token(supabase: AsyncClient, user: UserRead, token: str) -> None:
+    """Public entry point for callers that need to consume a step-up token
+    unconditionally - unlike `enforce_face_confirmation` below, this never
+    no-ops for a user with no face enrolled (that no-op exists there because
+    face is an *optional extra* on top of session auth for its callers;
+    here, the caller - proposals_service.confirm_proposal - has the user's
+    explicit choice of auth_method="face" and must not silently let an
+    unenrolled user "succeed" a check that was never performed). Callers for
+    whom that distinction matters should call `has_face_enrolled` first.
+
+    Just exposes the existing `_consume_face_confirmation` publicly - same
+    validation (ownership, expiry, single-use), nothing new."""
+    await _consume_face_confirmation(supabase, user, token)
+
+
 def requires_face_confirmation(amount_minor: int) -> bool:
     return amount_minor >= FACE_CONFIRMATION_THRESHOLD_MINOR
 
