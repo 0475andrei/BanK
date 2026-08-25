@@ -454,6 +454,10 @@ body {
     border-radius: var(--border-radius);
     padding: 40px;
     max-width: 480px;
+    /* Stays visible above #face-flashlight-overlay (z-index 90) while its
+       camera is active - see the flashlight comment near .modal-overlay. */
+    position: relative;
+    z-index: 91;
 }
 
 .standalone-card.centered { text-align: center; }
@@ -1736,6 +1740,10 @@ html.i18n-pending body { visibility: hidden; }
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     padding: 36px;
+    /* Stays visible above #face-flashlight-overlay (z-index 90) while its
+       camera is active - see the flashlight comment near .modal-overlay. */
+    position: relative;
+    z-index: 91;
 }
 
 .auth-card-wide { max-width: 480px; }
@@ -2130,6 +2138,30 @@ html.i18n-pending body { visibility: hidden; }
 }
 
 .modal-overlay[hidden] { display: none; }
+
+/* "Flashlight": while a face camera is active, most of the screen flashes
+   solid white at max device brightness, to act as a passive light source
+   for whoever's face the camera needs to see - the same trick real
+   ID-scanning apps use (see setFaceFlashlight in api.js). Sits below the
+   actual camera UI, which stays "positioned" with a higher z-index (see
+   .auth-card/.standalone-card below) so the video/controls remain visible
+   on top of the flash. */
+#face-flashlight-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: #ffffff;
+    z-index: 90;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+#face-flashlight-overlay.is-active { opacity: 1; }
+
+/* Modal-based camera flow (the step-up face-confirm modal): the backdrop
+   itself goes white - the .modal card is its own DOM child, so it always
+   paints on top of its own parent's background with no z-index changes
+   needed. */
+.modal-overlay.face-flashlight { background-color: #ffffff; }
 
 .modal {
     width: 100%;

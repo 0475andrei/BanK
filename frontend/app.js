@@ -1922,6 +1922,7 @@ function requestFaceConfirmationToken(reason = FACE_CONFIRM_DEFAULT_REASON) {
             stream = null;
             video.srcObject = null;
             modal.hidden = true;
+            setFaceFlashlight(false, modal);
             captureBtn.onclick = null;
             cancelBtn.onclick = null;
             closeBtn.onclick = null;
@@ -1929,7 +1930,7 @@ function requestFaceConfirmationToken(reason = FACE_CONFIRM_DEFAULT_REASON) {
         }
 
         navigator.mediaDevices.getUserMedia({ video: true })
-            .then((s) => { stream = s; video.srcObject = s; })
+            .then((s) => { stream = s; video.srcObject = s; setFaceFlashlight(true, modal); })
             .catch(() => {
                 errorEl.textContent = 'Nu s-a putut accesa camera. Verifică permisiunile browserului.';
                 errorEl.hidden = false;
@@ -2700,6 +2701,7 @@ function stopFaceCamera() {
     if (video) video.srcObject = null;
     document.getElementById('face-start-camera-btn').hidden = false;
     document.getElementById('face-capture-btn').hidden = true;
+    setFaceFlashlight(false);
 }
 
 let faceStatusEnrolled = null;
@@ -2740,6 +2742,7 @@ function wireFaceLoginPanel() {
             video.srcObject = faceCameraStream;
             startBtn.hidden = true;
             captureBtn.hidden = false;
+            setFaceFlashlight(true);
         } catch {
             errorEl.textContent = 'Nu s-a putut accesa camera. Verifică permisiunile browserului.';
             errorEl.hidden = false;
