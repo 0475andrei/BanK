@@ -162,7 +162,7 @@
                      "sent_success":  "Ödeme başarıyla gönderildi!"
                  },
     "chat":  {
-                 "welcome":  "Hello! I am your banking assistant. I can check your account balances and answer banking questions. How can I help?",
+                 "welcome":  "Merhaba! Ben bankacılık asistanınızım. Hesap bakiyelerinizi kontrol edebilir ve bankacılık sorularınızı yanıtlayabilirim. Size nasıl yardımcı olabilirim?",
                  "typing":  "The assistant is thinking...",
                  "errors":  {
                                 "unavailable":  "The AI assistant is currently unavailable. Please try again.",

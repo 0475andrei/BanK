@@ -148,7 +148,7 @@
                      "sent_success":  "Платіж успішно надіслано!"
                  },
     "chat":  {
-                 "welcome":  "Hello! I am your banking assistant. I can check your account balances and answer banking questions. How can I help?",
+                 "welcome":  "Вітаю! Я ваш банківський асистент. Я можу перевірити залишки на ваших рахунках і відповісти на банківські запитання. Чим можу допомогти?",
                  "typing":  "The assistant is thinking...",
                  "errors":  {
                                 "unavailable":  "The AI assistant is currently unavailable. Please try again.",

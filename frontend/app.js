@@ -540,7 +540,7 @@ async function openConversation(conversationId) {
         if (dialogue.length) {
             dialogue.forEach(message => appendChatBubble(message.role === 'user' ? 'user' : 'ai', message.content));
         } else {
-            appendChatBubble('ai', CHAT_WELCOME_TEXT);
+            appendChatBubble('ai', chatWelcomeText());
         }
     } catch (err) {
         showConversationHistoryError('Conversația nu a putut fi încărcată. Încearcă din nou.');
