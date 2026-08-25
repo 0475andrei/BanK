@@ -162,7 +162,7 @@
                             <div class="ai-avatar"><i data-lucide="sparkles"></i></div>
                             <div class="ai-info">
                                 <h2>BanK AI Assistant <span class="demo-badge">Demo</span></h2>
-                                <span class="status">Conectat • poate citi soldurile conturilor tale</span>
+                                <span class="status">Conectat • poate citi conturile și efectua acțiuni simple</span>
                             </div>
                             <button class="btn btn-secondary" id="new-conversation-btn" style="margin-left: auto;">
                                 <i data-lucide="plus" class="icon"></i> Conversație nouă
@@ -178,9 +178,12 @@
                             </div>
                         </div>
                         <div class="chat-input-area">
+                            <button class="card-eye-btn" id="chat-attach-btn" type="button" title="Atașează o poză sau PDF cu extrasul de cont (pt. citit un IBAN)" aria-label="Atașează un fișier"><i data-lucide="paperclip"></i></button>
+                            <input type="file" id="chat-attach-input" accept="image/png,image/jpeg,application/pdf" hidden>
                             <input type="text" placeholder="Întreabă asistentul AI..." class="chat-input" id="chat-input">
                             <button class="btn-send" onclick="sendMessage()">➤</button>
                         </div>
+                        <p class="field-hint" id="chat-attach-status" hidden></p>
                     </div>
                 </section>
 
@@ -202,13 +205,10 @@
                     <div class="analytics-grid">
                         <div class="chart-card">
                             <h3>Cheltuieli pe Categorii (Luna curentă)</h3>
-                            <div class="donut-chart-container">
-                                <!-- Simple CSS visual representation -->
-                                <div class="css-donut"></div>
-                                <div class="legend">
-                                    <div class="legend-item"><span class="dot groceries"></span> Supermarket (40%)</div>
-                                    <div class="legend-item"><span class="dot bills"></span> Facturi (35%)</div>
-                                    <div class="legend-item"><span class="dot entertainment"></span> Divertisment (25%)</div>
+                            <div class="donut-chart-container" id="spending-category-container">
+                                <div class="css-donut" id="spending-category-donut"></div>
+                                <div class="legend" id="spending-category-legend">
+                                    <div class="loading-state">Se încarcă...</div>
                                 </div>
                             </div>
                         </div>
@@ -232,6 +232,14 @@
 
                             <h3 style="margin-top: 30px;">Conturile mele de economii</h3>
                             <div id="savings-accounts-list" class="pots-list">
+                                <div class="loading-state">Se încarcă...</div>
+                            </div>
+
+                            <div class="pots-card-header" style="margin-top: 30px;">
+                                <h3>Transferuri programate</h3>
+                                <button type="button" class="btn-icon-add" id="open-scheduled-transfer-btn" title="Programează un transfer" aria-label="Programează un transfer"><i data-lucide="plus"></i></button>
+                            </div>
+                            <div id="scheduled-transfers-list" class="pots-list">
                                 <div class="loading-state">Se încarcă...</div>
                             </div>
                         </div>
@@ -258,7 +266,12 @@
 
                             <form id="payments-form">
                                 <label class="field-label" for="payments-iban">IBAN destinatar</label>
-                                <input class="field-input" type="text" id="payments-iban" required placeholder="RO49 BANK ...">
+                                <div class="iban-input-row">
+                                    <input class="field-input" type="text" id="payments-iban" required placeholder="RO49 BANK ...">
+                                    <button type="button" class="card-eye-btn" id="iban-scan-btn" title="Scanează IBAN dintr-o poză sau PDF" aria-label="Scanează IBAN dintr-o poză sau PDF"><i data-lucide="scan-line"></i></button>
+                                </div>
+                                <input type="file" id="iban-scan-input" accept="image/png,image/jpeg,application/pdf" hidden>
+                                <p class="field-hint" id="iban-scan-status" hidden></p>
                                 <p class="field-hint" id="payments-iban-holder"></p>
 
                                 <label class="field-label" for="payments-beneficiary">Nume beneficiar</label>
@@ -282,7 +295,21 @@
                         </div>
 
                         <div class="pots-card">
-                            <h3>Contactele mele</h3>
+                            <div class="pots-card-header">
+                                <h3>Contactele mele</h3>
+                                <button type="button" class="btn-icon-add" id="add-beneficiary-btn" title="Adaugă contact" aria-label="Adaugă contact"><i data-lucide="plus"></i></button>
+                            </div>
+                            <form id="add-beneficiary-form" class="inline-add-form" hidden>
+                                <input type="text" class="field-input" id="add-beneficiary-name" placeholder="Nume" required>
+                                <input type="text" class="field-input" id="add-beneficiary-iban" placeholder="IBAN" required>
+                                <input type="url" class="field-input" id="add-beneficiary-website" placeholder="Website (opțional, ex. pt. abonamente)">
+                                <label class="field-label" style="display: flex; align-items: center; gap: 8px;">
+                                    <input type="checkbox" id="add-beneficiary-is-subscription" style="width: auto;">
+                                    Este un abonament (Netflix, Spotify etc.)
+                                </label>
+                                <button type="submit" class="btn btn-primary">Salvează</button>
+                            </form>
+                            <div class="auth-error" id="add-beneficiary-error" hidden></div>
                             <div id="beneficiaries-list" class="pots-list">
                                 <div class="loading-state">Se încarcă...</div>
                             </div>
@@ -479,6 +506,45 @@
         </div>
     </div>
 
+    <!-- Scheduled/recurring transfer modal -->
+    <div class="modal-overlay" id="scheduled-transfer-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Programează un transfer</h3>
+                <button class="modal-close" id="close-scheduled-transfer-modal"><i data-lucide="x"></i></button>
+            </div>
+            <div class="auth-error" id="scheduled-transfer-error" hidden></div>
+            <form id="scheduled-transfer-form">
+                <label class="field-label" for="scheduled-transfer-from">Din contul</label>
+                <select class="field-input" id="scheduled-transfer-from" required></select>
+
+                <label class="field-label" for="scheduled-transfer-to">În contul</label>
+                <select class="field-input" id="scheduled-transfer-to" required></select>
+
+                <label class="field-label" for="scheduled-transfer-amount">Sumă</label>
+                <input class="field-input" type="number" id="scheduled-transfer-amount" min="0.01" step="0.01" required>
+
+                <label class="field-label" for="scheduled-transfer-start-days">Peste câte zile începe</label>
+                <input class="field-input" type="number" id="scheduled-transfer-start-days" min="0" step="1" value="0" required>
+
+                <label class="field-label" for="scheduled-transfer-frequency">Frecvență</label>
+                <select class="field-input" id="scheduled-transfer-frequency">
+                    <option value="">O singură dată</option>
+                    <option value="weekly">Săptămânal</option>
+                    <option value="monthly">Lunar</option>
+                </select>
+
+                <label class="field-label" for="scheduled-transfer-description">Descriere <span class="field-optional">(opțional)</span></label>
+                <input class="field-input" type="text" id="scheduled-transfer-description">
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-scheduled-transfer">Anulează</button>
+                    <button type="submit" class="btn btn-primary">Programează</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- New card modal -->
     <div class="modal-overlay" id="new-card-modal" hidden>
         <div class="modal">
@@ -561,6 +627,33 @@
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" id="cancel-face-confirm">Anulează</button>
                 <button type="button" class="btn btn-primary" id="capture-face-confirm">Confirmă</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Subscription price-increase block - opened by submitPayment() in
+         app.js whenever a payment comes back 409 subscription_price_increase
+         (see backend/app/modules/payments/service.py::
+         _detect_subscription_price_increase). -->
+    <div class="modal-overlay" id="price-increase-modal" hidden>
+        <div class="modal price-increase-modal">
+            <div class="price-increase-icon"><i data-lucide="trending-up"></i></div>
+            <h3 class="price-increase-title">Prețul abonamentului a crescut</h3>
+            <p class="price-increase-message">
+                <span id="price-increase-merchant">Acest abonament</span> și-a mărit prețul
+            </p>
+            <div class="price-increase-amounts">
+                <span class="price-increase-old" id="price-increase-old"></span>
+                <i data-lucide="arrow-right" class="icon"></i>
+                <span class="price-increase-new" id="price-increase-new"></span>
+            </div>
+            <p class="price-increase-blocked-note">Am blocat această plată.</p>
+            <a class="price-increase-website-link" id="price-increase-website-link" href="#" target="_blank" rel="noopener noreferrer" hidden>
+                <i data-lucide="external-link" class="icon"></i> Mergi să anulezi abonamentul
+            </a>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="price-increase-cancel">Anulează plata</button>
+                <button type="button" class="btn btn-primary" id="price-increase-confirm">Continuă oricum</button>
             </div>
         </div>
     </div>

@@ -43,10 +43,11 @@ def test_route_always_returns_the_banking_agent(context):
 
 def test_service_wires_a_default_orchestrator_with_all_agents(context):
     """Insights is registered FIRST (it wins shared keywords with Banking),
-    Docs goes right after Insights (it wins the shared `cont` stem with
-    Banking too), Planning is registered LAST (it loses the shared `econom`
-    keyword to Banking), Banking is the default (it takes anything
-    unclaimed). All of those are different things."""
+    Docs is registered right after Insights (it wins Banking's `cont` stem
+    for documentation questions like "ce comision are contul curent"),
+    Planning is registered LAST (it loses the shared `econom` keyword to
+    Banking), Banking is the default (it takes anything unclaimed). All of
+    those are different things."""
     service, _ = _service([ModelResponse(text="ok")])
 
     assert service.orchestrator.names() == ["insights", "docs", "banking", "planning"]

@@ -36,6 +36,17 @@ logger = logging.getLogger(__name__)
 #: starting with those two letters — including names like "Andrei", which would
 #: send "trimite 50 RON către Andrei" to the analytics agent. `anul`/`anual`
 #: cover "anul acesta" / "anul trecut" without that blast radius.
+#:
+#: `"anul "` (trailing space) rather than bare `"anul"`: prefix matching also
+#: means `anul` claims "anulează"/"anulare"/"anulat" (cancel-family words,
+#: e.g. propose_cancel_card's "anulează cardul meu" - see
+#: app/ai/tools/propose_tools.py), sending a card-cancellation request here
+#: instead of to Banking. The trailing space still matches "anul acesta" /
+#: "anul trecut" (a space always follows in that phrasing) while rejecting
+#: "anulează", which continues the same word with no boundary. Narrow
+#: regression: no longer matches "anul" as the very last word of a message,
+#: or followed by punctuation instead of a space - accepted, since the
+#: false-positive it fixes actively broke a real feature.
 INSIGHTS_ROUTING_RULES = (
     RoutingRule(
         name="insights_spending",
@@ -62,7 +73,7 @@ INSIGHTS_ROUTING_RULES = (
                 "month",
                 "trimestr",
                 "quarter",
-                "anul",
+                "anul ",
                 "anual",
             }
         ),

@@ -16,6 +16,11 @@ class PaymentCreate(BaseModel):
     # beneficiaries_service.upsert_beneficiary) - this opts a one-off payment
     # out of that. True by default to keep existing behavior unchanged.
     save_beneficiary: bool = True
+    # Set on a retry after the user has seen and accepted a
+    # SubscriptionPriceIncreaseError (see payments/service.py) - bypasses
+    # that check on this specific request. False by default: the check
+    # runs on every first attempt.
+    confirm_price_increase: bool = False
 
 
 class PaymentRead(BaseModel):

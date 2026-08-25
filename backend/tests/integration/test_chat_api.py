@@ -67,6 +67,62 @@ async def test_chat_threads_context_into_the_ai_service(authed_client, scripted_
     assert payload["result"]["source"] == "ledger"
 
 
+async def test_chat_surfaces_a_card_order_proposal(authed_client, scripted_provider):
+    """propose_card_order (app/ai/tools/banking/propose_card_order.py) never
+    writes anything itself - it's a separate, older propose-only tool that
+    predates the proposals table/confirm-reject flow (see
+    app/modules/chat/proposals_service.py) and isn't wired into it, so
+    ChatResponse.proposal stays None for this tool specifically (unlike the
+    five propose_* tools in app/ai/tools/propose_tools.py - see
+    test_proposals_confirm.py for those). Its result currently only reaches
+    the user as prose in `reply` and in the raw tool-result trace. This test
+    proves the tool still runs correctly and, crucially, that nothing gets
+    written - no card order is ever actually placed by the chat turn alone."""
+    client, _user = authed_client
+    account = (
+        await client.post("/api/v1/accounts", json={"name": "Checking", "currency": "USD"})
+    ).json()
+
+    scripted_provider(
+        ModelResponse(
+            tool_calls=[
+                ToolCall(
+                    id="c1",
+                    name="propose_card_order",
+                    arguments={
+                        "full_name": "Ana Pop",
+                        "phone": "0712345678",
+                        "address": "Str. Exemplu 1",
+                        "city": "Cluj-Napoca",
+                        "postal_code": "400000",
+                        "country": "Romania",
+                    },
+                )
+            ]
+        ),
+        ModelResponse(text="Iată comanda pregătită pentru confirmare."),
+    )
+
+    resp = await client.post("/api/v1/chat", json={"message": "vreau un card fizic nou"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    assert body["proposal"] is None
+    assert body["reply"] == "Iată comanda pregătită pentru confirmare."
+
+    history_resp = await client.get(f"/api/v1/chat/conversations/{body['conversation_id']}/messages")
+    tool_messages = [m for m in history_resp.json() if m["role"] == "tool"]
+    assert len(tool_messages) == 1
+    tool_result = json.loads(tool_messages[0]["content"])
+    assert tool_result["ok"] is True
+    assert tool_result["result"]["full_name"] == "Ana Pop"
+    assert tool_result["result"]["account_id"] == account["id"]
+
+    # No card order was actually placed - the tool only proposed one.
+    orders = (await client.get("/api/v1/card-orders")).json()
+    assert orders == []
+
+
 @pytest.mark.parametrize("message", ["", "   ", "\n\t "])
 async def test_chat_rejects_empty_message(authed_client, scripted_provider, message):
     """Blank and whitespace-only alike - never let an empty prompt reach the model."""

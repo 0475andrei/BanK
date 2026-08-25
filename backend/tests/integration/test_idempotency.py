@@ -41,9 +41,9 @@ async def test_concurrent_identical_requests_apply_once(authed_client, seed_bala
 
     a_after = (await client.get(f"/api/v1/accounts/{a['id']}")).json()
     b_after = (await client.get(f"/api/v1/accounts/{b['id']}")).json()
-    # Every new account starts with a welcome balance (see accounts/service.py).
+    # Only the user's first account ("a") gets the welcome balance.
     assert a_after["balance_minor"] == OPENING_BALANCE_MINOR + 9_000  # debited exactly once, not n times
-    assert b_after["balance_minor"] == OPENING_BALANCE_MINOR + 1_000
+    assert b_after["balance_minor"] == 1_000
 
 
 async def test_sequential_repeat_with_same_key_is_a_pure_replay(

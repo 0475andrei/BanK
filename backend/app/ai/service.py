@@ -19,12 +19,19 @@ from app.ai.providers.base import ModelProvider
 from app.ai.routing import RoutingDecision
 from app.ai.schemas import Message
 from app.ai.tools.banking import (
+    AddBeneficiaryTool,
+    CreateScheduledTransferTool,
+    FreezeCardTool,
     GetBalanceTool,
     ListAccountsTool,
     ListCardsTool,
     ListTransactionsTool,
     ListTransfersTool,
+    ProposeCardOrderTool,
+    RemoveBeneficiaryTool,
     ResolveIbanHolderTool,
+    SetCardSpendingLimitTool,
+    UnfreezeCardTool,
 )
 from app.ai.tools.insights import (
     CategorizeTransactionsTool,
@@ -51,10 +58,17 @@ if TYPE_CHECKING:
 
 
 def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
-    """The read-only tools the banking agent is allowed to call.
+    """The tools the banking agent is allowed to call: the original read-only
+    set, a handful of low-stakes write tools that execute directly (see each
+    one's own docstring for why), and the propose_* tools for higher-stakes
+    actions (money movement, opening/closing an account, cancelling a card,
+    ordering a physical card) - those only ever create a pending proposal,
+    never execute anything themselves (see app/ai/tools/propose_tools.py's
+    module docstring).
 
-    `supabase` is handed to every tool that reads data; the tools hold it for
-    their lifetime (the client is a stateless HTTP client, safe to share).
+    `supabase` is handed to every tool that reads/writes data; the tools hold
+    it for their lifetime (the client is a stateless HTTP client, safe to
+    share).
     """
     return ToolRegistry(
         [
@@ -64,6 +78,15 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
             ListCardsTool(supabase),
             ListTransfersTool(supabase),
             ResolveIbanHolderTool(supabase),
+            # Low-stakes and reversible: execute directly (see each tool's
+            # own docstring for why it doesn't need a UI-level confirm step).
+            FreezeCardTool(supabase),
+            UnfreezeCardTool(supabase),
+            SetCardSpendingLimitTool(supabase),
+            AddBeneficiaryTool(supabase),
+            RemoveBeneficiaryTool(supabase),
+            CreateScheduledTransferTool(supabase),
+            ProposeCardOrderTool(supabase),
             # Write-adjacent: each only creates a `pending` proposal row, never
             # executes (see app/ai/tools/propose_tools.py's module docstring).
             ProposeTransferTool(supabase),
