@@ -226,27 +226,6 @@ async def get_conversation_messages(
     return await conversations_service.load_messages(supabase, conversation_id)
 
 
-@router.patch("/conversations/{conversation_id}", response_model=ConversationRead)
-async def rename_conversation(
-    conversation_id: uuid.UUID,
-    payload: ConversationRenameRequest,
-    supabase: AsyncClient = Depends(get_supabase),
-    user: UserRead = Depends(get_current_user),
-) -> dict:
-    return await conversations_service.rename_conversation(
-        supabase, user, conversation_id, payload.title
-    )
-
-
-@router.delete("/conversations/{conversation_id}", status_code=204)
-async def delete_conversation(
-    conversation_id: uuid.UUID,
-    supabase: AsyncClient = Depends(get_supabase),
-    user: UserRead = Depends(get_current_user),
-) -> None:
-    await conversations_service.delete_conversation(supabase, user, conversation_id)
-
-
 @router.post("/proposals/{proposal_id}/confirm", response_model=ProposalRead)
 async def confirm_proposal(
     proposal_id: uuid.UUID,
