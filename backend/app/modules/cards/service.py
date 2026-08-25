@@ -74,6 +74,14 @@ async def list_cards(supabase: AsyncClient, user: UserRead) -> list[dict]:
     return await list_cards_for_owner(supabase, user.id)
 
 
+async def get_card(supabase: AsyncClient, user: UserRead, card_id: uuid.UUID) -> dict:
+    """Public entry point for callers outside this module that need a single
+    owned card by id (e.g. card_orders/service.py turning an existing
+    virtual card into a physical one) - thin wrapper over the same
+    ownership check every other card-touching function here uses."""
+    return await _get_owned_card(supabase, str(user.id), card_id)
+
+
 async def _get_owned_card(supabase: AsyncClient, user_id: str, card_id: uuid.UUID) -> dict:
     """Shared ownership check: a card has no `user_id` column of its own, so
     ownership is proven transitively through the account it's attached to -

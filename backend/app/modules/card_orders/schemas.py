@@ -9,6 +9,10 @@ from app.modules.cards.schemas import CardRead
 
 class CardOrderCreate(BaseModel):
     account_id: uuid.UUID
+    #: An existing (non-cancelled) virtual card on `account_id` to ship
+    #: physically - reuses its number/CVV/expiry instead of minting a new
+    #: card. Omit to order a brand-new separate physical card, as before.
+    card_id: uuid.UUID | None = None
     full_name: str = Field(..., min_length=1, max_length=200)
     phone: str = Field(..., min_length=1, max_length=20)
     address: str = Field(..., min_length=1, max_length=255)

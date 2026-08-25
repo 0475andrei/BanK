@@ -681,6 +681,7 @@ function wireStepUpModal() {
  * ========================================================================= */
 
 let currentAccounts = [];
+let currentCards = [];
 
 const CURRENCY_ICONS = { RON: 'coins', EUR: 'euro', USD: 'dollar-sign' };
 
@@ -1769,6 +1770,7 @@ async function loadCards() {
     if (!list) return;
     try {
         const cards = await apiFetch('/cards');
+        currentCards = cards;
         renderCardsList(cards);
     } catch (err) {
         list.innerHTML = `<div class="empty-state">Nu s-au putut încărca cardurile: ${escapeHTML(err.message)}</div>`;
@@ -1972,8 +1974,41 @@ function wireCardOrderModal() {
     const form = document.getElementById('card-order-form');
     const errorEl = document.getElementById('card-order-error');
     const accountSelect = document.getElementById('card-order-account');
+    const cardChoiceSelect = document.getElementById('card-order-card-choice');
+    const cardHint = document.getElementById('card-order-card-hint');
 
-    document.getElementById('open-card-order-btn').addEventListener('click', () => {
+    // Cards that already have a physical order can't be offered again (see
+    // the backend's matching guard in card_orders/service.py) - fetched
+    // once when the modal opens, alongside the account list.
+    let orderedCardIds = new Set();
+
+    function updateCardChoices() {
+        const eligible = currentCards.filter(c =>
+            c.account_id === accountSelect.value &&
+            c.status !== 'cancelled' &&
+            !orderedCardIds.has(c.id)
+        );
+
+        cardChoiceSelect.innerHTML = [
+            '<option value="">Card nou (emite un card separat)</option>',
+            ...eligible.map(c =>
+                `<option value="${c.id}">Fă fizic cardul virtual care se termină în ${c.last4}</option>`
+            ),
+        ].join('');
+
+        // Exactly one eligible virtual card on this account - that's almost
+        // certainly what "order a physical card" means here, so default to
+        // reusing it instead of silently minting an unrelated second card.
+        if (eligible.length === 1) {
+            cardChoiceSelect.value = eligible[0].id;
+        }
+
+        cardHint.hidden = eligible.length === 0;
+        cardHint.textContent = eligible.length === 0 ? '' :
+            'Poți transforma un card virtual existent în fizic (păstrează același număr) sau comanda unul nou.';
+    }
+
+    document.getElementById('open-card-order-btn').addEventListener('click', async () => {
         errorEl.hidden = true;
         form.reset();
         document.getElementById('card-order-country').value = 'România';
@@ -1981,8 +2016,19 @@ function wireCardOrderModal() {
         accountSelect.innerHTML = active.length
             ? active.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
             : '<option value="" disabled selected>Creează mai întâi un cont</option>';
+
+        try {
+            const orders = await apiFetch('/card-orders');
+            orderedCardIds = new Set(orders.map(o => o.card_id).filter(Boolean));
+        } catch (err) {
+            orderedCardIds = new Set();
+        }
+
+        updateCardChoices();
         modal.hidden = false;
     });
+    accountSelect.addEventListener('change', updateCardChoices);
+
     document.getElementById('close-card-order-modal').addEventListener('click', () => { modal.hidden = true; });
     document.getElementById('cancel-card-order').addEventListener('click', () => { modal.hidden = true; });
 
@@ -1995,6 +2041,7 @@ function wireCardOrderModal() {
                 method: 'POST',
                 body: JSON.stringify({
                     account_id: accountSelect.value,
+                    card_id: cardChoiceSelect.value || null,
                     full_name: document.getElementById('card-order-name').value,
                     phone: document.getElementById('card-order-phone').value,
                     address: document.getElementById('card-order-address').value,
