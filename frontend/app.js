@@ -218,6 +218,13 @@ async function sendMessage() {
         }
         setCurrentConversationId(response.conversation_id);
         void loadConversationHistory();
+        // The agent can freeze/unfreeze a card, change a limit, or touch
+        // beneficiaries/scheduled transfers directly - refresh those views so
+        // an already-open panel doesn't show stale state until a manual reload.
+        void loadCards();
+        void loadAccounts();
+        void loadBeneficiaries();
+        void loadScheduledTransfers();
     } catch (err) {
         typingBubble.remove();
 
@@ -1608,7 +1615,7 @@ function renderCardsList(cards) {
                     ` : ''}
                     <button class="card-eye-btn" title="Arată expirare și CVV" aria-label="Arată expirare și CVV"><i data-lucide="eye"></i></button>
                 </div>
-                <div class="status-indicator ${card.status}">${CARD_STATUS_LABELS[card.status] || card.status}</div>
+                <div class="status-indicator ${card.status}">${card.status === 'frozen' ? '<i data-lucide="snowflake"></i>' : ''}${CARD_STATUS_LABELS[card.status] || card.status}</div>
             </div>
             ${!isCancelled ? `
                 <div class="card-actions-row">

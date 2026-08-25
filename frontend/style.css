@@ -2198,6 +2198,21 @@ html.i18n-pending body { visibility: hidden; }
     color: var(--text-muted);
 }
 
+.status-indicator.frozen {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(129, 140, 248, 0.16));
+    color: #7dd3fc;
+}
+
+.status-indicator.frozen i {
+    width: 12px;
+    height: 12px;
+    stroke-width: 2.5;
+    filter: drop-shadow(0 0 3px rgba(125, 211, 252, 0.65));
+}
+
 .credit-card.cancelled {
     opacity: 0.5;
 }
