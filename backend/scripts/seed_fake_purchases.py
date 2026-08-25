@@ -92,6 +92,20 @@ async def seed_fake_purchases(email: str) -> None:
 
     balance = await ledger_service.get_balance(supabase, uuid.UUID(account_id))
 
+    # Card purchases need a card on the entry (ledger_entries.card_id, see
+    # migration 0017) - otherwise the admin panel's "transactions by card"
+    # filter has nothing to show. Cards are picked at random per purchase so
+    # a user with several gets a realistic mix; a user with none still gets
+    # history, just with card_id NULL, exactly like a transfer would.
+    cards_resp = (
+        await supabase.table("cards")
+        .select("id")
+        .eq("account_id", account_id)
+        .neq("status", "cancelled")
+        .execute()
+    )
+    card_ids = [row["id"] for row in (cards_resp.data or [])]
+
     now = datetime.now(timezone.utc)
     created, skipped = 0, 0
 
@@ -133,6 +147,7 @@ async def seed_fake_purchases(email: str) -> None:
                 "amount_minor": amount_minor,
                 "currency": currency,
                 "created_at": ts.isoformat(),
+                "card_id": random.choice(card_ids) if card_ids else None,
             }
         ).execute()
         created += 1
