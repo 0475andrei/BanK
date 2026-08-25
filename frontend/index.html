@@ -96,6 +96,12 @@
                             <div class="profile-panel-email" id="profile-panel-email"></div>
                         </div>
 
+                        <!-- Revealed only when GET /admin/me succeeds - see
+                             revealAdminLinkIfAdmin() in app.js. Hidden here by
+                             default so a non-admin never sees it flash. -->
+                        <a class="profile-menu-item" id="admin-panel-link" href="admin.html" hidden>
+                            <i data-lucide="shield" class="icon"></i> Panou administrare
+                        </a>
                         <button type="button" class="profile-menu-item" data-target="avatar">
                             <i data-lucide="smile" class="icon"></i> <span data-i18n="profile.avatar">Avatar</span>
                         </button>

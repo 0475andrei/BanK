@@ -830,12 +830,29 @@ function isSpendable(acc) {
     return true;
 }
 
+/** Shows the admin-panel link if this user is an admin.
+ *
+ * Asks the server (GET /admin/me) rather than reading a role off the user
+ * object: the role is not part of UserRead, and a client-side flag would be
+ * cosmetic anyway - the real gate is require_admin on every /admin route.
+ * Any failure (403 for a normal user, or anything else) just leaves the link
+ * hidden, so this can never break the dashboard for a non-admin. */
+async function revealAdminLinkIfAdmin() {
+    try {
+        await apiFetch('/admin/me');
+        document.getElementById('admin-panel-link').hidden = false;
+    } catch {
+        /* not an admin, or the admin module is unavailable - leave it hidden */
+    }
+}
+
 async function initDashboard() {
     const user = await requireSession();
     if (!user) return; // requireSession already redirected to login.html
 
     document.getElementById('user-name').textContent = `${user.first_name} ${user.last_name}`;
     applyAvatar(user);
+    void revealAdminLinkIfAdmin();
 
     document.getElementById('logout-btn').addEventListener('click', async () => {
         try {

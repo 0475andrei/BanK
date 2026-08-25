@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.modules.accounts.router import router as accounts_router
+from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
 from app.modules.beneficiaries.router import router as beneficiaries_router
 from app.modules.card_orders.router import router as card_orders_router
@@ -45,3 +46,6 @@ api_router.include_router(insights_router, prefix="/insights", tags=["insights"]
 api_router.include_router(
     trusted_devices_router, prefix="/trusted-devices", tags=["trusted-devices"]
 )
+# Gated as a whole by require_admin, declared on the router itself (see
+# app/modules/admin/router.py) - not per endpoint.
+api_router.include_router(admin_router, prefix="/admin", tags=["admin"])

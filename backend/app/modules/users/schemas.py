@@ -21,6 +21,11 @@ class UserRead(BaseModel):
     referral_code: str | None = None
     referred_by_user_id: uuid.UUID | None = None
     created_at: datetime
+    #: Set by an admin (see app/modules/admin). Not-null means every
+    #: authenticated request is refused - see core/dependencies.py. Defaults
+    #: to None so a UserRead built from a row that predates migration 0017
+    #: still validates.
+    blocked_at: datetime | None = None
 
 
 class UserUpdate(BaseModel):
