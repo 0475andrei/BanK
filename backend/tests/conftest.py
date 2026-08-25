@@ -28,7 +28,6 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport
 from httpx import AsyncClient as HTTPXAsyncClient
-from supabase import AsyncClient, acreate_client
 
 from app.ai.providers.mock_provider import MockProvider
 from app.config import settings
@@ -37,6 +36,7 @@ from app.db.supabase_client import get_supabase
 from app.main import create_app
 from app.modules.chat.router import get_model_provider
 from app.modules.users.schemas import UserRead
+from supabase import AsyncClient, acreate_client
 
 # Children-before-parents, respects the ON DELETE RESTRICT constraints.
 _TABLES_IN_FK_ORDER = (
@@ -52,6 +52,7 @@ _TABLES_IN_FK_ORDER = (
     "audit_log",
     "messages",
     "proposals",
+    "documents",
     "conversations",
     "accounts",
     "users",

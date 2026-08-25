@@ -13,7 +13,6 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends
-from supabase import AsyncClient
 
 from app.ai.context import build_context_for_user
 from app.ai.providers.base import ModelProvider, ProviderError
@@ -40,7 +39,9 @@ from app.modules.chat.schemas import (
     ProposalConfirmRequest,
     ProposalRead,
 )
+from app.modules.documents import service as documents_service
 from app.modules.users.schemas import UserRead
+from supabase import AsyncClient
 
 router = APIRouter()
 
@@ -125,11 +126,27 @@ async def chat(
         )
     conversation_id = uuid.UUID(conversation["id"])
 
+    # Ownership-checked BEFORE it ever reaches Context: get_document raises
+    # NotFoundError for a foreign or nonexistent id, exactly like
+    # conversations_service.get_conversation above - by the time
+    # active_document_id is set below, "the caller owns this document" is
+    # already an established fact, not something the orchestrator, the
+    # agent, or the tool re-checks.
+    active_document_id = None
+    if payload.document_id is not None:
+        await documents_service.get_document(supabase, str(user.id), str(payload.document_id))
+        active_document_id = str(payload.document_id)
+
     # THE EDGE. Built from the authenticated session, never from the payload.
     # conversation_id is resolved above so propose_* tools can attach a
     # proposal to this turn's conversation (proposals.conversation_id is
     # NOT NULL - see backend/supabase/migrations/0013_proposals.sql).
-    context = await build_context_for_user(user, supabase, conversation_id=str(conversation_id))
+    context = await build_context_for_user(
+        user,
+        supabase,
+        conversation_id=str(conversation_id),
+        active_document_id=active_document_id,
+    )
 
     history = await conversations_service.load_messages(supabase, conversation_id)
 
