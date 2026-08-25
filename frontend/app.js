@@ -284,19 +284,42 @@ function agentTagLabel(agentName) {
     return agentName.charAt(0).toUpperCase() + agentName.slice(1);
 }
 
+/** One "Label: value" row in the agent tag's tooltip. Built with
+ * createElement/textContent, not innerHTML, so `value` (which may echo
+ * server-controlled text like routing.reason) is never parsed as markup. */
+function agentTagTooltipRow(label, value) {
+    const row = document.createElement('div');
+    const strong = document.createElement('strong');
+    strong.textContent = `${label}:`;
+    row.appendChild(strong);
+    row.appendChild(document.createTextNode(` ${value}`));
+    return row;
+}
+
 /** Small metadata pill naming which agent produced a reply (see
  * ChatResponse.routing / RoutingDecision). Appended to `container` before
- * the bubble is added, so it renders above it, not inside it. */
+ * the bubble is added, so it renders above it, not inside it. Hover/focus
+ * reveals a custom tooltip (see .agent-tag-tooltip) instead of the OS-styled
+ * `title` attribute tooltip. */
 function renderAgentTag(routing, container) {
     const tag = document.createElement('div');
     tag.className = 'agent-tag';
-    tag.textContent = `→ ${agentTagLabel(routing.agent_name)}`;
-    const confidencePct = Math.round((routing.confidence ?? 0) * 100);
-    tag.title =
-        `Agent: ${routing.agent_name}\n` +
-        `Motiv: ${routing.reason}\n` +
-        `Regulă: ${routing.matched_rule ?? '—'}\n` +
-        `Încredere: ${confidencePct}%`;
+    tag.tabIndex = 0;
+    tag.appendChild(document.createTextNode(`→ ${agentTagLabel(routing.agent_name)}`));
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'agent-tag-tooltip';
+    tooltip.appendChild(agentTagTooltipRow('Agent', routing.agent_name));
+    tooltip.appendChild(agentTagTooltipRow('Motiv', routing.reason));
+    tooltip.appendChild(agentTagTooltipRow('Regulă', routing.matched_rule ?? '—'));
+    // Keyword rules always match at confidence=1.0 - showing it there is just
+    // noise. Only LLM-fallback routing (confidence < 1.0) is worth surfacing.
+    if (routing.confidence !== undefined && routing.confidence < 1.0) {
+        const pct = Math.round(routing.confidence * 100);
+        tooltip.appendChild(agentTagTooltipRow('Încredere', `${pct}%`));
+    }
+    tag.appendChild(tooltip);
+
     container.appendChild(tag);
 }
 
