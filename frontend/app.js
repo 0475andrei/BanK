@@ -1467,11 +1467,15 @@ function showPriceIncreaseModal(details) {
     });
 }
 
+const FACE_CONFIRM_DEFAULT_REASON = 'Suma depășește pragul de confirmare - verifică-ți identitatea prin cameră.';
+
 /** Opens the face-confirm modal, captures a photo, exchanges it for a
  * short-lived confirmation token via POST /auth/face/confirm. Resolves with
  * the token, or null if the user cancels. Never rejects - camera/API errors
- * show inline in the modal and let the user retry or cancel. */
-function requestFaceConfirmationToken() {
+ * show inline in the modal and let the user retry or cancel. `reason`
+ * overrides the modal's explanatory text for callers other than the
+ * large-transfer step-up this was originally built for. */
+function requestFaceConfirmationToken(reason = FACE_CONFIRM_DEFAULT_REASON) {
     return new Promise((resolve) => {
         const modal = document.getElementById('face-confirm-modal');
         const video = document.getElementById('face-confirm-video');
@@ -1483,6 +1487,7 @@ function requestFaceConfirmationToken() {
 
         let stream = null;
         errorEl.hidden = true;
+        document.getElementById('face-confirm-reason').textContent = reason;
         modal.hidden = false;
 
         function cleanup(result) {
@@ -1565,6 +1570,17 @@ function populateTransferToOptions() {
 
 const CARD_STATUS_LABELS = { active: 'Activ', frozen: 'Blocat', cancelled: 'Anulat' };
 
+/** Shows or re-masks a card's expiry/CVV and flips the eye icon to match.
+ * Split out of the eye button's click handler so the Face ID gate above it
+ * can decide WHETHER to reveal before this actually does it. */
+function applyCardSecretsVisibility(card, btn, revealing) {
+    const secrets = card.querySelectorAll('.card-secret');
+    secrets.forEach(el => { el.textContent = revealing ? el.dataset.value : (el.dataset.reveal === 'cvv' ? '•••' : '••/••'); });
+    btn.innerHTML = `<i data-lucide="${revealing ? 'eye-off' : 'eye'}"></i>`;
+    btn.title = revealing ? 'Ascunde expirare și CVV' : 'Arată expirare și CVV';
+    if (window.lucide) lucide.createIcons();
+}
+
 async function loadCards() {
     const list = document.getElementById('cards-list');
     if (!list) return;
@@ -1636,14 +1652,34 @@ function renderCardsList(cards) {
     if (window.lucide) lucide.createIcons();
 
     list.querySelectorAll('.card-eye-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             const card = btn.closest('.credit-card');
             const secrets = card.querySelectorAll('.card-secret');
             const revealing = secrets[0].textContent !== secrets[0].dataset.value;
-            secrets.forEach(el => { el.textContent = revealing ? el.dataset.value : (el.dataset.reveal === 'cvv' ? '•••' : '••/••'); });
-            btn.innerHTML = `<i data-lucide="${revealing ? 'eye-off' : 'eye'}"></i>`;
-            btn.title = revealing ? 'Ascunde expirare și CVV' : 'Arată expirare și CVV';
-            if (window.lucide) lucide.createIcons();
+
+            // Hiding back to masked never needs a fresh proof of identity -
+            // only revealing the real expiry/CVV does, and only for users who
+            // actually opted into Face ID (same "optional extra" philosophy
+            // as the face-confirmation step-up on large transfers).
+            if (revealing) {
+                let faceEnrolled = false;
+                try {
+                    faceEnrolled = (await apiFetch('/auth/face/status')).enrolled;
+                } catch (err) {
+                    // Can't check - fail open to the pre-existing behaviour
+                    // rather than locking the user out of their own card.
+                }
+                if (faceEnrolled) {
+                    btn.disabled = true;
+                    const token = await requestFaceConfirmationToken(
+                        'Verifică-ți identitatea prin cameră ca să vezi numărul complet și CVV-ul cardului.'
+                    );
+                    btn.disabled = false;
+                    if (!token) return;
+                }
+            }
+
+            applyCardSecretsVisibility(card, btn, revealing);
         });
     });
 
