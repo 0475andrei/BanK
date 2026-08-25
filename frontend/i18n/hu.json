@@ -148,7 +148,7 @@
                      "sent_success":  "A fizetés sikeresen elküldve!"
                  },
     "chat":  {
-                 "welcome":  "Hello! I am your banking assistant. I can check your account balances and answer banking questions. How can I help?",
+                 "welcome":  "Üdvözlöm! Én vagyok a banki asszisztense. Ellenőrizhetem a számlái egyenlegét, és válaszolhatok banki kérdésekre. Miben segíthetek?",
                  "typing":  "The assistant is thinking...",
                  "errors":  {
                                 "unavailable":  "The AI assistant is currently unavailable. Please try again.",

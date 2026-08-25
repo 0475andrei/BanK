@@ -2,7 +2,7 @@
 (function () {
     'use strict';
     const STORAGE_KEY = 'bank_preferred_language';
-    const CACHE_PREFIX = 'bank_i18n_v11:';
+    const CACHE_PREFIX = 'bank_i18n_v12:';
     const DEFAULT_LANGUAGE = 'ro';
     const LANGUAGES = { ro: 'Română', en: 'English', uk: 'Українська', hu: 'Magyar', tr: 'Türkçe', it: 'Italiano', es: 'Español', fr: 'Français', de: 'Deutsch' };
     const bundles = new Map();

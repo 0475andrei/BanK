@@ -148,7 +148,7 @@
                      "sent_success":  "Pagamento inviato con successo!"
                  },
     "chat":  {
-                 "welcome":  "Hello! I am your banking assistant. I can check your account balances and answer banking questions. How can I help?",
+                 "welcome":  "Ciao! Sono il tuo assistente bancario. Posso controllare i saldi dei tuoi conti e rispondere alle domande bancarie. Come posso aiutarti?",
                  "typing":  "The assistant is thinking...",
                  "errors":  {
                                 "unavailable":  "The AI assistant is currently unavailable. Please try again.",
