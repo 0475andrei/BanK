@@ -18,12 +18,11 @@ from pydantic import BaseModel, Field, model_validator
 from app.ai.context import Context
 from app.ai.schemas import ToolResult
 from app.ai.tools.base import Tool
-from app.ai.tools.insights._shared import day_bounds, fetch_entries
+from app.ai.tools.insights._shared import day_bounds, load_rows
 
 if TYPE_CHECKING:
-    from supabase import AsyncClient
-
     from app.modules.transactions.schemas import TransactionEntryRead
+    from supabase import AsyncClient
 
 
 def _transaction_summary(entry: TransactionEntryRead) -> dict[str, object]:
@@ -71,7 +70,7 @@ class ComputeSpendingStatsTool(Tool):
         assert isinstance(validated_input, ComputeSpendingStatsInput)
 
         date_from, date_to = day_bounds(validated_input.start_date, validated_input.end_date)
-        entries = await fetch_entries(
+        entries = await load_rows(
             self._supabase, context, date_from=date_from, date_to=date_to
         )
 

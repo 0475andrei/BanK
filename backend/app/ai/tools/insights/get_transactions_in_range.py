@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.ai.context import Context
 from app.ai.schemas import ToolResult
 from app.ai.tools.base import Tool
+from app.ai.tools.insights._shared import load_rows
 
 if TYPE_CHECKING:
     from supabase import AsyncClient
@@ -83,18 +84,14 @@ class GetTransactionsInRangeTool(Tool):
     async def run(self, validated_input: BaseModel, context: Context) -> ToolResult:
         assert isinstance(validated_input, GetTransactionsInRangeInput)
 
-        # Imported here rather than at module scope so the AI layer's tool
-        # package stays importable without pulling in the banking modules.
-        from app.modules.transactions import service as transactions_service
-
         # Both bounds are inclusive whole days: "in October" means the 1st from
         # midnight through the 31st until midnight, not until the 31st at 00:00.
         date_from = datetime.combine(validated_input.start_date, time.min, tzinfo=UTC)
         date_to = datetime.combine(validated_input.end_date, time.max, tzinfo=UTC)
 
-        entries = await transactions_service.list_user_transactions_in_range_for_owner(
+        entries = await load_rows(
             self._supabase,
-            context.user_id,
+            context,
             date_from=date_from,
             date_to=date_to,
             limit=validated_input.limit,

@@ -304,6 +304,7 @@ def test_insights_agent_gets_only_its_own_tools():
         "detect_recurring_payments",
         "compute_spending_stats",
         "detect_anomalies",
+        "compare_statement_to_ledger",
     ]
     assert tools.get("list_cards") is None
     assert all(tool.read_only for tool in tools)

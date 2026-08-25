@@ -78,6 +78,24 @@ class Context(BaseModel):
     #: app/ai/tools/document_tools.py). None means no document is active in
     #: this turn, the ordinary case for every agent except DocumentAgent.
     active_document_id: str | None = None
+    #: Set for a real HTTP chat turn in one of two ways (see chat/router.py):
+    #: EXPLICITLY, when the incoming ChatRequest named a statement_id -
+    #: ownership verified via statements_service.get_statement BEFORE this
+    #: is ever set, exactly like active_document_id above - or IMPLICITLY,
+    #: when it named none: chat/router.py then looks up the most recently
+    #: uploaded (non-deleted) statement in this conversation
+    #: (statements_service.get_latest_statement_for_conversation) and uses
+    #: that instead. This is the one deliberate difference from
+    #: active_document_id: "the last statement uploaded in a conversation
+    #: stays active until another is uploaded" needs no picker UI on the
+    #: frontend, at the cost of being sticky across turns rather than
+    #: per-turn-explicit. Either path still means "the caller owns this
+    #: statement" is an established fact by the time a tool or the
+    #: orchestrator sees this field - never re-checked by either of them.
+    #: None means no statement is active in this turn, the ordinary case
+    #: for every agent except DocumentAgent and InsightsAgent's
+    #: compare_statement_to_ledger.
+    statement_id: str | None = None
 
     @field_validator("account_ids", mode="before")
     @classmethod
@@ -155,6 +173,7 @@ def build_context(
     *,
     conversation_id: str | None = None,
     active_document_id: str | None = None,
+    statement_id: str | None = None,
 ) -> Context:
     """Explicit construction point for callers that already know the user.
 
@@ -167,6 +186,7 @@ def build_context(
         account_ids=tuple(account_ids),
         conversation_id=conversation_id,
         active_document_id=active_document_id,
+        statement_id=statement_id,
     )
 
 
@@ -176,6 +196,7 @@ async def build_context_for_user(
     *,
     conversation_id: str | None = None,
     active_document_id: str | None = None,
+    statement_id: str | None = None,
 ) -> Context:
     """Build a verified `Context` for an already-authenticated user.
 
@@ -205,4 +226,5 @@ async def build_context_for_user(
         account_ids=tuple(str(account["id"]) for account in accounts),
         conversation_id=conversation_id,
         active_document_id=active_document_id,
+        statement_id=statement_id,
     )

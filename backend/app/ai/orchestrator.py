@@ -82,10 +82,11 @@ class Orchestrator:
         """Pick the agent for this message and say why.
 
         `context` is consulted FIRST, ahead of keyword rules: an active
-        document (see Context.active_document_id, set by chat/router.py once
-        it has verified ownership) forces DocumentAgent regardless of what
-        the message says. This is deliberate, not just a convenience -
-        keyword routing runs on the message text, which for a document
+        document OR active statement (see Context.active_document_id /
+        Context.statement_id, set by chat/router.py once it has verified
+        ownership) forces DocumentAgent regardless of what the message
+        says. This is deliberate, not just a convenience - keyword routing
+        runs on the message text, which for a document/statement
         conversation may itself be influenced by the document's content
         (e.g. a user pasting a phrase from it). If keyword rules ran first,
         a message like "transfer 50 RON" while a document is active could
@@ -96,12 +97,17 @@ class Orchestrator:
         if self._default is None:
             raise RuntimeError("Orchestrator has no agents registered")
 
-        if context.active_document_id is not None:
+        if context.active_document_id is not None or context.statement_id is not None:
             document_agent = self._agents.get("documents")
             if document_agent is not None:
+                reason = (
+                    "active_document_in_context"
+                    if context.active_document_id is not None
+                    else "active_statement_in_context"
+                )
                 return RoutingDecision(
                     agent_name="documents",
-                    reason="active_document_in_context",
+                    reason=reason,
                     confidence=1.0,
                     matched_rule="context_override",
                 )

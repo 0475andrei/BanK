@@ -94,6 +94,21 @@ def test_typed_errors_share_a_base_the_tool_layer_can_catch():
     assert issubclass(NoAccountAvailableError, IdentityError)
 
 
+def test_context_statement_id_defaults_to_none_and_is_settable():
+    """Mirrors active_document_id's shape - see Context.statement_id's
+    docstring (Step 13)."""
+    empty = Context(user_id="u1")
+    assert empty.statement_id is None
+
+    with_statement = Context(user_id="u1", statement_id="stmt-1111")
+    assert with_statement.statement_id == "stmt-1111"
+
+
+def test_build_context_threads_statement_id_through():
+    context = build_context("user-from-auth", ["acc-a"], statement_id="stmt-1111")
+    assert context.statement_id == "stmt-1111"
+
+
 def test_dev_and_build_context_produce_the_same_shape():
     """The dev identity is swappable for a real one with no shape change."""
     dev = dev_context()

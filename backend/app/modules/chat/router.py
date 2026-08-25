@@ -41,6 +41,7 @@ from app.modules.chat.schemas import (
     ProposalRead,
 )
 from app.modules.documents import service as documents_service
+from app.modules.statements import service as statements_service
 from app.modules.users.schemas import UserRead
 from supabase import AsyncClient
 
@@ -138,6 +139,22 @@ async def chat(
         await documents_service.get_document(supabase, str(user.id), str(payload.document_id))
         active_document_id = str(payload.document_id)
 
+    # Explicit path first (ownership-checked exactly like document_id
+    # above); if the turn named none, fall back to whatever statement was
+    # most recently uploaded in this conversation - see
+    # app/ai/context.py's Context.statement_id docstring for why this one
+    # field is implicit where active_document_id is not.
+    active_statement_id = None
+    if payload.statement_id is not None:
+        await statements_service.get_statement(supabase, str(user.id), str(payload.statement_id))
+        active_statement_id = str(payload.statement_id)
+    else:
+        latest_statement = await statements_service.get_latest_statement_for_conversation(
+            supabase, str(user.id), str(conversation_id)
+        )
+        if latest_statement is not None:
+            active_statement_id = latest_statement["id"]
+
     # THE EDGE. Built from the authenticated session, never from the payload.
     # conversation_id is resolved above so propose_* tools can attach a
     # proposal to this turn's conversation (proposals.conversation_id is
@@ -147,6 +164,7 @@ async def chat(
         supabase,
         conversation_id=str(conversation_id),
         active_document_id=active_document_id,
+        statement_id=active_statement_id,
     )
 
     history = await conversations_service.load_messages(supabase, conversation_id)

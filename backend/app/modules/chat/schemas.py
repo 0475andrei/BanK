@@ -26,6 +26,14 @@ class ChatRequest(BaseModel):
     #: check). Ownership is verified server-side in router.py before this
     #: ever reaches Context - never trusted as-is, same as conversation_id.
     document_id: uuid.UUID | None = None
+    #: Set by the frontend after a successful /statements/upload, to route
+    #: this turn to DocumentAgent (see app/ai/orchestrator.py's context-first
+    #: check). Ownership is verified server-side in router.py before this
+    #: ever reaches Context, same as document_id above. Unlike document_id,
+    #: an omitted statement_id does NOT mean "no statement active" - see
+    #: app/ai/context.py's Context.statement_id docstring for the implicit
+    #: fallback (last statement uploaded in this conversation stays active).
+    statement_id: uuid.UUID | None = None
 
 
 class ProposalRead(BaseModel):
