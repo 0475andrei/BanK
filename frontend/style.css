@@ -925,6 +925,27 @@ body {
 }
 .message.user .avatar { margin-right: 0; margin-left: 12px; }
 
+/* Column wrapper (see app.js appendChatBubble) so the agent tag stacks above
+   the bubble instead of sitting beside it in .message's flex row. */
+.message-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.agent-tag {
+    display: inline-block;
+    width: fit-content;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    opacity: 0.7;
+    margin-bottom: 4px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: help;
+}
+
 .message .bubble {
     padding: 14px 18px;
     border-radius: 18px;

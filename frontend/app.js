@@ -245,7 +245,41 @@ const CHAT_ERRORS = {
     generic: 'A apărut o problemă. Încearcă din nou.',
 };
 
-/** Builds a chat bubble matching the existing markup and appends it. */
+// Romanian labels for the routing tag - keys match RoutingDecision.agent_name
+// (see backend app/ai/orchestrator.py). Anything not listed falls back to a
+// capitalized version of the raw agent name.
+const AGENT_TAG_LABELS = {
+    banking: 'Bancar',
+    insights: 'Analiză',
+    planning: 'Planificare',
+    documents: 'Documente',
+    docs: 'Ajutor',
+};
+
+function agentTagLabel(agentName) {
+    if (AGENT_TAG_LABELS[agentName]) return AGENT_TAG_LABELS[agentName];
+    return agentName.charAt(0).toUpperCase() + agentName.slice(1);
+}
+
+/** Small metadata pill naming which agent produced a reply (see
+ * ChatResponse.routing / RoutingDecision). Appended to `container` before
+ * the bubble is added, so it renders above it, not inside it. */
+function renderAgentTag(routing, container) {
+    const tag = document.createElement('div');
+    tag.className = 'agent-tag';
+    tag.textContent = `→ ${agentTagLabel(routing.agent_name)}`;
+    const confidencePct = Math.round((routing.confidence ?? 0) * 100);
+    tag.title =
+        `Agent: ${routing.agent_name}\n` +
+        `Motiv: ${routing.reason}\n` +
+        `Regulă: ${routing.matched_rule ?? '—'}\n` +
+        `Încredere: ${confidencePct}%`;
+    container.appendChild(tag);
+}
+
+/** Builds a chat bubble matching the existing markup and appends it.
+ * `options.routing`, when present on an 'ai' message, renders the agent tag
+ * (see renderAgentTag) above the bubble. */
 function appendChatBubble(role, text, options = {}) {
     const chatMessages = document.getElementById('chat-messages');
 
@@ -259,6 +293,15 @@ function appendChatBubble(role, text, options = {}) {
         wrapper.appendChild(avatar);
     }
 
+    // Column wrapper so the agent tag stacks above the bubble instead of
+    // sitting beside it in .message's horizontal flex row.
+    const content = document.createElement('div');
+    content.className = 'message-content';
+
+    if (role === 'ai' && options.routing) {
+        renderAgentTag(options.routing, content);
+    }
+
     const bubble = document.createElement('div');
     bubble.className = options.bubbleClass ? `bubble ${options.bubbleClass}` : 'bubble';
     if (options.html) {
@@ -268,7 +311,8 @@ function appendChatBubble(role, text, options = {}) {
         // never be interpreted as markup.
         bubble.textContent = text;
     }
-    wrapper.appendChild(bubble);
+    content.appendChild(bubble);
+    wrapper.appendChild(content);
 
     chatMessages.appendChild(wrapper);
     if (window.lucide) lucide.createIcons();
@@ -322,7 +366,9 @@ async function sendMessage() {
         });
 
         typingBubble.remove();
-        const aiBubble = appendChatBubble('ai', response.reply);
+        const aiBubble = appendChatBubble('ai', response.reply, {
+            routing: response.routing || undefined,
+        });
         if (response.proposal) {
             renderProposalCard(response.proposal, aiBubble);
         }
@@ -516,7 +562,11 @@ async function openConversation(conversationId) {
             (message.role === 'user' || message.role === 'assistant') && message.content
         );
         if (dialogue.length) {
-            dialogue.forEach(message => appendChatBubble(message.role === 'user' ? 'user' : 'ai', message.content));
+            dialogue.forEach(message => appendChatBubble(
+                message.role === 'user' ? 'user' : 'ai',
+                message.content,
+                { routing: message.routing || undefined }
+            ));
         } else {
             appendChatBubble('ai', CHAT_WELCOME_TEXT);
         }

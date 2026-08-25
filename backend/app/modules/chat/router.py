@@ -36,6 +36,7 @@ from app.modules.chat.schemas import (
     ChatResponse,
     ConversationRead,
     ConversationRenameRequest,
+    MessageRead,
     ProposalConfirmRequest,
     ProposalRead,
 )
@@ -239,14 +240,14 @@ async def rename_conversation(
     return {"status": "ok"}
 
 
-@router.get("/conversations/{conversation_id}/messages", response_model=list[Message])
+@router.get("/conversations/{conversation_id}/messages", response_model=list[MessageRead])
 async def get_conversation_messages(
     conversation_id: uuid.UUID,
     supabase: AsyncClient = Depends(get_supabase),
     user: UserRead = Depends(get_current_user),
-) -> list[Message]:
+) -> list[MessageRead]:
     await conversations_service.get_conversation(supabase, user, conversation_id)
-    return await conversations_service.load_messages(supabase, conversation_id)
+    return await conversations_service.load_messages_with_routing(supabase, conversation_id)
 
 
 @router.patch("/conversations/{conversation_id}", response_model=ConversationRead)

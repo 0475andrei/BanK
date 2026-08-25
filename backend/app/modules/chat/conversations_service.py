@@ -1,11 +1,11 @@
 import uuid
 
-from supabase import AsyncClient
-
 from app.ai.routing import RoutingDecision
 from app.ai.schemas import Message, ToolCall
 from app.core.exceptions import ConversationNotFoundError
+from app.modules.chat.schemas import MessageRead
 from app.modules.users.schemas import UserRead
+from supabase import AsyncClient
 
 
 async def create_conversation(supabase: AsyncClient, user: UserRead) -> dict:
@@ -114,6 +114,35 @@ async def load_messages(supabase: AsyncClient, conversation_id: uuid.UUID) -> li
             tool_calls=[ToolCall(**tc) for tc in (row["tool_calls"] or [])],
             tool_call_id=row["tool_call_id"],
             name=row["name"],
+        )
+        for row in resp.data
+    ]
+
+
+async def load_messages_with_routing(
+    supabase: AsyncClient, conversation_id: uuid.UUID
+) -> list[MessageRead]:
+    """Same rows as `load_messages`, but read into `MessageRead` - the HTTP
+    read model - so the history endpoint can surface `routing_metadata`
+    without widening the AI-layer's `Message` type (see MessageRead's
+    docstring)."""
+    resp = (
+        await supabase.table("messages")
+        .select("*")
+        .eq("conversation_id", str(conversation_id))
+        .order("created_at")
+        .execute()
+    )
+    return [
+        MessageRead(
+            role=row["role"],
+            content=row["content"],
+            tool_calls=[ToolCall(**tc) for tc in (row["tool_calls"] or [])],
+            tool_call_id=row["tool_call_id"],
+            name=row["name"],
+            routing=RoutingDecision(**row["routing_metadata"])
+            if row["routing_metadata"]
+            else None,
         )
         for row in resp.data
     ]
