@@ -36,32 +36,6 @@ async def get_conversation(
     return conversation
 
 
-async def rename_conversation(
-    supabase: AsyncClient, user: UserRead, conversation_id: uuid.UUID, title: str
-) -> dict:
-    """Ownership-checked rename. Reuses `get_conversation`'s check rather than
-    filtering the update by user_id directly, so a foreign or nonexistent id
-    fails the same way (ConversationNotFoundError) in both places."""
-    await get_conversation(supabase, user, conversation_id)
-    resp = (
-        await supabase.table("conversations")
-        .update({"title": title})
-        .eq("id", str(conversation_id))
-        .execute()
-    )
-    return resp.data[0]
-
-
-async def delete_conversation(
-    supabase: AsyncClient, user: UserRead, conversation_id: uuid.UUID
-) -> None:
-    """Ownership-checked delete. `messages` rows cascade via the FK
-    (ON DELETE CASCADE, see migrations/0006) - nothing here deletes them
-    directly."""
-    await get_conversation(supabase, user, conversation_id)
-    await supabase.table("conversations").delete().eq("id", str(conversation_id)).execute()
-
-
 async def list_conversations(supabase: AsyncClient, user: UserRead) -> list[dict]:
     resp = (
         await supabase.table("conversations")
@@ -149,10 +123,20 @@ async def load_messages_with_routing(
 
 
 async def delete_conversation(supabase: AsyncClient, conversation_id: uuid.UUID) -> None:
-    """Delete a conversation and all its messages (cascade assumed or done by supabase)."""
+    """Delete a conversation and all its messages.
+
+    NOT ownership-checked - the caller must call `get_conversation` first (see
+    chat/router.py::delete_conversation), otherwise any id would be deletable.
+    The `messages` rows go with it via the FK's ON DELETE CASCADE (see
+    migrations/0006_conversations_and_messages.sql) - nothing here deletes them.
+    """
     await supabase.table("conversations").delete().eq("id", str(conversation_id)).execute()
 
 
 async def rename_conversation(supabase: AsyncClient, conversation_id: uuid.UUID, title: str) -> None:
-    """Rename a conversation."""
+    """Rename a conversation.
+
+    NOT ownership-checked, same as `delete_conversation` above - the caller
+    must call `get_conversation` first (see chat/router.py::rename_conversation).
+    """
     await supabase.table("conversations").update({"title": title}).eq("id", str(conversation_id)).execute()

@@ -16,7 +16,7 @@
                 <span class="logo-text">
                     <span class="logo-name">BanK</span>
                     <span class="logo-bank">BANCA</span>
-                    <span class="logo-tagline">CONFORTUL TAU FINANCIAR</span>
+                    <span class="logo-tagline" data-i18n="brand.tagline">CONFORTUL TAU FINANCIAR</span>
                 </span>
             </div>
 
@@ -54,7 +54,7 @@
                     <div class="auth-error" id="device-error" hidden></div>
 
                     <form id="device-login-form">
-                        <label class="field-label" for="device-password">Password</label>
+                        <label class="field-label" for="device-password" data-i18n="common.Password">Password</label>
                         <div class="password-field-wrapper">
                             <input class="field-input" type="password" id="device-password" required autocomplete="current-password">
                             <button type="button" class="password-toggle-btn" data-target="device-password" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
@@ -65,27 +65,27 @@
                 </div>
 
                 <p class="auth-switch"><a href="#" id="not-you-link">Nu ești tu? Autentifică-te cu alt cont</a></p>
-                <p class="auth-switch"><a href="forgot-password.html">Ai uitat parola?</a></p>
+                <p class="auth-switch"><a href="forgot-password.html" data-i18n="auth.forgot_password">Ai uitat parola?</a></p>
             </div>
 
             <!-- Normal path: default until proven otherwise, and always
                  reachable via "Nu ești tu?" above. -->
             <div id="normal-login">
-                <p class="auth-subtitle">Log in to your account</p>
+                <p class="auth-subtitle" data-i18n="common.Log in to your account">Log in to your account</p>
 
                 <div class="auth-error" id="auth-error" hidden></div>
 
                 <form id="login-form">
-                    <label class="field-label" for="email">Email</label>
+                    <label class="field-label" for="email" data-i18n="common.Email">Email</label>
                     <input class="field-input" type="email" id="email" name="email" required autocomplete="email">
 
-                    <label class="field-label" for="password">Password</label>
+                    <label class="field-label" for="password" data-i18n="common.Password">Password</label>
                     <div class="password-field-wrapper">
                         <input class="field-input" type="password" id="password" name="password" required autocomplete="current-password">
                         <button type="button" class="password-toggle-btn" data-target="password" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
                     </div>
 
-                    <button class="btn btn-primary auth-submit" type="submit">Log in</button>
+                    <button class="btn btn-primary auth-submit" type="submit" data-i18n="common.Log in">Log in</button>
                 </form>
 
                 <!-- Face login: DIY, camera-based (see backend/app/modules/
@@ -93,7 +93,7 @@
                 <div id="face-login-section" hidden>
                     <div class="auth-error" id="face-login-error" hidden></div>
 
-                    <label class="field-label" for="face-login-email">Email</label>
+                    <label class="field-label" for="face-login-email" data-i18n="common.Email">Email</label>
                     <input class="field-input" type="email" id="face-login-email" required autocomplete="email">
 
                     <div class="face-camera-wrap" style="margin-top: 16px;">
@@ -102,12 +102,12 @@
                     </div>
 
                     <button type="button" class="btn btn-secondary auth-submit" id="face-login-start-btn">Pornește camera</button>
-                    <button type="button" class="btn btn-primary auth-submit" id="face-login-capture-btn" hidden>Login cu Face</button>
+                    <button type="button" class="btn btn-primary auth-submit" id="face-login-capture-btn" hidden data-i18n="auth.face_login">Login cu Face</button>
                 </div>
 
-                <p class="auth-switch"><a href="#" id="toggle-face-login">Login cu Face</a></p>
-                <p class="auth-switch"><a href="forgot-password.html">Ai uitat parola?</a></p>
-                <p class="auth-switch">No account yet? <a href="register.html">Register</a></p>
+                <p class="auth-switch"><a href="#" id="toggle-face-login" data-i18n="auth.face_login">Login cu Face</a></p>
+                <p class="auth-switch"><a href="forgot-password.html" data-i18n="auth.forgot_password">Ai uitat parola?</a></p>
+                <p class="auth-switch"><span data-i18n="common.No account yet?">No account yet?</span> <a href="register.html" data-i18n="common.Register">Register</a></p>
             </div>
         </div>
     </div>
@@ -296,6 +296,12 @@
 
         let faceLoginStream = null;
 
+        function updateFaceToggleLabel() {
+            toggleFaceLink.textContent = faceSection.hidden
+                ? t("auth.face_login", "Login cu Face")
+                : t("auth.face_password", "Login cu parolă");
+        }
+
         function stopFaceLoginCamera() {
             if (faceLoginStream) {
                 faceLoginStream.getTracks().forEach(track => track.stop());
@@ -311,9 +317,11 @@
             const showingFace = !faceSection.hidden;
             faceSection.hidden = !faceSection.hidden;
             loginForm.hidden = !loginForm.hidden;
-            toggleFaceLink.textContent = showingFace ? "Login cu Face" : "Login cu parolă";
+            updateFaceToggleLabel();
             if (showingFace) stopFaceLoginCamera();
         });
+
+        window.addEventListener("languagechange", updateFaceToggleLabel);
 
         faceStartBtn.addEventListener("click", async () => {
             faceErrorEl.hidden = true;

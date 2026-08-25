@@ -1,3 +1,170 @@
 {
-  "Prezentare Generală": "Огляд", "Asistent AI & Proiecții": "AI-помічник і прогнози", "Toate Tranzacțiile": "Усі транзакції", "Cardurile Mele": "Мої картки", "Investiții & Bugetare": "Інвестиції та бюджет", "Plăți": "Платежі", "Conversații recente": "Останні розмови", "Caută tranzacții, carduri, contacte...": "Пошук транзакцій, карток, контактів...", "Notificări": "Сповіщення", "Nicio notificare încă.": "Ще немає сповіщень.", "Profilul meu": "Мій профіль", "Log out": "Вийти", "Total Balance": "Загальний баланс", "Cont nou": "Новий рахунок", "Transferă": "Переказати", "Conturile mele": "Мої рахунки", "Tranzacții Recente": "Останні транзакції", "Vezi toate": "Переглянути все", "Se încarcă...": "Завантаження...", "Conversație nouă": "Нова розмова", "Întreabă asistentul AI...": "Запитайте AI-помічника...", "Generează Card Virtual": "Створити віртуальну картку", "Comandă Card Fizic": "Замовити фізичну картку", "Deschide un cont nou": "Відкрити новий рахунок", "Anulează": "Скасувати", "Confirmă": "Підтвердити", "Email": "Ел. пошта", "Password": "Пароль", "Log in": "Увійти", "Log in to your account": "Увійдіть до свого облікового запису", "No account yet?": "Ще немає облікового запису?", "Register": "Зареєструватися", "Create your account": "Створіть обліковий запис", "First name": "Ім’я", "Last name": "Прізвище", "At least 8 characters": "Щонайменше 8 символів", "Resetare parolă": "Скинути пароль", "Trimite codul": "Надіслати код", "Verifică codul": "Перевірити код", "Parolă nouă": "Новий пароль", "Alege limba": "Виберіть мову", "Choose language": "Виберіть мову"
+    "common":  {
+                   "Prezentare Generală":  "Огляд",
+                   "Asistent AI \u0026 Proiecții":  "AI-помічник і прогнози",
+                   "Toate Tranzacțiile":  "Усі транзакції",
+                   "Cardurile Mele":  "Мої картки",
+                   "Investiții \u0026 Bugetare":  "Інвестиції та бюджет",
+                   "Plăți":  "Платежі",
+                   "Conversații recente":  "Останні розмови",
+                   "Caută tranzacții, carduri, contacte...":  "Пошук транзакцій, карток, контактів...",
+                   "Notificări":  "Сповіщення",
+                   "Nicio notificare încă.":  "Ще немає сповіщень.",
+                   "Profilul meu":  "Мій профіль",
+                   "Log out":  "Вийти",
+                   "Total Balance":  "Загальний баланс",
+                   "Cont nou":  "Новий рахунок",
+                   "Transferă":  "Переказати",
+                   "Conturile mele":  "Мої рахунки",
+                   "Tranzacții Recente":  "Останні транзакції",
+                   "Vezi toate":  "Переглянути все",
+                   "Se încarcă...":  "Завантаження...",
+                   "Conversație nouă":  "Нова розмова",
+                   "Întreabă asistentul AI...":  "Запитайте AI-помічника...",
+                   "Generează Card Virtual":  "Створити віртуальну картку",
+                   "Comandă Card Fizic":  "Замовити фізичну картку",
+                   "Deschide un cont nou":  "Відкрити новий рахунок",
+                   "Anulează":  "Скасувати",
+                   "Confirmă":  "Підтвердити",
+                   "Email":  "Ел. пошта",
+                   "Password":  "Пароль",
+                   "Log in":  "Увійти",
+                   "Log in to your account":  "Увійдіть до свого облікового запису",
+                   "No account yet?":  "Ще немає облікового запису?",
+                   "Register":  "Зареєструватися",
+                   "Create your account":  "Створіть обліковий запис",
+                   "First name":  "Ім’я",
+                   "Last name":  "Прізвище",
+                   "At least 8 characters":  "Щонайменше 8 символів",
+                   "Resetare parolă":  "Скинути пароль",
+                   "Trimite codul":  "Надіслати код",
+                   "Verifică codul":  "Перевірити код",
+                   "Parolă nouă":  "Новий пароль",
+                   "Alege limba":  "Виберіть мову",
+                   "Choose language":  "Виберіть мову",
+                   "Caută tranzacții, carduri, contacte":  {
+
+                                                           },
+                   "Nicio notificare încă":  {
+
+                                             },
+                   "Se încarcă":  {
+
+                                  },
+                   "Întreabă asistentul AI":  {
+
+                                              },
+                   "search_placeholder":  "Пошук транзакцій, карток і контактів..."
+               },
+    "dashboard":  {
+                      "Fără activitate încă.":  "Ще немає активності.",
+                      "Conectat • poate citi soldurile conturilor tale":  "Підключено • може читати баланси ваших рахунків",
+                      "Conversație nouă":  "Нова розмова",
+                      "Anulează cardul":  "Скасувати картку",
+                      "Generează Card Virtual":  "Створити віртуальну картку",
+                      "Comandă Card Fizic":  "Замовити фізичну картку",
+                      "Cheltuieli pe Categorii (Luna curentă)":  "Витрати за категоріями (поточний місяць)",
+                      "Supermarket (40%)":  "Продукти (40%)",
+                      "Facturi (35%)":  "Рахунки (35%)",
+                      "Divertisment (25%)":  "Розваги (25%)",
+                      "Deschide un cont nou":  "Відкрити новий рахунок",
+                      "Cont de economii":  "Ощадний рахунок",
+                      "Flexibil - retragi oricând":  "Гнучкий — знімайте кошти будь-коли",
+                      "Cont cu dobândă fixă":  "Рахунок із фіксованою ставкою",
+                      "Alegi perioada - rată mai mare":  "Оберіть строк — вища ставка",
+                      "Conturile mele de economii":  "Мої ощадні рахунки",
+                      "Fără activitate încă":  {
+
+                                               },
+                      "No activity":  "No activity yet.",
+                      "no_activity":  "Ще немає активності."
+                  },
+    "savings":  {
+                    "up_to_rate":  "до {rate}% річних",
+                    "no_accounts":  "Ще немає ощадних рахунків."
+                },
+    "cards":  {
+                  "cancel":  "Скасувати картку",
+                  "label":  "Картка",
+                  "expiry":  "Термін дії",
+                  "cvv":  "CVV",
+                  "limit":  "Ліміт",
+                  "show_details":  "Показати термін дії та CVV",
+                  "hide_details":  "Приховати термін дії та CVV",
+                  "status_active":  "Активна",
+                  "status_frozen":  "Заблокована",
+                  "status_cancelled":  "Скасована",
+                  "empty":  "Карток ще немає. Створіть свою першу віртуальну картку.",
+                  "cancel_confirm":  "Ви впевнені, що хочете скасувати цю картку? Її не можна повторно активувати."
+              },
+    "brand":  { "tagline":  "ВАШ ФІНАНСОВИЙ КОМФОРТ" },
+    "registration":  {
+                    "drop_id_optional":  "Перетягніть фото документа сюди або виберіть файл (необов’язково)",
+                    "title":  "Створіть обліковий запис", "first_name":  "Ім’я", "last_name":  "Прізвище", "email":  "Електронна пошта", "password":  "Пароль", "password_hint":  "Щонайменше 8 символів", "submit":  "Зареєструватися",
+                    "manual":  "Введення вручну", "chat_mode":  "Чат із Comodul", "ocr_label":  "Автоматичне введення з документа (необов’язково)", "drop_id":  "Перетягніть фото документа сюди або виберіть файл", "ocr_status":  "Лише PNG. Ім’я, CNP та адресу буде заповнено автоматично.", "national_id":  "Національний ідентифікатор (CNP)", "national_id_hint":  "Стать і дата народження зчитуються автоматично", "phone":  "Телефон (необов’язково)", "address":  "Адреса (необов’язково)", "referral":  "Реферальний код (необов’язково)", "referral_hint":  "Маєте реферальний код? Ваш новий рахунок отримає 500 RON у подарунок.", "chat_status":  "Я допоможу відкрити рахунок у зручному для вас темпі", "chat_welcome":  "Вітаю! Я Comodul і допоможу відкрити рахунок BanK. Назвіть своє ім’я або завантажте фото документа.", "chat_placeholder":  "Напишіть повідомлення...", "already_account":  "У вас уже є рахунок?"
+                },
+    "auth":  {
+                    "face_login":  "Вхід за обличчям",
+                    "face_password":  "Вхід за паролем",
+                    "forgot_password":  "Забули пароль?"
+                },
+    "profile":  {
+                    "avatar":  "Аватар",
+                    "referral":  "Мій реферальний код",
+                    "change_password":  "Змінити пароль",
+                    "face_login":  "Вхід за обличчям",
+                    "back":  "Назад",
+                    "choose_avatar":  "Оберіть емодзі для свого аватара",
+                    "referral_hint":  "Кожен, хто зареєструється за цим кодом, отримає 500 RON на перший рахунок.",
+                    "current_password":  "Поточний пароль",
+                    "new_password":  "Новий пароль",
+                    "confirm_password":  "Підтвердьте новий пароль",
+                    "start_camera":  "Увімкнути камеру",
+                    "capture_activate":  "Зробити фото й активувати",
+                    "disable_face_login":  "Вимкнути вхід за обличчям",
+                    "face_active":  "Вхід за обличчям активовано для вашого облікового запису.",
+                    "face_inactive":  "Вхід за обличчям ще не активовано. Увімкніть камеру та зробіть фото.",
+                    "face_success":  "Вхід за обличчям успішно активовано!"
+                },
+    "payments":  {
+                     "Trimite bani printr-un IBAN":  "Надіслати гроші за IBAN",
+                     "Din contul":  "З рахунку",
+                     "Copiază IBAN-ul":  "Копіювати IBAN",
+                     "IBAN destinatar":  "IBAN одержувача",
+                     "Nume beneficiar":  "Ім’я одержувача",
+                     "Sumă":  "Сума",
+                     "Descriere":  "Опис",
+                     "(opțional)":  "(необов’язково)",
+                     "Salvează acest beneficiar în Contactele mele":  "Зберегти одержувача в моїх контактах",
+                     "Trimite plata":  "Надіслати платіж",
+                     "Contactele mele":  "Мої контакти",
+                     "Istoric plăți":  "Історія платежів",
+                     "contacts_load_error":  "Не вдалося завантажити контакти",
+                     "no_contacts":  "Ще немає контактів — вони з’являться після першого платежу.",
+                     "history_load_error":  "Не вдалося завантажити історію платежів",
+                     "no_payments":  "Ще немає платежів.",
+                     "account_holder":  "Власник рахунку",
+                     "iban_not_found":  "Для цього IBAN не знайдено рахунок.",
+                     "sent_success":  "Платіж успішно надіслано!"
+                 },
+    "chat":  {
+                 "welcome":  "Hello! I am your banking assistant. I can check your account balances and answer banking questions. How can I help?",
+                 "typing":  "The assistant is thinking...",
+                 "errors":  {
+                                "unavailable":  "The AI assistant is currently unavailable. Please try again.",
+                                "invalid":  "The message could not be sent. Check what you wrote."
+                            },
+                 "time":  {
+                              "seconds":  "a few seconds ago",
+                              "minute":  "a minute ago",
+                              "minutes":  "{count} minutes ago",
+                              "hour":  "an hour ago",
+                              "hours":  "{count} hours ago",
+                              "yesterday":  "yesterday",
+                              "days":  "{count} days ago"
+                          }
+             },
+    "errors":  {
+                   "generic":  "Something went wrong. Please try again."
+               }
 }
