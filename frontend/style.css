@@ -1320,35 +1320,143 @@ body {
     gap: 40px;
 }
 
-.css-donut {
-    width: 150px;
-    height: 150px;
-    border-radius: 50%;
-    background: conic-gradient(
-        var(--secondary-blue) 0% 40%, 
-        var(--primary-teal) 40% 75%, 
-        #8b5cf6 75% 100%
-    );
+.spending-donut-wrap {
     position: relative;
+    width: 160px;
+    height: 160px;
+    flex-shrink: 0;
 }
 
-.css-donut::after {
-    content: '';
+.spending-donut {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+/* Positioning + the mount animation + the hover pop-out are ALL one
+   `transform` chain, driven purely by custom properties so every state
+   change (mount, hover) is just a var() override the browser can transition
+   smoothly - see buildSpendingDonutSegments for why translate/rotate/scale
+   live together here instead of split across a parent <g>'s SVG attribute. */
+.spending-segment circle {
+    transform-box: fill-box;
+    transform-origin: center;
+    --hx: 0px;
+    --hy: 0px;
+    --scale: 0.55;
+    transform: translate(var(--hx), var(--hy)) rotate(var(--rot)) scale(var(--scale));
+    opacity: 0;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+    transition: filter 0.2s ease;
+    cursor: pointer;
+}
+
+/* Mount phase only: the staggered (--seg-delay) grow-in. Swapped for
+   .is-mounted's fast, undelayed transition once the entrance finishes (see
+   renderSpendingDonut) so hovering a later slice never inherits its mount
+   delay and feels laggy to respond. */
+.spending-donut-wrap.is-mounting .spending-segment circle {
+    --scale: 1;
+    opacity: 1;
+    transition:
+        transform 0.5s cubic-bezier(0.16, 1, 0.3, 1) var(--seg-delay, 0ms),
+        opacity 0.4s ease var(--seg-delay, 0ms),
+        filter 0.2s ease;
+}
+
+.spending-donut-wrap.is-mounted .spending-segment circle {
+    --scale: 1;
+    opacity: 1;
+    transition:
+        transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+        opacity 0.2s ease,
+        filter 0.2s ease;
+}
+
+/* Hover/focus "pop": the slice pushes outward along its own radius (--hx-
+   active/--hy-active, precomputed per slice) and brightens; every other
+   slice dims so a colorblind user can confirm "this slice = this category"
+   by highlight and position, never by matching hues alone (see
+   wireSpendingCategoryHover). */
+.spending-donut.has-active .spending-segment:not(.is-active) circle {
+    opacity: 0.28;
+}
+
+.spending-segment.is-active circle {
+    --hx: var(--hx-active);
+    --hy: var(--hy-active);
+    --scale: 1.05;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45)) brightness(1.12);
+}
+
+.spending-segment:focus-visible circle {
+    outline: 2px solid var(--text-main);
+    outline-offset: 2px;
+}
+
+.spending-donut-center {
     position: absolute;
-    top: 50%; left: 50%;
+    top: 50%;
+    left: 50%;
     transform: translate(-50%, -50%);
-    width: 110px;
-    height: 110px;
-    background-color: var(--bg-surface);
-    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    text-align: center;
+    pointer-events: none;
 }
 
-.legend { display: flex; flex-direction: column; gap: 12px; }
-.legend-item { display: flex; align-items: center; font-size: 14px; }
-.dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 12px; }
-.dot.groceries { background-color: var(--secondary-blue); }
-.dot.bills { background-color: var(--primary-teal); }
-.dot.entertainment { background-color: #8b5cf6; }
+.spending-donut-total-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.spending-donut-total-value {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.spending-donut-tooltip {
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translate(-50%, -100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 6px 10px;
+    border-radius: var(--border-radius-sm);
+    background-color: var(--bg-dark);
+    border: 1px solid var(--bg-surface-hover);
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.spending-donut-tooltip-value { font-size: 13px; font-weight: 700; color: var(--text-main); }
+.spending-donut-tooltip-label { font-size: 11px; color: var(--text-muted); }
+.spending-donut-tooltip[hidden] { display: none; }
+
+.legend { display: flex; flex-direction: column; gap: 4px; }
+.legend-item {
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    padding: 6px 8px;
+    margin: 0 -8px;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+.legend-item.is-active { background-color: var(--bg-surface-hover); }
+.legend.has-active .legend-item:not(.is-active) { opacity: 0.45; }
+.legend-item:focus-visible { outline: 2px solid var(--text-main); outline-offset: -2px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 12px; flex-shrink: 0; }
 
 .pots-list { display: flex; flex-direction: column; gap: 24px; }
 
@@ -2227,9 +2335,78 @@ html.i18n-pending body { visibility: hidden; }
     color: var(--text-muted);
 }
 
+.status-indicator.frozen {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(129, 140, 248, 0.16));
+    color: #7dd3fc;
+}
+
+.status-indicator.frozen i {
+    width: 12px;
+    height: 12px;
+    stroke-width: 2.5;
+    filter: drop-shadow(0 0 3px rgba(125, 211, 252, 0.65));
+}
+
 .credit-card.cancelled {
     opacity: 0.5;
 }
+
+/* Card status + freeze/unfreeze action merged into one self-updating toggle:
+   it shows the current state and, on click, becomes the other state. */
+.status-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease, opacity 0.2s ease;
+}
+
+.status-toggle-btn:active { transform: scale(0.96); }
+
+.status-toggle-btn.active {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: var(--income-green);
+}
+
+.status-toggle-btn.active:hover {
+    background-color: rgba(16, 185, 129, 0.2);
+}
+
+.status-toggle-btn.frozen {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(129, 140, 248, 0.16));
+    color: #7dd3fc;
+}
+
+.status-toggle-btn.frozen:hover {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.28), rgba(129, 140, 248, 0.28));
+}
+
+.status-toggle-btn i {
+    width: 12px;
+    height: 12px;
+    stroke-width: 2.5;
+}
+
+.status-toggle-btn.frozen i {
+    filter: drop-shadow(0 0 3px rgba(125, 211, 252, 0.65));
+}
+
+.status-toggle-btn.is-toggling {
+    opacity: 0.6;
+    cursor: default;
+    transform: none;
+}
+
+.status-toggle-btn:disabled { cursor: default; }
 
 .card-actions-row {
     display: flex;
@@ -2241,7 +2418,6 @@ html.i18n-pending body { visibility: hidden; }
 }
 
 .card-cancel-btn,
-.card-freeze-btn,
 .card-limit-btn {
     background: none;
     border: none;
@@ -2253,7 +2429,6 @@ html.i18n-pending body { visibility: hidden; }
 }
 
 .card-cancel-btn:hover { color: var(--expense-red); }
-.card-freeze-btn:hover,
 .card-limit-btn:hover { color: var(--primary-teal); }
 
 .card-reveal-number {
