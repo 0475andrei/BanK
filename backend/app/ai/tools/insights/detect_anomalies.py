@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from app.ai.context import Context
 from app.ai.schemas import ToolResult
 from app.ai.tools.base import Tool
-from app.ai.tools.insights._shared import fetch_entries
+from app.ai.tools.insights._shared import load_rows
 
 if TYPE_CHECKING:
     from supabase import AsyncClient
@@ -88,7 +88,7 @@ class DetectAnomaliesTool(Tool):
         now = datetime.now(UTC)
         date_from = now - timedelta(days=validated_input.days_back)
 
-        entries = await fetch_entries(self._supabase, context, date_from=date_from, date_to=now)
+        entries = await load_rows(self._supabase, context, date_from=date_from, date_to=now)
         spending = [e for e in entries if e.direction.value == "debit"]
 
         baseline_period = {

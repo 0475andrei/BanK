@@ -41,9 +41,11 @@ def _document_row(**overrides: object) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_document_agent_registry_has_exactly_one_tool():
+def test_document_agent_registry_has_exactly_the_read_only_document_and_statement_tools():
+    """Since Step 13: read_document plus summarize_statement - still no
+    write, propose, or handoff tool (see the next test)."""
     tools = build_document_tools(supabase=object())
-    assert tools.names() == ["read_document"]
+    assert tools.names() == ["read_document", "summarize_statement"]
 
 
 def test_document_agent_registry_has_no_write_or_propose_tool():

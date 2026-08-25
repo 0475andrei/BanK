@@ -52,6 +52,8 @@ _TABLES_IN_FK_ORDER = (
     "audit_log",
     "messages",
     "proposals",
+    "statement_rows",
+    "statements",
     "documents",
     "conversations",
     "accounts",
@@ -205,6 +207,47 @@ def conversation_factory(supabase: AsyncClient) -> Callable[..., Awaitable[dict]
             .insert({"user_id": str(user.id), "title": title})
             .execute()
         )
+        return resp.data[0]
+
+    return _factory
+
+
+@pytest.fixture
+def statement_factory(supabase: AsyncClient) -> Callable[..., Awaitable[dict]]:
+    """Inserts a bare statement row directly - the AzDI-backed upload
+    endpoint isn't exercised by every test that just needs a statement to
+    exist (see statements/service.py and the InsightsAgent/DocumentAgent
+    tests, which mock AzDI at the boundary instead of calling this)."""
+
+    async def _factory(
+        user: UserRead, conversation_id: str | None = None, **overrides: object
+    ) -> dict:
+        payload = {
+            "user_id": str(user.id),
+            "conversation_id": conversation_id,
+            "bank_name": "Banca Test",
+            "currency": "RON",
+            "row_count": 0,
+        }
+        payload.update(overrides)
+        resp = await supabase.table("statements").insert(payload).execute()
+        return resp.data[0]
+
+    return _factory
+
+
+@pytest.fixture
+def statement_row_factory(supabase: AsyncClient) -> Callable[..., Awaitable[dict]]:
+    async def _factory(statement_id: str, **overrides: object) -> dict:
+        payload = {
+            "statement_id": statement_id,
+            "description": "Test row",
+            "amount": -10.0,
+            "currency": "RON",
+            "row_index": 0,
+        }
+        payload.update(overrides)
+        resp = await supabase.table("statement_rows").insert(payload).execute()
         return resp.data[0]
 
     return _factory

@@ -16,6 +16,7 @@ from app.modules.notifications.router import router as notifications_router
 from app.modules.onboarding.router import router as onboarding_router
 from app.modules.payments.router import router as payments_router
 from app.modules.scheduled_transfers.router import router as scheduled_transfers_router
+from app.modules.statements.router import router as statements_router
 from app.modules.transactions.router import router as transactions_router
 from app.modules.transfers.router import router as transfers_router
 from app.modules.trusted_devices.router import router as trusted_devices_router
@@ -37,6 +38,7 @@ api_router.include_router(beneficiaries_router, prefix="/beneficiaries", tags=["
 api_router.include_router(users_router, prefix="/users", tags=["users"])
 api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
 api_router.include_router(documents_router, prefix="/documents", tags=["documents"])
+api_router.include_router(statements_router, prefix="/statements", tags=["statements"])
 api_router.include_router(id_ocr_router, prefix="/id-ocr", tags=["id-ocr"])
 api_router.include_router(iban_ocr_router, prefix="/iban-ocr", tags=["iban-ocr"])
 api_router.include_router(onboarding_router, prefix="/onboarding", tags=["onboarding"])

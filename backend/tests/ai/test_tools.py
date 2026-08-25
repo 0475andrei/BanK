@@ -30,6 +30,7 @@ from app.ai.tools.banking import (
 from app.ai.tools.base import Tool
 from app.ai.tools.insights import (
     CategorizeTransactionsTool,
+    CompareStatementToLedgerTool,
     ComputeSpendingStatsTool,
     DetectAnomaliesTool,
     DetectRecurringPaymentsTool,
@@ -76,13 +77,15 @@ ALL_PROPOSE_TOOL_CLASSES = (
 )
 
 #: Every tool the insights agent exposes, in the order build_insights_tools
-#: registers them (Step 8's get_transactions_in_range, then Step 9's four).
+#: registers them (Step 8's get_transactions_in_range, then Step 9's four,
+#: then Step 13's compare_statement_to_ledger).
 ALL_INSIGHTS_TOOL_CLASSES = (
     GetTransactionsInRangeTool,
     CategorizeTransactionsTool,
     DetectRecurringPaymentsTool,
     ComputeSpendingStatsTool,
     DetectAnomaliesTool,
+    CompareStatementToLedgerTool,
 )
 
 
@@ -324,6 +327,7 @@ def test_all_insights_tools_are_registered(supabase):
         "detect_recurring_payments",
         "compute_spending_stats",
         "detect_anomalies",
+        "compare_statement_to_ledger",
     ]
 
 

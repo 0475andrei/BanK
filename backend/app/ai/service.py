@@ -37,6 +37,7 @@ from app.ai.tools.banking import (
 from app.ai.tools.document_tools import ReadDocumentTool
 from app.ai.tools.insights import (
     CategorizeTransactionsTool,
+    CompareStatementToLedgerTool,
     ComputeSpendingStatsTool,
     DetectAnomaliesTool,
     DetectRecurringPaymentsTool,
@@ -52,6 +53,7 @@ from app.ai.tools.propose_tools import (
     ProposeTransferTool,
 )
 from app.ai.tools.registry import ToolRegistry
+from app.ai.tools.statement_tools import SummarizeStatementTool
 
 if TYPE_CHECKING:
     from app.ai.providers.embedding_base import EmbeddingProvider
@@ -113,6 +115,7 @@ def build_insights_tools(supabase: AsyncClient) -> ToolRegistry:
             DetectRecurringPaymentsTool(supabase),
             ComputeSpendingStatsTool(supabase),
             DetectAnomaliesTool(supabase),
+            CompareStatementToLedgerTool(supabase),
         ]
     )
 
@@ -145,17 +148,22 @@ def build_docs_tools(
 
 
 def build_document_tools(supabase: AsyncClient) -> ToolRegistry:
-    """DocumentAgent's ENTIRE toolset: read_document, and nothing else.
+    """DocumentAgent's ENTIRE toolset: read_document and, since Step 13,
+    summarize_statement. Nothing else.
 
     This is the structural half of Step 12's prompt-injection defense (the
-    other half is the <untrusted_document> wrapping + system prompt in
-    document_agent.py). No propose_* tool, no banking read tool, nothing
+    other half is the <untrusted_document> / <untrusted_statement> wrapping
+    + system prompt in document_agent.py), and it still holds for
+    summarize_statement: no propose_* tool, no banking read tool, nothing
     that could hand control to another agent is ever in this registry - a
-    document's content reaching the model can therefore never result in a
-    write, a proposal, or a read of anything outside that one document,
-    regardless of what the document's text says. Do not add tools here.
+    document's or statement's content reaching the model can therefore
+    never result in a write, a proposal, or a read of anything outside that
+    one document/statement, regardless of what its text says. Do not add
+    any OTHER kind of tool here - a new read-only, no-handoff,
+    aggregate-or-wrapped tool over the same active document/statement is
+    the only thing this registry may ever grow.
     """
-    return ToolRegistry([ReadDocumentTool(supabase)])
+    return ToolRegistry([ReadDocumentTool(supabase), SummarizeStatementTool(supabase)])
 
 
 class AIService:

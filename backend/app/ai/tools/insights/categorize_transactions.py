@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.ai.context import Context
 from app.ai.schemas import ToolResult
 from app.ai.tools.base import Tool
-from app.ai.tools.insights._shared import day_bounds, fetch_entries
+from app.ai.tools.insights._shared import day_bounds, load_rows
 
 if TYPE_CHECKING:
     from supabase import AsyncClient
@@ -83,17 +83,32 @@ async def categorize_spending(
     synchronously, without going through an LLM tool-call loop just to
     render a chart on page load."""
     date_from, date_to = day_bounds(start_date, end_date)
-    entries = await fetch_entries(
+    entries = await load_rows(
         supabase, context, date_from=date_from, date_to=date_to, account_id=account_id
     )
     spending = [entry for entry in entries if entry.direction.value == "debit"]
 
     buckets: dict[str, dict[str, int]] = {}
+    row_categories: dict[str, str] = {}
     for entry in spending:
         category = _categorize(f"{entry.description} {entry.reference}")
+        row_categories[str(entry.id)] = category
         bucket = buckets.setdefault(category, {"count": 0, "total_minor": 0})
         bucket["count"] += 1
         bucket["total_minor"] += entry.amount_minor
+
+    if context.statement_id is not None:
+        # Persist onto the extracted rows - NEVER onto the ledger, see
+        # statements/service.py's module docstring. Sequential writes:
+        # PostgREST has no per-row bulk-update-by-value primitive, and a
+        # statement's row count is small enough (a few hundred at most)
+        # that this isn't worth a bespoke batching path.
+        from app.modules.statements import service as statements_service
+
+        for row_id, category in row_categories.items():
+            await statements_service.set_row_category(
+                supabase, context.user_id, context.statement_id, row_id, category
+            )
 
     total_minor = sum(bucket["total_minor"] for bucket in buckets.values())
     categories: list[dict[str, Any]] = [
