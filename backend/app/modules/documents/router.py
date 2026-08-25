@@ -65,7 +65,7 @@ async def upload_document(
         )
     resolved_conversation_id = conversation["id"]
 
-    extracted_text, page_count = extract_pdf_text(content)
+    extracted_text, page_count = await extract_pdf_text(content)
 
     document = await documents_service.create_document(
         supabase,

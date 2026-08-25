@@ -57,6 +57,7 @@
                    "search_placeholder":  "Rechercher des transactions, cartes et contacts..."
                },
     "dashboard":  {
+                      "Demo": "Démo", "scheduled_title": "Virements programmés",
                       "Fără activitate încă.":  "Aucune activité pour le moment.",
                       "Conectat • poate citi soldurile conturilor tale":  "Connecté • peut lire les soldes de vos comptes",
                       "Conversație nouă":  "Nouvelle conversation",
@@ -108,7 +109,10 @@
                     "face_password":  "Connexion avec mot de passe",
                     "forgot_password":  "Mot de passe oublié ?"
                 },
+    "recovery": { "title": "Réinitialiser le mot de passe - BanK", "heading": "Réinitialiser le mot de passe", "request_hint": "Saisissez l’e-mail de votre compte. S’il existe, vous recevrez un code à 6 chiffres via Teams.", "code_sent": "Si l’adresse existe, un code a été envoyé via Teams.", "code_label": "Code (6 chiffres)", "resend_prompt": "Vous n’avez pas reçu le code ?", "resend": "Renvoyer", "code_confirmed": "Code confirmé. Choisissez un nouveau mot de passe.", "confirm_password": "Confirmer le nouveau mot de passe", "submit": "Réinitialiser le mot de passe", "remembered": "Vous vous souvenez de votre mot de passe ?", "password_mismatch": "Les mots de passe ne correspondent pas." },
+    "enrollment": { "title": "Vérifier l’appareil - BanK", "heading": "Reconnaître cet appareil", "description": "Nous vous avons envoyé un code à 6 chiffres via Teams. Saisissez-le pour vous connecter la prochaine fois avec votre mot de passe uniquement.", "confirm": "Confirmer l’appareil", "later": "Plus tard" },
     "profile":  {
+                    "show_password": "Afficher le mot de passe",
                     "avatar":  "Avatar",
                     "referral":  "Mon code de parrainage",
                     "change_password":  "Changer le mot de passe",
@@ -126,7 +130,7 @@
                     "face_inactive":  "La connexion Face n’est pas encore activée. Démarrez la caméra et prenez une photo.",
                     "face_success":  "Connexion Face activée avec succès !"
                 },
-    "payments":  {
+    "payments":  { "add_contact": "Ajouter un contact", "name": "Nom", "iban": "IBAN", "website": "Site web (facultatif, par ex. pour les abonnements)", "subscription": "Il s’agit d’un abonnement (Netflix, Spotify, etc.)", "save": "Enregistrer", "subscription_badge": "Abonnement",
                      "Trimite bani printr-un IBAN":  "Envoyer de l’argent par IBAN",
                      "Din contul":  "Depuis le compte",
                      "Copiază IBAN-ul":  "Copier l’IBAN",

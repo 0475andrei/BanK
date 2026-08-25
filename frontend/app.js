@@ -888,6 +888,7 @@ function wireStepUpModal() {
  * ========================================================================= */
 
 let currentAccounts = [];
+let currentCards = [];
 
 const CURRENCY_ICONS = { RON: 'coins', EUR: 'euro', USD: 'dollar-sign' };
 
@@ -903,20 +904,37 @@ function isSpendable(acc) {
     return true;
 }
 
-/** Shows the admin-panel link if this user is an admin.
+/** Shows or hides the admin-panel link to match whoever is CURRENTLY
+ * signed in.
  *
  * Asks the server (GET /admin/me) rather than reading a role off the user
  * object: the role is not part of UserRead, and a client-side flag would be
- * cosmetic anyway - the real gate is require_admin on every /admin route.
- * Any failure (403 for a normal user, or anything else) just leaves the link
- * hidden, so this can never break the dashboard for a non-admin. */
+ * cosmetic anyway - the real gate is require_admin on every /admin route,
+ * so this link is only ever a convenience, never the actual security
+ * boundary. Explicitly sets `hidden` BOTH ways (not just true->false) and
+ * gets re-run on tab focus (see wireAdminLinkRefresh) - the session cookie
+ * is shared per-browser, not per-tab, so logging into a different account
+ * in another tab silently changes who this tab is authenticated as too;
+ * without re-checking on focus, an admin's link would stay visible (and a
+ * newly-promoted admin's would stay hidden) until the next full reload. */
 async function revealAdminLinkIfAdmin() {
+    const link = document.getElementById('admin-panel-link');
+    if (!link) return;
     try {
         await apiFetch('/admin/me');
-        document.getElementById('admin-panel-link').hidden = false;
+        link.hidden = false;
     } catch {
-        /* not an admin, or the admin module is unavailable - leave it hidden */
+        link.hidden = true;
     }
+}
+
+/** Re-checks admin status whenever this tab regains focus/visibility - see
+ * revealAdminLinkIfAdmin's doc comment for why that's necessary. */
+function wireAdminLinkRefresh() {
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') void revealAdminLinkIfAdmin();
+    });
+    window.addEventListener('focus', () => void revealAdminLinkIfAdmin());
 }
 
 async function initDashboard() {
@@ -926,6 +944,7 @@ async function initDashboard() {
     document.getElementById('user-name').textContent = `${user.first_name} ${user.last_name}`;
     applyAvatar(user);
     void revealAdminLinkIfAdmin();
+    wireAdminLinkRefresh();
 
     document.getElementById('logout-btn').addEventListener('click', async () => {
         try {
@@ -1995,6 +2014,7 @@ async function loadCards() {
     if (!list) return;
     try {
         const cards = await apiFetch('/cards');
+        currentCards = cards;
         loadedCards = cards;
         renderCardsList(cards);
     } catch (err) {
@@ -2009,15 +2029,26 @@ function renderCardsList(cards) {
         return;
     }
 
+    // A cancelled card never comes back to life (see the confirm() prompt
+    // below) - showing it grayed out forever is just clutter, so once it's
+    // cancelled it drops out of view entirely, same as if it were deleted.
+    // The backend still soft-cancels (status='cancelled', row + audit trail
+    // kept) rather than actually dropping the row - this filter is purely
+    // what the user sees.
+    const visibleCards = cards.filter(c => c.status !== 'cancelled');
+    if (visibleCards.length === 0) {
+        list.innerHTML = `<div class="empty-state">${t('cards.empty', 'Niciun card încă. Generează primul card virtual.')}</div>`;
+        return;
+    }
+
     const accountById = Object.fromEntries(currentAccounts.map(a => [a.id, a]));
 
-    list.innerHTML = cards.map(card => {
+    list.innerHTML = visibleCards.map(card => {
         const account = accountById[card.account_id];
-        const isCancelled = card.status === 'cancelled';
         const formattedNumber = card.card_number.replace(/(.{4})/g, '$1 ').trim();
         const expiry = `${String(card.expiry_month).padStart(2, '0')}/${String(card.expiry_year).slice(-2)}`;
         return `
-        <div class="credit-card virtual ${isCancelled ? 'cancelled' : ''}">
+        <div class="credit-card virtual">
             <div class="card-header">
                 <span class="card-type">${t('cards.label', 'Card')}${account ? ' &middot; ' + escapeHTML(account.name) : ''}</span>
                 <span class="card-logo">VISA</span>
@@ -2041,20 +2072,21 @@ function renderCardsList(cards) {
                     ` : ''}
                     <button class="card-eye-btn" title="${t('cards.show_details', 'Arată expirarea și CVV')}" aria-label="${t('cards.show_details', 'Arată expirarea și CVV')}"><i data-lucide="eye"></i></button>
                 </div>
-                ${isCancelled
-                    ? `<div class="status-indicator cancelled">${t('cards.status_cancelled', CARD_STATUS_LABELS.cancelled)}</div>`
-                    : `<button class="status-toggle-btn ${card.status}" data-card-id="${card.id}" data-action="${card.status === 'frozen' ? 'unfreeze' : 'freeze'}" title="${t(card.status === 'frozen' ? 'cards.unfreeze_hint' : 'cards.freeze_hint', card.status === 'frozen' ? 'Apasă pentru a debloca cardul' : 'Apasă pentru a bloca temporar cardul')}">
-                        <i data-lucide="${card.status === 'frozen' ? 'snowflake' : 'shield-check'}"></i>
-                        <span>${t(`cards.status_${card.status}`, CARD_STATUS_LABELS[card.status] || card.status)}</span>
-                    </button>`
-                }
+                <button class="status-toggle-btn ${card.status}" data-card-id="${card.id}" data-action="${card.status === 'frozen' ? 'unfreeze' : 'freeze'}" title="${t(card.status === 'frozen' ? 'cards.unfreeze_hint' : 'cards.freeze_hint', card.status === 'frozen' ? 'Apasă pentru a debloca cardul' : 'Apasă pentru a bloca temporar cardul')}">
+                    <i data-lucide="${card.status === 'frozen' ? 'snowflake' : 'shield-check'}"></i>
+                    <span>${t(`cards.status_${card.status}`, CARD_STATUS_LABELS[card.status] || card.status)}</span>
+                </button>
             </div>
-            ${!isCancelled ? `
-                <div class="card-actions-row">
-                    <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}">${t('cards.limit')}</button>
-                    <button class="card-cancel-btn" data-card-id="${card.id}">${t('cards.cancel')}</button>
-                </div>
-            ` : ''}
+            <div class="card-actions-row">
+                <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}" title="${t('cards.limit_hint', 'Setează limita de cheltuieli')}">
+                    <i data-lucide="sliders-horizontal"></i>
+                    <span>${t('cards.limit', 'Limită')}</span>
+                </button>
+                <button class="card-cancel-btn" data-card-id="${card.id}" title="${t('cards.cancel_hint', 'Anulează definitiv cardul')}">
+                    <i data-lucide="trash-2"></i>
+                    <span>${t('cards.cancel', 'Anulează')}</span>
+                </button>
+            </div>
         </div>
         `;
     }).join('');
@@ -2198,8 +2230,41 @@ function wireCardOrderModal() {
     const form = document.getElementById('card-order-form');
     const errorEl = document.getElementById('card-order-error');
     const accountSelect = document.getElementById('card-order-account');
+    const cardChoiceSelect = document.getElementById('card-order-card-choice');
+    const cardHint = document.getElementById('card-order-card-hint');
 
-    document.getElementById('open-card-order-btn').addEventListener('click', () => {
+    // Cards that already have a physical order can't be offered again (see
+    // the backend's matching guard in card_orders/service.py) - fetched
+    // once when the modal opens, alongside the account list.
+    let orderedCardIds = new Set();
+
+    function updateCardChoices() {
+        const eligible = currentCards.filter(c =>
+            c.account_id === accountSelect.value &&
+            c.status !== 'cancelled' &&
+            !orderedCardIds.has(c.id)
+        );
+
+        cardChoiceSelect.innerHTML = [
+            '<option value="">Card nou (emite un card separat)</option>',
+            ...eligible.map(c =>
+                `<option value="${c.id}">Fă fizic cardul virtual care se termină în ${c.last4}</option>`
+            ),
+        ].join('');
+
+        // Exactly one eligible virtual card on this account - that's almost
+        // certainly what "order a physical card" means here, so default to
+        // reusing it instead of silently minting an unrelated second card.
+        if (eligible.length === 1) {
+            cardChoiceSelect.value = eligible[0].id;
+        }
+
+        cardHint.hidden = eligible.length === 0;
+        cardHint.textContent = eligible.length === 0 ? '' :
+            'Poți transforma un card virtual existent în fizic (păstrează același număr) sau comanda unul nou.';
+    }
+
+    document.getElementById('open-card-order-btn').addEventListener('click', async () => {
         errorEl.hidden = true;
         form.reset();
         document.getElementById('card-order-country').value = 'România';
@@ -2207,8 +2272,19 @@ function wireCardOrderModal() {
         accountSelect.innerHTML = active.length
             ? active.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
             : '<option value="" disabled selected>Creează mai întâi un cont</option>';
+
+        try {
+            const orders = await apiFetch('/card-orders');
+            orderedCardIds = new Set(orders.map(o => o.card_id).filter(Boolean));
+        } catch (err) {
+            orderedCardIds = new Set();
+        }
+
+        updateCardChoices();
         modal.hidden = false;
     });
+    accountSelect.addEventListener('change', updateCardChoices);
+
     document.getElementById('close-card-order-modal').addEventListener('click', () => { modal.hidden = true; });
     document.getElementById('cancel-card-order').addEventListener('click', () => { modal.hidden = true; });
 
@@ -2221,6 +2297,7 @@ function wireCardOrderModal() {
                 method: 'POST',
                 body: JSON.stringify({
                     account_id: accountSelect.value,
+                    card_id: cardChoiceSelect.value || null,
                     full_name: document.getElementById('card-order-name').value,
                     phone: document.getElementById('card-order-phone').value,
                     address: document.getElementById('card-order-address').value,
@@ -2282,7 +2359,7 @@ function renderBeneficiariesList(contacts) {
     list.innerHTML = contacts.map(c => `
         <div class="contact-item" data-id="${c.id}" data-iban="${escapeHTML(c.iban)}" data-name="${escapeHTML(c.display_name)}">
             <div class="contact-item-fill">
-                <div class="name">${escapeHTML(c.display_name)}${c.is_subscription ? ' <span class="contact-subscription-badge">Abonament</span>' : ''}</div>
+                <div class="name">${escapeHTML(c.display_name)}${c.is_subscription ? ` <span class="contact-subscription-badge" data-i18n="payments.subscription_badge">${t('payments.subscription_badge', 'Abonament')}</span>` : ''}</div>
                 <div class="iban">${escapeHTML(c.iban)}</div>
                 ${c.website ? `<a class="contact-website" href="${escapeHTML(c.website)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHTML(c.website)}</a>` : ''}
             </div>

@@ -1,206 +1,141 @@
-import io
+"""POST /api/v1/iban-ocr/extract - this endpoint's HTTP surface.
 
-import pymupdf
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+The OCR itself moved to vision-service, and so did the tests that render real
+images and assert what comes back out (vision/tests/test_iban_endpoint.py).
+What is left here is what this endpoint still owns and vision-service
+deliberately does not: requiring a session, rejecting the wrong content type,
+rejecting an oversized or empty upload, and translating the service's
+failures into this API's error envelope.
+
+vision_client is stubbed throughout - a test of "does this endpoint check the
+session" must not depend on tesseract being installed, on the DejaVu fonts
+being present (they are not, since the OCR packages left this image), or on
+another container being up.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from app.core import vision_client
+from app.core.exceptions import ValidationError
+from app.core.vision_client import VisionServiceUnavailableError
 
 VALID_IBAN = "RO49AAAA1B31007593840000"
-_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+_OK_RESULT = {
+    "iban": VALID_IBAN,
+    "ocr_confidence": 91.5,
+    "low_confidence": False,
+    "raw_text": f"Card holder: Ion Popescu\n{VALID_IBAN}",
+}
 
 
-def _render_text_image(lines: list[str]) -> Image.Image:
-    font = ImageFont.truetype(_FONT_PATH, 28)
-    image = Image.new("RGB", (900, 320), "white")
-    draw = ImageDraw.Draw(image)
-    for i, line in enumerate(lines):
-        draw.text((20, 20 + i * 40), line, fill="black", font=font)
-    return image
+@pytest.fixture
+def stub_vision(monkeypatch):
+    """Replace the network call with a canned answer. Returns a dict the test
+    can mutate to choose what the service 'returns'."""
+    state: dict = {"result": _OK_RESULT, "raises": None, "calls": []}
 
+    async def fake_extract_iban(content: bytes, *, filename: str):
+        state["calls"].append({"content": content, "filename": filename})
+        if state["raises"] is not None:
+            raise state["raises"]
+        return state["result"]
 
-def _to_png_bytes(image: Image.Image) -> bytes:
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    return buffer.getvalue()
-
-
-def _render_pdf_bytes(pages: list[list[str]]) -> bytes:
-    document = pymupdf.open()
-    try:
-        for lines in pages:
-            page = document.new_page()
-            for i, line in enumerate(lines):
-                page.insert_text((50, 80 + i * 40), line, fontsize=18)
-        return document.tobytes()
-    finally:
-        document.close()
-
-
-async def test_extract_requires_authentication(client):
-    png_bytes = _to_png_bytes(_render_text_image([VALID_IBAN]))
-    resp = await client.post(
-        "/api/v1/iban-ocr/extract", files={"file": ("card.png", png_bytes, "image/png")}
+    monkeypatch.setattr(vision_client, "extract_iban", fake_extract_iban)
+    # The module under test imported the function directly.
+    monkeypatch.setattr(
+        "app.modules.iban_ocr.extractor.vision_client.extract_iban", fake_extract_iban
     )
+    return state
+
+
+async def test_extract_requires_authentication(client, stub_vision):
+    resp = await client.post(
+        "/api/v1/iban-ocr/extract", files={"file": ("card.png", b"png-bytes", "image/png")}
+    )
+
     assert resp.status_code == 401
+    # The session check has to happen BEFORE any work is handed to another
+    # service - otherwise an anonymous caller could still burn its CPU.
+    assert stub_vision["calls"] == []
 
 
-async def test_extract_reads_iban_from_photo(authed_client):
+async def test_extract_returns_the_services_result(authed_client, stub_vision):
     client, _user = authed_client
-    png_bytes = _to_png_bytes(_render_text_image(["Card holder: Ion Popescu", VALID_IBAN]))
 
     resp = await client.post(
-        "/api/v1/iban-ocr/extract", files={"file": ("card.png", png_bytes, "image/png")}
+        "/api/v1/iban-ocr/extract", files={"file": ("card.png", b"png-bytes", "image/png")}
     )
+
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["iban"] == VALID_IBAN
     assert body["low_confidence"] is False
-    assert body["ocr_confidence"] > 0
+    # raw_text is deliberately not echoed back to the client.
+    assert "raw_text" not in body
 
 
-async def test_extract_reads_iban_with_spaced_grouping(authed_client):
-    """IBANs are commonly printed in space-separated groups of 4. Double
-    spaces between groups (not single) - tesseract reliably misreads
-    "1B31" as "1B831" at single-space width with this font/size, an OCR
-    rendering artifact unrelated to the extraction logic under test (which
-    has its own direct, rendering-free coverage in tests/unit/test_iban_ocr.py)."""
+async def test_extract_passes_the_suffix_through(authed_client, stub_vision):
+    """vision-service picks its PDF reader or its image reader from the
+    filename suffix, so the endpoint has to send a truthful one."""
     client, _user = authed_client
-    spaced = "  ".join(VALID_IBAN[i : i + 4] for i in range(0, len(VALID_IBAN), 4))
-    png_bytes = _to_png_bytes(_render_text_image([spaced]))
 
-    resp = await client.post(
-        "/api/v1/iban-ocr/extract", files={"file": ("card.png", png_bytes, "image/png")}
-    )
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["iban"] == VALID_IBAN
-
-
-async def test_extract_ignores_checksum_invalid_lookalike(authed_client):
-    """Proves the checksum, not just the pattern, gates a match - this
-    string is IBAN-shaped but its check digits are wrong."""
-    client, _user = authed_client
-    fake = "RO00AAAA1B31007593840000"
-    png_bytes = _to_png_bytes(_render_text_image([fake]))
-
-    resp = await client.post(
-        "/api/v1/iban-ocr/extract", files={"file": ("card.png", png_bytes, "image/png")}
-    )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["iban"] is None
-    assert body["low_confidence"] is True
-
-
-async def test_extract_flags_low_confidence_when_no_iban_present(authed_client):
-    client, _user = authed_client
-    png_bytes = _to_png_bytes(_render_text_image(["Just a random receipt", "Total: 42.50 RON"]))
-
-    resp = await client.post(
-        "/api/v1/iban-ocr/extract", files={"file": ("card.png", png_bytes, "image/png")}
-    )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["iban"] is None
-    assert body["low_confidence"] is True
-
-
-async def test_extract_flags_low_confidence_for_blurry_image(authed_client):
-    client, _user = authed_client
-    image = _render_text_image([VALID_IBAN])
-    blurred = image.filter(ImageFilter.GaussianBlur(radius=8))
-    png_bytes = _to_png_bytes(blurred)
-
-    resp = await client.post(
-        "/api/v1/iban-ocr/extract", files={"file": ("card.png", png_bytes, "image/png")}
-    )
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["low_confidence"] is True
-
-
-async def test_extract_reads_iban_from_pdf(authed_client):
-    client, _user = authed_client
-    pdf_bytes = _render_pdf_bytes([["Extras de cont", VALID_IBAN]])
-
-    resp = await client.post(
+    await client.post(
         "/api/v1/iban-ocr/extract",
-        files={"file": ("statement.pdf", pdf_bytes, "application/pdf")},
+        files={"file": ("statement.pdf", b"%PDF-fake", "application/pdf")},
     )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["iban"] == VALID_IBAN
-    assert body["low_confidence"] is False
+
+    assert stub_vision["calls"][0]["filename"].endswith(".pdf")
 
 
-async def test_extract_finds_iban_on_second_pdf_page(authed_client):
-    """The IBAN isn't always on the first page of a statement - every page
-    is tried in order (see extractor.py::extract_iban)."""
+async def test_extract_rejects_non_image_content_type(authed_client, stub_vision):
     client, _user = authed_client
-    pdf_bytes = _render_pdf_bytes(
-        [["Pagina 1 - fara IBAN aici"], ["Pagina 2", VALID_IBAN]]
-    )
 
     resp = await client.post(
-        "/api/v1/iban-ocr/extract",
-        files={"file": ("statement.pdf", pdf_bytes, "application/pdf")},
+        "/api/v1/iban-ocr/extract", files={"file": ("card.jpg", b"x", "text/plain")}
     )
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["iban"] == VALID_IBAN
 
-
-async def test_extract_prefers_pdf_text_layer_over_ocr(authed_client):
-    """Regression test: a PDF with a real text layer (a generated
-    statement/invoice, not a scan) must be read via that text layer, not
-    rasterized and OCR'd - OCR can misread a character (e.g. "0" as "O")
-    that the text layer never gets wrong. Uses the same unevenly-grouped
-    spacing a real statement used when this bug was reported
-    ("RO71 BANK4 JG9W 0MDT 6GE2SJE", not a neat groups-of-4 pattern)."""
-    client, _user = authed_client
-    iban = "RO71BANK4JG9W0MDT6GE2SJE"
-    spaced = "RO71 BANK4 JG9W 0MDT 6GE2SJE"
-    pdf_bytes = _render_pdf_bytes([["IBAN", spaced]])
-
-    resp = await client.post(
-        "/api/v1/iban-ocr/extract",
-        files={"file": ("statement.pdf", pdf_bytes, "application/pdf")},
-    )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["iban"] == iban
-    assert body["ocr_confidence"] == 100.0
-    assert body["low_confidence"] is False
-
-
-async def test_extract_rejects_unreadable_pdf(authed_client):
-    client, _user = authed_client
-    resp = await client.post(
-        "/api/v1/iban-ocr/extract",
-        files={"file": ("statement.pdf", b"not a real pdf", "application/pdf")},
-    )
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "validation_error"
+    assert stub_vision["calls"] == []
 
 
-async def test_extract_rejects_non_image_content_type(authed_client):
+async def test_extract_rejects_empty_file(authed_client, stub_vision):
     client, _user = authed_client
-    resp = await client.post(
-        "/api/v1/iban-ocr/extract",
-        files={"file": ("card.jpg", b"not really a jpeg", "text/plain")},
-    )
-    assert resp.status_code == 422
-    assert resp.json()["error"]["code"] == "validation_error"
 
-
-async def test_extract_rejects_unreadable_image(authed_client):
-    client, _user = authed_client
-    resp = await client.post(
-        "/api/v1/iban-ocr/extract",
-        files={"file": ("card.png", b"this is not a valid png file", "image/png")},
-    )
-    assert resp.status_code == 422
-    assert resp.json()["error"]["code"] == "validation_error"
-
-
-async def test_extract_rejects_empty_file(authed_client):
-    client, _user = authed_client
     resp = await client.post(
         "/api/v1/iban-ocr/extract", files={"file": ("card.png", b"", "image/png")}
     )
+
     assert resp.status_code == 422
+    assert stub_vision["calls"] == []
+
+
+async def test_unreadable_file_becomes_a_validation_error(authed_client, stub_vision):
+    """422 from vision-service means 'this upload is unusable' - the caller
+    should be told to try a clearer file, not that something broke."""
+    client, _user = authed_client
+    stub_vision["raises"] = ValidationError("unreadable_file")
+
+    resp = await client.post(
+        "/api/v1/iban-ocr/extract", files={"file": ("card.png", b"junk", "image/png")}
+    )
+
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "validation_error"
+
+
+async def test_service_outage_is_a_502_not_a_422(authed_client, stub_vision):
+    """The distinction that matters operationally: a bad photo and a service
+    that is down must not look the same to the client or in the logs."""
+    client, _user = authed_client
+    stub_vision["raises"] = VisionServiceUnavailableError()
+
+    resp = await client.post(
+        "/api/v1/iban-ocr/extract", files={"file": ("card.png", b"png-bytes", "image/png")}
+    )
+
+    assert resp.status_code == 502
+    assert resp.json()["error"]["code"] == "vision_service_unavailable"

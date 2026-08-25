@@ -4,18 +4,10 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# tesseract-ocr-ron: Romanian language pack, for app/modules/id_ocr - ID
-# cards are printed in Romanian. OCR runs fully offline/in-container, so
-# no ID photo ever leaves this machine.
-#
-# cmake/build-essential: face_recognition's dlib dependency (app/modules/
-# face_auth) has no prebuilt wheel for every platform, so pip may need to
-# compile it from source here - same "runs fully offline, nothing ever
-# leaves this machine" principle as the OCR above, just a heavier build.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tesseract-ocr tesseract-ocr-ron \
-    cmake build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# No apt packages at all any more. tesseract (OCR) and cmake/build-essential
+# (dlib, for face embeddings) moved to vision/Dockerfile along with the code
+# that needed them - see vision/app/main.py. That is what took this image
+# from ~1.7GB and a ~4 minute build down to a plain-Python one.
 
 COPY pyproject.toml ./
 COPY app ./app

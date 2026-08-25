@@ -1,4 +1,4 @@
-from app.modules.iban_ocr.extractor import _find_iban
+from app.iban import _find_iban
 
 VALID_IBAN = "RO49AAAA1B31007593840000"
 

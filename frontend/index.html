@@ -23,32 +23,32 @@
             <nav class="nav-menu">
                 <button class="nav-item active" data-view="dashboard">
                     <i data-lucide="layout-dashboard" class="icon"></i>
-                    <span>Prezentare Generală</span>
+                    <span data-i18n="common.Prezentare Generală">Prezentare Generală</span>
                 </button>
                 <button class="nav-item" data-view="chat">
                     <i data-lucide="sparkles" class="icon"></i>
-                    <span>Asistent AI & Proiecții</span>
+                    <span data-i18n="common.Asistent AI & Proiecții">Asistent AI & Proiecții</span>
                 </button>
                 <button class="nav-item" data-view="transactions">
                     <i data-lucide="history" class="icon"></i>
-                    <span>Toate Tranzacțiile</span>
+                    <span data-i18n="common.Toate Tranzacțiile">Toate Tranzacțiile</span>
                 </button>
                 <button class="nav-item" data-view="cards">
                     <i data-lucide="credit-card" class="icon"></i>
-                    <span>Cardurile Mele</span>
+                    <span data-i18n="common.Cardurile Mele">Cardurile Mele</span>
                 </button>
                 <button class="nav-item" data-view="analytics">
                     <i data-lucide="trending-up" class="icon"></i>
-                    <span>Investiții & Bugetare</span>
+                    <span data-i18n="common.Investiții & Bugetare">Investiții & Bugetare</span>
                 </button>
                 <button class="nav-item" data-view="payments">
                     <i data-lucide="landmark" class="icon"></i>
-                    <span>Plăți</span>
+                    <span data-i18n="common.Plăți">Plăți</span>
                 </button>
             </nav>
             <section class="conversation-history" id="conversation-history" hidden aria-labelledby="conversation-history-title">
                 <div class="conversation-history-header">
-                    <h2 id="conversation-history-title">Conversații recente</h2>
+                    <h2 id="conversation-history-title" data-i18n="common.Conversații recente">Conversații recente</h2>
                 </div>
                 <p class="conversation-history-error" id="conversation-history-error" role="alert" hidden></p>
                 <div class="conversation-history-list" id="conversation-history-list"></div>
@@ -71,10 +71,10 @@
                          wireNotificationsPanel in app.js). -->
                     <div class="profile-panel notifications-panel" id="notifications-panel" hidden>
                         <div class="profile-panel-header">
-                            <div class="profile-panel-name">Notificări</div>
+                            <div class="profile-panel-name" data-i18n="common.Notificări">Notificări</div>
                         </div>
                         <div id="notifications-list">
-                            <div class="empty-state">Nicio notificare încă.</div>
+                            <div class="empty-state" data-i18n="common.Nicio notificare încă.">Nicio notificare încă.</div>
                         </div>
                     </div>
 
@@ -124,18 +124,18 @@
                 <section id="view-dashboard" class="view active">
                     <div class="dashboard-header">
                         <div class="total-balance-card">
-                            <span class="label">Total Balance</span>
+                            <span class="label" data-i18n="common.Total Balance">Total Balance</span>
                             <h1 class="balance" id="total-balance">&hellip;</h1>
                             <div class="actions">
-                                <button class="btn btn-primary" id="open-new-account-btn"><i data-lucide="plus" class="icon"></i> Cont nou</button>
-                                <button class="btn btn-secondary" id="open-transfer-btn"><i data-lucide="send" class="icon"></i> Transferă</button>
+                                <button class="btn btn-primary" id="open-new-account-btn"><i data-lucide="plus" class="icon"></i> <span data-i18n="common.Cont nou">Cont nou</span></button>
+                                <button class="btn btn-secondary" id="open-transfer-btn"><i data-lucide="send" class="icon"></i> <span data-i18n="common.Transferă">Transferă</span></button>
                             </div>
                         </div>
                     </div>
 
                     <div class="dashboard-grid">
                         <div class="accounts-section">
-                            <h2 class="section-title">Conturile mele</h2>
+                            <h2 class="section-title" data-i18n="common.Conturile mele">Conturile mele</h2>
                             <div class="accounts-grid" id="accounts-grid">
                                 <div class="loading-state">Se încarcă...</div>
                             </div>
@@ -143,8 +143,8 @@
 
                         <div class="transactions-section">
                             <div class="section-header-row">
-                                <h2 class="section-title">Tranzacții Recente</h2>
-                                <button class="link-btn" id="view-all-transactions-btn">Vezi toate</button>
+                                <h2 class="section-title" data-i18n="common.Tranzacții Recente">Tranzacții Recente</h2>
+                                <button class="link-btn" id="view-all-transactions-btn" data-i18n="common.Vezi toate">Vezi toate</button>
                             </div>
                             <div class="transactions-list" id="transactions-list">
                                 <div class="loading-state">Se încarcă...</div>
@@ -155,7 +155,7 @@
 
                 <!-- All Transactions View (grouped by month) -->
                 <section id="view-transactions" class="view hidden">
-                    <h2 class="view-title">Toate Tranzacțiile</h2>
+                    <h2 class="view-title" data-i18n="common.Toate Tranzacțiile">Toate Tranzacțiile</h2>
                     <div id="all-transactions-list">
                         <div class="loading-state">Se încarcă...</div>
                     </div>
@@ -167,7 +167,7 @@
                         <div class="chat-header">
                             <div class="ai-avatar"><i data-lucide="sparkles"></i></div>
                             <div class="ai-info">
-                                <h2>BanK AI Assistant <span class="demo-badge">Demo</span></h2>
+                                <h2>BanK AI Assistant</h2>
                                 <span class="status">Conectat • poate citi conturile și efectua acțiuni simple</span>
                             </div>
                             <button class="btn btn-secondary" id="new-conversation-btn" style="margin-left: auto;">
@@ -199,7 +199,7 @@
 
                 <!-- Cards Management View -->
                 <section id="view-cards" class="view hidden">
-                    <h2 class="view-title">Cardurile Mele</h2>
+                    <h2 class="view-title" data-i18n="common.Cardurile Mele">Cardurile Mele</h2>
                     <div class="cards-carousel" id="cards-list">
                         <div class="loading-state">Se încarcă...</div>
                     </div>
@@ -211,10 +211,10 @@
 
                 <!-- Analytics & Insights View -->
                 <section id="view-analytics" class="view hidden">
-                    <h2 class="view-title">Investiții & Bugetare <span class="demo-badge">Demo</span></h2>
+                    <h2 class="view-title"><span data-i18n="common.Investiții & Bugetare">Investiții & Bugetare</span> <span class="demo-badge" data-i18n="dashboard.Demo">Demo</span></h2>
                     <div class="analytics-grid">
                         <div class="chart-card">
-                            <h3>Cheltuieli pe Categorii (Luna curentă)</h3>
+                            <h3 data-i18n="dashboard.Cheltuieli pe Categorii (Luna curentă)">Cheltuieli pe Categorii (Luna curentă)</h3>
                             <div class="donut-chart-container" id="spending-category-container">
                                 <div class="spending-donut-wrap" id="spending-category-donut"></div>
                                 <div class="legend" id="spending-category-legend">
@@ -246,7 +246,7 @@
                             </div>
 
                             <div class="pots-card-header" style="margin-top: 30px;">
-                                <h3>Transferuri programate</h3>
+                                <h3 data-i18n="dashboard.scheduled_title">Transferuri programate</h3>
                                 <button type="button" class="btn-icon-add" id="open-scheduled-transfer-btn" title="Programează un transfer" aria-label="Programează un transfer"><i data-lucide="plus"></i></button>
                             </div>
                             <div id="scheduled-transfers-list" class="pots-list">
@@ -258,10 +258,10 @@
 
                 <!-- Payments (IBAN-to-IBAN, cross-user) View -->
                 <section id="view-payments" class="view hidden">
-                    <h2 class="view-title">Plăți</h2>
+                    <h2 class="view-title" data-i18n="common.Plăți">Plăți</h2>
                     <div class="analytics-grid">
                         <div class="chart-card">
-                            <h3>Trimite bani printr-un IBAN</h3>
+                            <h3 data-i18n="payments.Trimite bani printr-un IBAN">Trimite bani printr-un IBAN</h3>
 
                             <label class="field-label" for="payments-account">Din contul</label>
                             <select class="field-input" id="payments-account"></select>
@@ -306,25 +306,25 @@
 
                         <div class="pots-card">
                             <div class="pots-card-header">
-                                <h3>Contactele mele</h3>
-                                <button type="button" class="btn-icon-add" id="add-beneficiary-btn" title="Adaugă contact" aria-label="Adaugă contact"><i data-lucide="plus"></i></button>
+                                <h3 data-i18n="payments.Contactele mele">Contactele mele</h3>
+                                <button type="button" class="btn-icon-add" id="add-beneficiary-btn" title="Adaugă contact" aria-label="Adaugă contact" data-i18n-title="payments.add_contact" data-i18n-aria-label="payments.add_contact"><i data-lucide="plus"></i></button>
                             </div>
                             <form id="add-beneficiary-form" class="inline-add-form" hidden>
-                                <input type="text" class="field-input" id="add-beneficiary-name" placeholder="Nume" required>
-                                <input type="text" class="field-input" id="add-beneficiary-iban" placeholder="IBAN" required>
-                                <input type="url" class="field-input" id="add-beneficiary-website" placeholder="Website (opțional, ex. pt. abonamente)">
+                                <input type="text" class="field-input" id="add-beneficiary-name" data-i18n-placeholder="payments.name" placeholder="Nume" required>
+                                <input type="text" class="field-input" id="add-beneficiary-iban" data-i18n-placeholder="payments.iban" placeholder="IBAN" required>
+                                <input type="url" class="field-input" id="add-beneficiary-website" data-i18n-placeholder="payments.website" placeholder="Website (opțional, ex. pt. abonamente)">
                                 <label class="field-label" style="display: flex; align-items: center; gap: 8px;">
                                     <input type="checkbox" id="add-beneficiary-is-subscription" style="width: auto;">
-                                    Este un abonament (Netflix, Spotify etc.)
+                                    <span data-i18n="payments.subscription">Este un abonament (Netflix, Spotify etc.)</span>
                                 </label>
-                                <button type="submit" class="btn btn-primary">Salvează</button>
+                                <button type="submit" class="btn btn-primary" data-i18n="payments.save">Salvează</button>
                             </form>
                             <div class="auth-error" id="add-beneficiary-error" hidden></div>
                             <div id="beneficiaries-list" class="pots-list">
                                 <div class="loading-state">Se încarcă...</div>
                             </div>
 
-                            <h3 style="margin-top: 30px;">Istoric plăți</h3>
+                            <h3 style="margin-top: 30px;" data-i18n="payments.Istoric plăți">Istoric plăți</h3>
                             <div id="payments-list" class="pots-list">
                                 <div class="loading-state">Se încarcă...</div>
                             </div>
@@ -589,6 +589,10 @@
             <form id="card-order-form">
                 <label class="field-label" for="card-order-account">Cont asociat</label>
                 <select class="field-input" id="card-order-account" required></select>
+
+                <label class="field-label" for="card-order-card-choice">Card</label>
+                <select class="field-input" id="card-order-card-choice"></select>
+                <p class="field-hint" id="card-order-card-hint" hidden></p>
 
                 <label class="field-label" for="card-order-name">Nume complet</label>
                 <input class="field-input" type="text" id="card-order-name" required placeholder="ex. Popescu Andrei">

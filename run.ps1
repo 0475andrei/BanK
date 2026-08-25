@@ -1,4 +1,5 @@
-# Start the whole app - database, API and frontend - in Docker.
+# Start the whole app - API, vision-service and frontend - in Docker.
+# (The database is hosted Supabase, reached over HTTPS - nothing local.)
 #
 #   .\run.ps1          start everything (rebuilds if code changed)
 #   .\run.ps1 stop     stop everything

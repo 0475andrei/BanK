@@ -1,134 +1,125 @@
-import io
+"""POST /api/v1/id-ocr/extract - this endpoint's HTTP surface.
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+The OCR itself moved to vision-service, and the tests that render real card
+images and assert what comes back went with it
+(vision/tests/test_id_card_endpoint.py). What remains here is what this
+endpoint still owns: being reachable WITHOUT a session (it runs during
+registration, before an account exists), rejecting the wrong content type or
+an empty/oversized upload, not echoing `raw_text` back, and turning the
+service's failures into this API's error envelope.
 
-from app.modules.auth.validation import generate_test_national_id
+vision_client is stubbed throughout, so none of this depends on tesseract,
+on the DejaVu fonts (gone from this image with the OCR packages), or on
+another container being up.
+"""
 
-_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+from __future__ import annotations
+
+import pytest
+
+from app.core import vision_client
+from app.core.exceptions import ValidationError
+from app.core.vision_client import VisionServiceUnavailableError
+
+_CNP = "2950615123456"
+
+_OK_RESULT = {
+    "national_id": _CNP,
+    "national_id_valid": True,
+    "last_name": "POPESCU",
+    "first_name": "ANDREI ION",
+    "address": "STR EXEMPLU NR 1 BUCURESTI",
+    "date_of_birth": "1995-06-15",
+    "gender": "F",
+    "series_number": "RD123456",
+    "ocr_confidence": 88.0,
+    "low_confidence": False,
+    # Present in the service's answer, and deliberately NOT forwarded to the
+    # client - the assertion below is the point of keeping it here.
+    "raw_text": "CNP 2950615123456\nNume/Nom\nPOPESCU",
+}
 
 
-def _render_id_card_image(lines: list[str]) -> Image.Image:
-    font = ImageFont.truetype(_FONT_PATH, 28)
-    image = Image.new("RGB", (900, 320), "white")
-    draw = ImageDraw.Draw(image)
-    for i, line in enumerate(lines):
-        draw.text((20, 20 + i * 40), line, fill="black", font=font)
-    return image
+@pytest.fixture
+def stub_vision(monkeypatch):
+    state: dict = {"result": _OK_RESULT, "raises": None, "calls": []}
 
+    async def fake_extract_id_fields(content: bytes):
+        state["calls"].append(content)
+        if state["raises"] is not None:
+            raise state["raises"]
+        return state["result"]
 
-def _to_png_bytes(image: Image.Image) -> bytes:
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    return buffer.getvalue()
-
-
-def _render_id_card_png(cnp: str) -> bytes:
-    lines = [
-        "CNP " + cnp,
-        "Nume/Nom",
-        "POPESCU",
-        "Prenume/Prenom",
-        "ANDREI ION",
-        "Domiciliu/Adresse",
-        "STR EXEMPLU NR 1 BUCURESTI",
-    ]
-    return _to_png_bytes(_render_id_card_image(lines))
-
-
-async def test_extract_reads_cnp_name_and_address_from_photo(client):
-    cnp = generate_test_national_id(1995, 6, 15, gender="F")
-    png_bytes = _render_id_card_png(cnp)
-
-    resp = await client.post(
-        "/api/v1/id-ocr/extract",
-        files={"file": ("id.png", png_bytes, "image/png")},
+    monkeypatch.setattr(vision_client, "extract_id_fields", fake_extract_id_fields)
+    monkeypatch.setattr(
+        "app.modules.id_ocr.extractor.vision_client.extract_id_fields",
+        fake_extract_id_fields,
     )
+    return state
+
+
+async def test_extract_requires_no_authentication(client, stub_vision):
+    """This runs during registration, before any session exists - so unlike
+    almost every other endpoint, anonymous access is the correct behaviour."""
+    resp = await client.post(
+        "/api/v1/id-ocr/extract", files={"file": ("id.png", b"png-bytes", "image/png")}
+    )
+
+    assert resp.status_code == 200, resp.text
+
+
+async def test_extract_returns_fields_without_raw_text(client, stub_vision):
+    resp = await client.post(
+        "/api/v1/id-ocr/extract", files={"file": ("id.png", b"png-bytes", "image/png")}
+    )
+
     assert resp.status_code == 200, resp.text
     body = resp.json()
-
-    assert body["national_id"] == cnp
-    assert body["national_id_valid"] is True
-    assert body["last_name"] == "POPESCU"
+    assert body["national_id"] == _CNP
     assert body["first_name"] == "ANDREI ION"
-    assert body["address"].startswith("STR EXEMPLU")
     assert body["date_of_birth"] == "1995-06-15"
-    assert body["gender"] == "F"
+    # The full OCR dump stays server-side.
     assert "raw_text" not in body
-    assert body["low_confidence"] is False
-    assert body["ocr_confidence"] > 0
 
 
-async def test_extract_requires_no_authentication(client):
-    # This runs during registration, before any session exists.
-    png_bytes = _render_id_card_png(generate_test_national_id(1990, 1, 1, gender="M"))
+async def test_extract_rejects_non_png_content_type(client, stub_vision):
     resp = await client.post(
-        "/api/v1/id-ocr/extract",
-        files={"file": ("id.png", png_bytes, "image/png")},
+        "/api/v1/id-ocr/extract", files={"file": ("id.jpg", b"x", "image/jpeg")}
     )
-    assert resp.status_code == 200
+
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "validation_error"
+    # Rejected before any work is handed to another service.
+    assert stub_vision["calls"] == []
 
 
-async def test_extract_rejects_non_png_content_type(client):
+async def test_extract_rejects_empty_file(client, stub_vision):
     resp = await client.post(
-        "/api/v1/id-ocr/extract",
-        files={"file": ("id.jpg", b"not really a jpeg", "image/jpeg")},
+        "/api/v1/id-ocr/extract", files={"file": ("id.png", b"", "image/png")}
     )
+
+    assert resp.status_code == 422
+    assert stub_vision["calls"] == []
+
+
+async def test_unreadable_image_becomes_a_validation_error(client, stub_vision):
+    stub_vision["raises"] = ValidationError("unreadable_file")
+
+    resp = await client.post(
+        "/api/v1/id-ocr/extract", files={"file": ("id.png", b"junk", "image/png")}
+    )
+
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "validation_error"
 
 
-async def test_extract_rejects_unreadable_image(client):
-    resp = await client.post(
-        "/api/v1/id-ocr/extract",
-        files={"file": ("id.png", b"this is not a valid png file", "image/png")},
-    )
-    assert resp.status_code == 422
-    assert resp.json()["error"]["code"] == "validation_error"
-
-
-async def test_extract_rejects_empty_file(client):
-    resp = await client.post(
-        "/api/v1/id-ocr/extract",
-        files={"file": ("id.png", b"", "image/png")},
-    )
-    assert resp.status_code == 422
-
-
-async def test_extract_flags_low_confidence_when_cnp_not_found(client):
-    # Otherwise perfectly clear text - the missing-CNP trigger, not the
-    # OCR-confidence-score trigger.
-    lines = ["Nume/Nom", "POPESCU", "Prenume/Prenom", "ANDREI ION"]
-    png_bytes = _to_png_bytes(_render_id_card_image(lines))
+async def test_service_outage_is_a_502_not_a_422(client, stub_vision):
+    """A bad photo and a service that is down must stay distinguishable."""
+    stub_vision["raises"] = VisionServiceUnavailableError()
 
     resp = await client.post(
-        "/api/v1/id-ocr/extract",
-        files={"file": ("id.png", png_bytes, "image/png")},
+        "/api/v1/id-ocr/extract", files={"file": ("id.png", b"png-bytes", "image/png")}
     )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["national_id"] is None
-    assert body["low_confidence"] is True
 
-
-async def test_extract_flags_low_confidence_for_blurry_image(client):
-    cnp = generate_test_national_id(1988, 3, 3, gender="M")
-    image = _render_id_card_image(
-        [
-            "CNP " + cnp,
-            "Nume/Nom",
-            "POPESCU",
-            "Prenume/Prenom",
-            "ANDREI ION",
-        ]
-    )
-    blurred = image.filter(ImageFilter.GaussianBlur(radius=8))
-    png_bytes = _to_png_bytes(blurred)
-
-    resp = await client.post(
-        "/api/v1/id-ocr/extract",
-        files={"file": ("id.png", png_bytes, "image/png")},
-    )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["low_confidence"] is True
-    assert body["ocr_confidence"] < 60.0
+    assert resp.status_code == 502
+    assert resp.json()["error"]["code"] == "vision_service_unavailable"

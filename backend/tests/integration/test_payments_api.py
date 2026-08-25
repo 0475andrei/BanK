@@ -255,6 +255,45 @@ async def test_payment_price_increase_includes_saved_website(
     assert resp.json()["error"]["details"]["website"] == "https://netflix.com"
 
 
+async def test_payment_blocks_price_increase_via_known_subscription_name(
+    authed_client, authed_client_factory
+):
+    """The new automatic trigger: a recipient NAME matching the hardcoded
+    known-subscription list (see known_subscriptions.py) is enough on its
+    own - no beneficiary ever saved, no is_subscription flag ever set. Same
+    recurring-then-higher pattern and default beneficiary_name="Netflix" as
+    _pay - deliberately does NOT call _mark_as_subscription."""
+    payer, _payer_user = authed_client
+    payer_account = await _open_account(payer, "Payer")
+    payee, _payee_user = await authed_client_factory()
+    payee_account = await _open_account(payee, "Payee")
+
+    assert (await _pay(payer, payer_account, payee_account, 4_000, "v1")).status_code == 201
+    assert (await _pay(payer, payer_account, payee_account, 4_000, "v2")).status_code == 201
+
+    resp = await _pay(payer, payer_account, payee_account, 6_000, "v3")
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    assert body["error"]["code"] == "subscription_price_increase"
+    assert body["error"]["details"]["website"] == "https://www.netflix.com/cancelplan"
+
+
+async def test_payment_name_match_is_case_insensitive_and_substring(
+    authed_client, authed_client_factory
+):
+    payer, _payer_user = authed_client
+    payer_account = await _open_account(payer, "Payer")
+    payee, _payee_user = await authed_client_factory()
+    payee_account = await _open_account(payee, "Payee")
+
+    name = "SPOTIFY AB (Sweden)"
+    await _pay(payer, payer_account, payee_account, 3_000, "w1", beneficiary_name=name)
+    await _pay(payer, payer_account, payee_account, 3_000, "w2", beneficiary_name=name)
+
+    resp = await _pay(payer, payer_account, payee_account, 5_000, "w3", beneficiary_name=name)
+    assert resp.status_code == 409, resp.text
+
+
 async def test_payment_without_recurring_history_is_not_blocked(
     authed_client, authed_client_factory
 ):
