@@ -57,6 +57,7 @@
                    "search_placeholder":  "İşlem, kart ve kişi ara..."
                },
     "dashboard":  {
+                      "Demo": "Demo", "scheduled_title": "Planlanmış transferler",
                       "Fără activitate încă.":  "Henüz etkinlik yok.",
                       "Conectat • poate citi soldurile conturilor tale":  "Bağlandı • hesap bakiyelerinizi okuyabilir",
                       "Conversație nouă":  "Yeni konuşma",
@@ -122,7 +123,10 @@
                     "face_password":  "Şifre ile giriş",
                     "forgot_password":  "Şifrenizi mi unuttunuz?"
                 },
+    "recovery": { "title": "Şifreyi sıfırla - BanK", "heading": "Şifreyi sıfırla", "request_hint": "Hesabınızın e-posta adresini girin. Varsa Teams üzerinden 6 haneli kod alırsınız.", "code_sent": "Adres mevcutsa Teams üzerinden bir kod gönderildi.", "code_label": "Kod (6 hane)", "resend_prompt": "Kodu almadınız mı?", "resend": "Tekrar gönder", "code_confirmed": "Kod doğrulandı. Yeni bir şifre seçin.", "confirm_password": "Yeni şifreyi onayla", "submit": "Şifreyi sıfırla", "remembered": "Şifrenizi hatırladınız mı?", "password_mismatch": "Şifreler eşleşmiyor." },
+    "enrollment": { "title": "Cihazı doğrula - BanK", "heading": "Bu cihazı tanı", "description": "Teams üzerinden 6 haneli bir kod gönderdik. Bir dahaki sefere yalnızca şifrenizle giriş yapmak için kodu girin.", "confirm": "Cihazı onayla", "later": "Daha sonra" },
     "profile":  {
+                    "show_password": "Şifreyi göster",
                     "avatar":  "Avatar",
                     "referral":  "Referans kodum",
                     "change_password":  "Şifreyi değiştir",
@@ -140,7 +144,7 @@
                     "face_inactive":  "Yüz ile giriş henüz etkin değil. Kamerayı başlatın ve etkinleştirmek için fotoğraf çekin.",
                     "face_success":  "Yüz ile giriş başarıyla etkinleştirildi!"
                 },
-    "payments":  {
+    "payments":  { "add_contact": "Kişi ekle", "name": "Ad", "iban": "IBAN", "website": "Web sitesi (isteğe bağlı, ör. abonelikler için)", "subscription": "Bu bir aboneliktir (Netflix, Spotify vb.)", "save": "Kaydet", "subscription_badge": "Abonelik",
                      "Trimite bani printr-un IBAN":  "IBAN ile para gönder",
                      "Din contul":  "Hesaptan",
                      "Copiază IBAN-ul":  "IBAN\u0027ı kopyala",

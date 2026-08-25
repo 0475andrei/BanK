@@ -57,6 +57,7 @@
                    "search_placeholder":  "Tranzakciók, kártyák és névjegyek keresése..."
                },
     "dashboard":  {
+                      "Demo": "Demó", "scheduled_title": "Ütemezett átutalások",
                       "Fără activitate încă.":  "Még nincs aktivitás.",
                       "Conectat • poate citi soldurile conturilor tale":  "Kapcsolódva • olvashatja számlaegyenlegeit",
                       "Conversație nouă":  "Új beszélgetés",
@@ -108,7 +109,10 @@
                     "face_password":  "Bejelentkezés jelszóval",
                     "forgot_password":  "Elfelejtetted a jelszavad?"
                 },
+    "recovery": { "title": "Jelszó visszaállítása - BanK", "heading": "Jelszó visszaállítása", "request_hint": "Add meg a fiókod e-mail-címét. Ha létezik, 6 számjegyű kódot kapsz Teamsen.", "code_sent": "Ha a cím létezik, a kódot elküldtük Teamsen.", "code_label": "Kód (6 számjegy)", "resend_prompt": "Nem kaptad meg a kódot?", "resend": "Újraküldés", "code_confirmed": "A kód megerősítve. Válassz új jelszót.", "confirm_password": "Új jelszó megerősítése", "submit": "Jelszó visszaállítása", "remembered": "Emlékszel a jelszavadra?", "password_mismatch": "A jelszavak nem egyeznek." },
+    "enrollment": { "title": "Eszköz ellenőrzése - BanK", "heading": "Eszköz felismerése", "description": "6 számjegyű kódot küldtünk Teamsen. Add meg, hogy legközelebb csak a jelszavaddal jelentkezhess be.", "confirm": "Eszköz megerősítése", "later": "Később" },
     "profile":  {
+                    "show_password": "Jelszó megjelenítése",
                     "avatar":  "Avatar",
                     "referral":  "Ajánlói kódom",
                     "change_password":  "Jelszó módosítása",
@@ -126,7 +130,7 @@
                     "face_inactive":  "A Face Login még nincs aktiválva. Indítsd el a kamerát és készíts egy fényképet.",
                     "face_success":  "A Face Login sikeresen aktiválva!"
                 },
-    "payments":  {
+    "payments":  { "add_contact": "Névjegy hozzáadása", "name": "Név", "iban": "IBAN", "website": "Webhely (opcionális, például előfizetésekhez)", "subscription": "Ez egy előfizetés (Netflix, Spotify stb.)", "save": "Mentés", "subscription_badge": "Előfizetés",
                      "Trimite bani printr-un IBAN":  "Pénzküldés IBAN-nal",
                      "Din contul":  "Számláról",
                      "Copiază IBAN-ul":  "IBAN másolása",

@@ -57,6 +57,7 @@
                    "search_placeholder":  "Transaktionen, Karten und Kontakte durchsuchen..."
                },
     "dashboard":  {
+                      "Demo": "Demo", "scheduled_title": "Geplante Überweisungen",
                       "Fără activitate încă.":  "Noch keine Aktivitäten.",
                       "Conectat • poate citi soldurile conturilor tale":  "Verbunden • kann Ihre Kontostände lesen",
                       "Conversație nouă":  "Neue Unterhaltung",
@@ -108,7 +109,10 @@
                     "face_password":  "Anmeldung mit Passwort",
                     "forgot_password":  "Passwort vergessen?"
                 },
+    "recovery": { "title": "Passwort zurücksetzen - BanK", "heading": "Passwort zurücksetzen", "request_hint": "Geben Sie die E-Mail-Adresse Ihres Kontos ein. Falls sie existiert, erhalten Sie einen 6-stelligen Code über Teams.", "code_sent": "Falls die Adresse existiert, wurde ein Code über Teams gesendet.", "code_label": "Code (6 Ziffern)", "resend_prompt": "Code nicht erhalten?", "resend": "Erneut senden", "code_confirmed": "Code bestätigt. Wählen Sie ein neues Passwort.", "confirm_password": "Neues Passwort bestätigen", "submit": "Passwort zurücksetzen", "remembered": "Passwort wieder eingefallen?", "password_mismatch": "Die Passwörter stimmen nicht überein." },
+    "enrollment": { "title": "Gerät überprüfen - BanK", "heading": "Dieses Gerät erkennen", "description": "Wir haben Ihnen einen 6-stelligen Code über Teams gesendet. Geben Sie ihn ein, damit Sie sich beim nächsten Mal auf diesem Computer nur mit Ihrem Passwort anmelden können.", "confirm": "Gerät bestätigen", "later": "Später" },
     "profile":  {
+                    "show_password": "Passwort anzeigen",
                     "avatar":  "Avatar",
                     "referral":  "Mein Empfehlungscode",
                     "change_password":  "Passwort ändern",
@@ -126,7 +130,7 @@
                     "face_inactive":  "Face Login ist noch nicht aktiviert. Starte die Kamera und nimm ein Foto auf.",
                     "face_success":  "Face Login erfolgreich aktiviert!"
                 },
-    "payments":  {
+    "payments":  { "add_contact": "Kontakt hinzufügen", "name": "Name", "iban": "IBAN", "website": "Website (optional, z. B. für Abonnements)", "subscription": "Dies ist ein Abonnement (Netflix, Spotify usw.)", "save": "Speichern", "subscription_badge": "Abonnement",
                      "Trimite bani printr-un IBAN":  "Geld per IBAN senden",
                      "Din contul":  "Vom Konto",
                      "Copiază IBAN-ul":  "IBAN kopieren",
