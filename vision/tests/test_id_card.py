@@ -1,5 +1,5 @@
-from app.modules.auth.validation import generate_test_national_id
-from app.modules.id_ocr.extractor import _parse_fields
+from app.validation import generate_test_national_id
+from app.id_card import _parse_fields
 
 
 def _sample_card_text(cnp: str) -> str:

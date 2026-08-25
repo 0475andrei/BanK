@@ -11,16 +11,14 @@ actually matters. See migration 0011's header for the same caveat.
 """
 
 import hashlib
+import math
 import secrets
-import tempfile
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
-import face_recognition
-import numpy as np
 from postgrest.exceptions import APIError
 from supabase import AsyncClient
 
+from app.core import vision_client
 from app.core.audit import record_audit_event
 from app.core.exceptions import (
     FaceConfirmationRequiredError,
@@ -43,28 +41,54 @@ FACE_CONFIRMATION_THRESHOLD_MINOR = 500_000
 FACE_CONFIRMATION_TOKEN_TTL_MINUTES = 3
 
 
-def _extract_embedding(image_bytes: bytes) -> list[float]:
-    """Runs fully offline (dlib, in-container) - no photo ever leaves this
-    machine, same principle as id_ocr's ID-card extraction."""
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-        tmp.write(image_bytes)
-        tmp_path = Path(tmp.name)
+#: Errors vision-service reports for a photo it could read but couldn't use,
+#: mapped to the messages this module has always returned.
+_FACE_EXTRACTION_MESSAGES = {
+    "no_face_detected": "No face detected in the photo. Try a clearer, well-lit picture.",
+    "multiple_faces_detected": (
+        "Multiple faces detected - only one person can enroll at a time."
+    ),
+}
 
+
+async def _extract_embedding(image_bytes: bytes) -> list[float]:
+    """Turn a photo into a 128-value embedding, via vision-service.
+
+    THE SPLIT: only this step needs dlib, so only this step left the
+    backend (see vision/app/face.py). Everything else about faces in this
+    module - storing an embedding, comparing two of them, issuing and
+    consuming confirmation tokens - is arithmetic and database work and
+    stays here, which is why `enforce_face_confirmation` and friends can
+    still be called in-process from transfers, payments and proposals.
+
+    The photo goes to a container that has no database and no session
+    context; it comes back as numbers and is never persisted there.
+    """
     try:
-        image = face_recognition.load_image_file(str(tmp_path))
-        encodings = face_recognition.face_encodings(image)
-    finally:
-        tmp_path.unlink(missing_ok=True)
+        return await vision_client.extract_face_embedding(image_bytes)
+    except ValidationError as exc:
+        # Re-raised with this module's own wording so the API's error text
+        # is unchanged by the split.
+        raise ValidationError(
+            _FACE_EXTRACTION_MESSAGES.get(str(exc.message), str(exc.message))
+        ) from exc
 
-    if not encodings:
-        raise ValidationError("No face detected in the photo. Try a clearer, well-lit picture.")
-    if len(encodings) > 1:
-        raise ValidationError("Multiple faces detected - only one person can enroll at a time.")
-    return encodings[0].tolist()
+
+def _distance(known: list[float], candidate: list[float]) -> float:
+    """Euclidean distance between two embeddings - exactly what
+    face_recognition.face_distance computed before the split, without
+    needing numpy or dlib in this image for two subtractions.
+
+    A length mismatch means the stored embedding came from a different model
+    and is not comparable; treated as "no match" rather than crashing.
+    """
+    if len(known) != len(candidate):
+        return float("inf")
+    return math.dist(known, candidate)
 
 
 async def enroll_face(supabase: AsyncClient, user: UserRead, image_bytes: bytes) -> None:
-    embedding = _extract_embedding(image_bytes)
+    embedding = await _extract_embedding(image_bytes)
 
     try:
         await (
@@ -149,9 +173,8 @@ async def login_with_face(supabase: AsyncClient, email: str, image_bytes: bytes)
 
     matched = False
     if user_row is not None and credential_row is not None:
-        candidate = _extract_embedding(image_bytes)
-        known = np.array(credential_row["embedding"])
-        distance = face_recognition.face_distance([known], np.array(candidate))[0]
+        candidate = await _extract_embedding(image_bytes)
+        distance = _distance(credential_row["embedding"], candidate)
         matched = bool(distance <= MATCH_THRESHOLD)
 
     # Same shape as password login: unknown email, no face enrolled, and a
@@ -193,9 +216,8 @@ async def create_face_confirmation(supabase: AsyncClient, user: UserRead, image_
     if credential_row is None:
         raise ValidationError("Face Login is not enabled on this account.")
 
-    candidate = _extract_embedding(image_bytes)
-    known = np.array(credential_row["embedding"])
-    distance = face_recognition.face_distance([known], np.array(candidate))[0]
+    candidate = await _extract_embedding(image_bytes)
+    distance = _distance(credential_row["embedding"], candidate)
     if distance > MATCH_THRESHOLD:
         raise UnauthorizedError("Face not recognized.")
 
