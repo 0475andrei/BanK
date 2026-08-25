@@ -22,11 +22,13 @@ async def test_create_transfer_moves_balance(authed_client, seed_balance_factory
     assert body["amount_minor"] == 2_500
     assert body["status"] == "completed"
 
-    # Every new account starts with a welcome balance (see accounts/service.py).
+    # Only the user's FIRST account ever gets the welcome balance (see
+    # accounts/service.py) - "a" was opened first, "b" second, so "b"
+    # starts at zero.
     a_after = (await client.get(f"/api/v1/accounts/{a['id']}")).json()
     b_after = (await client.get(f"/api/v1/accounts/{b['id']}")).json()
     assert a_after["balance_minor"] == OPENING_BALANCE_MINOR + 10_000 - 2_500
-    assert b_after["balance_minor"] == OPENING_BALANCE_MINOR + 2_500
+    assert b_after["balance_minor"] == 2_500
 
 
 async def test_transfer_requires_idempotency_key(authed_client, seed_balance_factory):

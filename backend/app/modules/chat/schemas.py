@@ -20,6 +20,11 @@ class ChatRequest(BaseModel):
     #: Null starts a new conversation. Otherwise the caller is continuing one
     #: it was handed by an earlier response - ownership is checked server-side.
     conversation_id: uuid.UUID | None = None
+    #: Set by the frontend after a successful /documents/upload, to route this
+    #: turn to DocumentAgent (see app/ai/orchestrator.py's context-first
+    #: check). Ownership is verified server-side in router.py before this
+    #: ever reaches Context - never trusted as-is, same as conversation_id.
+    document_id: uuid.UUID | None = None
 
 
 class ProposalRead(BaseModel):
@@ -60,7 +65,12 @@ class ChatResponse(BaseModel):
     routing: RoutingDecision | None = None
     #: Set only when this turn's agent called a propose_* tool (see
     #: app/ai/tools/propose_tools.py) - same "optional, additive" pattern as
-    #: `routing`. None means no action was proposed this turn.
+    #: `routing`. None means no action was proposed this turn. NOTE:
+    #: propose_card_order (a separate, older propose-only tool - see
+    #: app/ai/tools/banking/propose_card_order.py) does NOT write into the
+    #: `proposals` table and so never populates this field; its result
+    #: currently only reaches the user as prose in the reply, not as a
+    #: confirm/reject card. Follow-up: migrate it onto proposals_service.
     proposal: ProposalRead | None = None
 
 

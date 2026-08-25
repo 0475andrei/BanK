@@ -81,13 +81,34 @@ class Orchestrator:
     def route(self, message: str, context: Context) -> RoutingDecision:
         """Pick the agent for this message and say why.
 
-        `context` is accepted so identity-aware routing (product tier,
-        entitlements) can be added without changing this signature again; it is
-        not consulted yet.
+        `context` is consulted FIRST, ahead of keyword rules: an active
+        document (see Context.active_document_id, set by chat/router.py once
+        it has verified ownership) forces DocumentAgent regardless of what
+        the message says. This is deliberate, not just a convenience -
+        keyword routing runs on the message text, which for a document
+        conversation may itself be influenced by the document's content
+        (e.g. a user pasting a phrase from it). If keyword rules ran first,
+        a message like "transfer 50 RON" while a document is active could
+        route away from DocumentAgent's isolation entirely. Context-first
+        means that can't happen: the override is decided before any keyword
+        is even looked at.
         """
-        del context  # not consulted yet
         if self._default is None:
             raise RuntimeError("Orchestrator has no agents registered")
+
+        if context.active_document_id is not None:
+            document_agent = self._agents.get("documents")
+            if document_agent is not None:
+                return RoutingDecision(
+                    agent_name="documents",
+                    reason="active_document_in_context",
+                    confidence=1.0,
+                    matched_rule="context_override",
+                )
+            # DocumentAgent isn't registered for some reason (e.g. a minimal
+            # orchestrator in a test) - fall through to keyword routing
+            # rather than raising, same "never let routing itself take down
+            # the request" reasoning as _classify_with_model below.
 
         rule_decision = self._match_rules(message)
         if rule_decision is not None:

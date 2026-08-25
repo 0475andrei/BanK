@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from app.ai.agents.banking_agent import BankingAgent
 from app.ai.agents.docs_agent import DocsAgent
+from app.ai.agents.document_agent import DocumentAgent
 from app.ai.agents.insights_agent import InsightsAgent
 from app.ai.agents.planning_agent import PlanningAgent
 from app.ai.context import Context
@@ -19,12 +20,21 @@ from app.ai.providers.base import ModelProvider
 from app.ai.routing import RoutingDecision
 from app.ai.schemas import Message
 from app.ai.tools.banking import (
+    AddBeneficiaryTool,
+    CreateScheduledTransferTool,
+    FreezeCardTool,
     GetBalanceTool,
     ListAccountsTool,
     ListCardsTool,
     ListTransactionsTool,
     ListTransfersTool,
+    ProposeCardOrderTool,
+    RemoveBeneficiaryTool,
+    ResolveIbanHolderTool,
+    SetCardSpendingLimitTool,
+    UnfreezeCardTool,
 )
+from app.ai.tools.document_tools import ReadDocumentTool
 from app.ai.tools.insights import (
     CategorizeTransactionsTool,
     ComputeSpendingStatsTool,
@@ -44,16 +54,22 @@ from app.ai.tools.propose_tools import (
 from app.ai.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
-    from supabase import AsyncClient
-
     from app.ai.providers.embedding_base import EmbeddingProvider
+    from supabase import AsyncClient
 
 
 def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
-    """The read-only tools the banking agent is allowed to call.
+    """The tools the banking agent is allowed to call: the original read-only
+    set, a handful of low-stakes write tools that execute directly (see each
+    one's own docstring for why), and the propose_* tools for higher-stakes
+    actions (money movement, opening/closing an account, cancelling a card,
+    ordering a physical card) - those only ever create a pending proposal,
+    never execute anything themselves (see app/ai/tools/propose_tools.py's
+    module docstring).
 
-    `supabase` is handed to every tool that reads data; the tools hold it for
-    their lifetime (the client is a stateless HTTP client, safe to share).
+    `supabase` is handed to every tool that reads/writes data; the tools hold
+    it for their lifetime (the client is a stateless HTTP client, safe to
+    share).
     """
     return ToolRegistry(
         [
@@ -62,6 +78,16 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
             ListTransactionsTool(supabase),
             ListCardsTool(supabase),
             ListTransfersTool(supabase),
+            ResolveIbanHolderTool(supabase),
+            # Low-stakes and reversible: execute directly (see each tool's
+            # own docstring for why it doesn't need a UI-level confirm step).
+            FreezeCardTool(supabase),
+            UnfreezeCardTool(supabase),
+            SetCardSpendingLimitTool(supabase),
+            AddBeneficiaryTool(supabase),
+            RemoveBeneficiaryTool(supabase),
+            CreateScheduledTransferTool(supabase),
+            ProposeCardOrderTool(supabase),
             # Write-adjacent: each only creates a `pending` proposal row, never
             # executes (see app/ai/tools/propose_tools.py's module docstring).
             ProposeTransferTool(supabase),
@@ -118,6 +144,20 @@ def build_docs_tools(
     return ToolRegistry([SearchKnowledgeBaseTool(supabase, embedding_provider)])
 
 
+def build_document_tools(supabase: AsyncClient) -> ToolRegistry:
+    """DocumentAgent's ENTIRE toolset: read_document, and nothing else.
+
+    This is the structural half of Step 12's prompt-injection defense (the
+    other half is the <untrusted_document> wrapping + system prompt in
+    document_agent.py). No propose_* tool, no banking read tool, nothing
+    that could hand control to another agent is ever in this registry - a
+    document's content reaching the model can therefore never result in a
+    write, a proposal, or a read of anything outside that one document,
+    regardless of what the document's text says. Do not add tools here.
+    """
+    return ToolRegistry([ReadDocumentTool(supabase)])
+
+
 class AIService:
     """Holds the orchestrator and hands conversations to the routed agent."""
 
@@ -171,9 +211,19 @@ class AIService:
 
         Banking is still the DEFAULT — what an unmatched or unclassifiable
         message falls back to — which is a separate thing from rule order.
+
+        DocumentAgent's registration position among these barely matters:
+        `Orchestrator.route()` checks `context.active_document_id` before
+        ANY keyword rule (see orchestrator.py), so whenever a document is
+        active, DocumentAgent wins regardless of where it sits here. Its
+        keyword rules (`document`, `pdf`, `contract`, ...) are only a
+        fallback for "no document attached yet" messages, and don't overlap
+        any other agent's stems, so registering it here — after Insights,
+        before Docs/Banking — costs nothing.
         """
         orchestrator = Orchestrator(provider=provider)
         orchestrator.register(InsightsAgent(provider, build_insights_tools(supabase)))
+        orchestrator.register(DocumentAgent(provider, build_document_tools(supabase)))
         orchestrator.register(DocsAgent(provider, build_docs_tools(supabase, embedding_provider)))
         orchestrator.register(
             BankingAgent(provider, build_banking_tools(supabase)), default=True

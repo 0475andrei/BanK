@@ -13,11 +13,19 @@ from pydantic import BaseModel
 from app.ai.context import Context
 from app.ai.schemas import ToolCall, ToolResult
 from app.ai.tools.banking import (
+    AddBeneficiaryTool,
+    CreateScheduledTransferTool,
+    FreezeCardTool,
     GetBalanceTool,
     ListAccountsTool,
     ListCardsTool,
     ListTransactionsTool,
     ListTransfersTool,
+    ProposeCardOrderTool,
+    RemoveBeneficiaryTool,
+    ResolveIbanHolderTool,
+    SetCardSpendingLimitTool,
+    UnfreezeCardTool,
 )
 from app.ai.tools.base import Tool
 from app.ai.tools.insights import (
@@ -48,6 +56,14 @@ ALL_TOOL_CLASSES = (
     ListTransactionsTool,
     ListCardsTool,
     ListTransfersTool,
+    ResolveIbanHolderTool,
+    FreezeCardTool,
+    UnfreezeCardTool,
+    SetCardSpendingLimitTool,
+    AddBeneficiaryTool,
+    RemoveBeneficiaryTool,
+    CreateScheduledTransferTool,
+    ProposeCardOrderTool,
 )
 
 #: The five propose_* tools added in Step 11 - see app/ai/tools/propose_tools.py.
@@ -153,6 +169,14 @@ def test_all_banking_tools_are_registered(supabase):
         "list_transactions",
         "list_cards",
         "list_transfers",
+        "resolve_iban_holder",
+        "freeze_card",
+        "unfreeze_card",
+        "set_card_spending_limit",
+        "add_beneficiary",
+        "remove_beneficiary",
+        "create_scheduled_transfer",
+        "propose_card_order",
         "propose_transfer",
         "propose_payment",
         "propose_open_account",
@@ -247,22 +271,42 @@ def test_registry_subset_narrows_permissions(supabase):
     assert registry.subset([]).names() == []
 
 
-def test_only_the_five_propose_tools_are_write_adjacent(supabase):
-    """Guardrail, updated for Step 11: the model is still untrusted, so every
-    banking tool must be read_only EXCEPT the five propose_* tools - and even
-    those never execute anything themselves (see propose_tools.py's module
-    docstring), they only ever insert a pending `proposals` row."""
-    from app.ai.service import build_banking_tools
-
-    tools = build_banking_tools(supabase)
-    write_adjacent = {tool.name for tool in tools if not tool.read_only}
-    assert write_adjacent == {
+#: The only write / write-adjacent tools the banking agent may expose - each
+#: is either low-stakes and reversible enough to execute directly (see its
+#: own module docstring for why), or a propose_* tool that never executes
+#: anything itself, only ever inserting a pending `proposals` row (see
+#: propose_tools.py's module docstring; propose_card_order is the one
+#: exception - it stays read_only, see its own docstring). This guardrail is
+#: the successor to the old test_no_write_tools_are_registered, back when
+#: there were none: it still catches an ACCIDENTAL new write tool showing up
+#: unreviewed, it just no longer assumes there are zero on purpose.
+_ALLOWED_WRITE_TOOL_NAMES = frozenset(
+    {
+        "freeze_card",
+        "unfreeze_card",
+        "set_card_spending_limit",
+        "add_beneficiary",
+        "remove_beneficiary",
+        "create_scheduled_transfer",
         "propose_transfer",
         "propose_payment",
         "propose_open_account",
         "propose_close_account",
         "propose_cancel_card",
     }
+)
+
+
+def test_only_the_reviewed_write_tools_are_registered(supabase):
+    """Guardrail: the model is untrusted. Every banking tool must be either
+    read-only, or one of the small, deliberately-reviewed write/write-adjacent
+    tools above (propose_card_order stays read_only on purpose - see its
+    docstring)."""
+    from app.ai.service import build_banking_tools
+
+    tools = build_banking_tools(supabase)
+    write_adjacent = {tool.name for tool in tools if not tool.read_only}
+    assert write_adjacent == _ALLOWED_WRITE_TOOL_NAMES
 
 
 # ---------------------------------------------------------------------------

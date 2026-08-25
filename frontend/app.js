@@ -62,6 +62,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     wireStepUpModal();
+    wireChatAttach();
+    wireDocumentAttach();
     initDashboard();
 
     window.addEventListener('languagechange', () => {
@@ -86,6 +88,166 @@ document.addEventListener('DOMContentLoaded', () => {
         window.refreshTranslations?.();
     });
 });
+
+/** Lets the user attach a photo/PDF (e.g. "extras de cont") to the chat to
+ * supply an IBAN, instead of typing it - reuses the same /iban-ocr/extract
+ * endpoint as the Payments form's scan button (see wirePaymentsForm). On a
+ * good read, sends the IBAN as the next chat message so the assistant picks
+ * it up in context like any other user-provided IBAN; on a bad read, tells
+ * the user to type it manually instead of guessing. */
+function wireChatAttach() {
+    const attachBtn = document.getElementById('chat-attach-btn');
+    const attachInput = document.getElementById('chat-attach-input');
+    const statusEl = document.getElementById('chat-attach-status');
+    if (!attachBtn || !attachInput) return;
+
+    attachBtn.addEventListener('click', () => attachInput.click());
+
+    attachInput.addEventListener('change', async () => {
+        const file = attachInput.files[0];
+        if (!file) return;
+
+        statusEl.hidden = false;
+        statusEl.className = 'field-hint';
+        statusEl.textContent = 'Se citește fișierul...';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const res = await fetch(`${API_BASE_URL}/iban-ocr/extract`, {
+                method: 'POST',
+                credentials: 'include',
+                body: formData,
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.error?.message || `Request failed (${res.status})`);
+            }
+            const result = await res.json();
+
+            if (result.iban && !result.low_confidence) {
+                statusEl.hidden = true;
+                const chatInput = document.getElementById('chat-input');
+                chatInput.value = `IBAN citit din fișierul atașat: ${result.iban}`;
+                await sendMessage();
+            } else {
+                statusEl.className = 'field-hint ocr-warning';
+                statusEl.textContent = 'Nu am găsit un IBAN clar în fișier - te rog scrie-l manual.';
+            }
+        } catch (err) {
+            statusEl.hidden = false;
+            statusEl.className = 'field-hint ocr-warning';
+            statusEl.textContent = err.message;
+        } finally {
+            attachInput.value = '';
+        }
+    });
+}
+
+/** Lets the user attach a PDF to the chat so DocumentAgent can answer
+ * questions about it - separate from wireChatAttach above, which reads an
+ * IBAN out of a scanned statement and is unrelated to this feature. Posts to
+ * POST /documents/upload; the returned document_id is remembered in
+ * currentDocumentId and sent along with every chat message until detached
+ * or the conversation changes (see clearActiveDocument, sendMessage). */
+function wireDocumentAttach() {
+    const attachBtn = document.getElementById('document-attach-btn');
+    const attachInput = document.getElementById('document-attach-input');
+    const statusEl = document.getElementById('document-attach-status');
+    if (!attachBtn || !attachInput) return;
+
+    const MAX_DOCUMENT_SIZE_BYTES = 5 * 1024 * 1024;
+
+    attachBtn.addEventListener('click', () => attachInput.click());
+
+    attachInput.addEventListener('change', async () => {
+        const file = attachInput.files[0];
+        if (!file) return;
+
+        if (file.size > MAX_DOCUMENT_SIZE_BYTES) {
+            statusEl.hidden = false;
+            statusEl.className = 'field-hint ocr-warning';
+            statusEl.textContent = 'Fișierul depășește 5 MB.';
+            attachInput.value = '';
+            return;
+        }
+
+        statusEl.hidden = false;
+        statusEl.className = 'field-hint';
+        statusEl.textContent = 'Se încarcă documentul...';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        if (currentConversationId) {
+            formData.append('conversation_id', currentConversationId);
+        }
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/documents/upload`, {
+                method: 'POST',
+                credentials: 'include',
+                body: formData,
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.error?.message || `Request failed (${res.status})`);
+            }
+            const result = await res.json();
+
+            statusEl.hidden = true;
+            setCurrentConversationId(result.conversation_id);
+            renderDocumentChip(result.document);
+            showToast('Document atașat. Poți pune întrebări despre el.');
+        } catch (err) {
+            statusEl.hidden = false;
+            statusEl.className = 'field-hint ocr-warning';
+            statusEl.textContent = err.message;
+        } finally {
+            attachInput.value = '';
+        }
+    });
+}
+
+let currentDocumentId = null;
+
+/** Shows the small "N pag. · nume.pdf · ✕" pill above the chat input and
+ * remembers the document so sendMessage can include it on the next turn. */
+function renderDocumentChip(document_) {
+    currentDocumentId = document_.id;
+
+    const chip = document.getElementById('document-chip');
+    if (!chip) return;
+    chip.innerHTML = '';
+
+    const label = document.createElement('span');
+    label.textContent = `${document_.page_count} pag. · ${document_.filename}`;
+    chip.appendChild(label);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'document-chip-close';
+    closeBtn.setAttribute('aria-label', 'Detașează documentul');
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', () => {
+        clearActiveDocument();
+        showToast('Document detașat.');
+    });
+    chip.appendChild(closeBtn);
+
+    chip.hidden = false;
+}
+
+/** Detaches the active document from the chat, without touching the stored
+ * conversation - the document itself stays in the conversation's history in
+ * the database, this only clears what the client sends on future turns. */
+function clearActiveDocument() {
+    currentDocumentId = null;
+    const chip = document.getElementById('document-chip');
+    if (chip) {
+        chip.hidden = true;
+        chip.innerHTML = '';
+    }
+}
 
 /* -------------------------------------------------------------------------
  * AI chat - talks to POST /chat (see backend app/modules/chat/router.py).
@@ -175,7 +337,11 @@ async function sendMessage() {
         // apiFetch already prefixes /api/v1 and sends the session cookie.
         const response = await apiFetch('/chat', {
             method: 'POST',
-            body: JSON.stringify({ message, conversation_id: currentConversationId }),
+            body: JSON.stringify({
+                message,
+                conversation_id: currentConversationId,
+                document_id: currentDocumentId,
+            }),
         });
 
         typingBubble.remove();
@@ -185,6 +351,13 @@ async function sendMessage() {
         }
         setCurrentConversationId(response.conversation_id);
         void loadConversationHistory();
+        // The agent can freeze/unfreeze a card, change a limit, or touch
+        // beneficiaries/scheduled transfers directly - refresh those views so
+        // an already-open panel doesn't show stale state until a manual reload.
+        void loadCards();
+        void loadAccounts();
+        void loadBeneficiaries();
+        void loadScheduledTransfers();
     } catch (err) {
         typingBubble.remove();
 
@@ -205,6 +378,7 @@ async function sendMessage() {
  * from the current conversation - the next message starts a new one. */
 function startNewConversation() {
     setCurrentConversationId(null);
+    clearActiveDocument();
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = '';
     appendChatBubble('ai', chatWelcomeText());
@@ -352,6 +526,7 @@ function renderConversationHistory() {
 
 async function openConversation(conversationId) {
     setCurrentConversationId(conversationId);
+    clearActiveDocument();
     renderConversationHistory();
     showConversationHistoryError();
 
@@ -678,6 +853,8 @@ async function initDashboard() {
     wirePaymentsForm();
     wireProfilePanel(user);
     wireNotificationsPanel();
+    wireAddBeneficiaryForm();
+    wireScheduledTransfersModal();
 
     await loadAccountProducts();
     await refreshDashboard();
@@ -689,6 +866,257 @@ async function refreshDashboard() {
     await loadCards();
     await loadBeneficiaries();
     await loadPayments();
+    await loadSpendingByCategory();
+    await loadScheduledTransfers();
+}
+
+//: Fixed hue order, validated (CVD-safe under protan/deuteranopia simulation,
+//: normal-vision floor, contrast on this app's --bg-surface #1A2235 - see
+//: dataviz skill's palette.md/color-formula.md) - never cycled, never
+//: generated. Assigned to real categories only, in order of first
+//: appearance; "Altele" always gets SPENDING_OTHER_COLOR instead, win or
+//: lose, so a residual/mixed bucket never impersonates a real category's hue.
+const SPENDING_CATEGORY_PALETTE = [
+    '#3987e5', // blue
+    '#d95926', // orange
+    '#199e70', // aqua
+    '#c98500', // yellow
+    '#d55181', // magenta
+    '#008300', // green
+];
+const SPENDING_OTHER_CATEGORY_NAME = 'Altele';
+const SPENDING_OTHER_COLOR = '#898781';
+
+//: Donut/pie is only honest "at a glance" up to ~6 slices (see dataviz
+//: skill's anti-patterns.md) - past that, distinct hues run out and slivers
+//: blur together. Anything past the cap folds into one trailing "Altele",
+//: merged with the backend's own "Altele" if it sent one.
+const SPENDING_MAX_DIRECT_CATEGORIES = 6;
+
+/** Caps at SPENDING_MAX_DIRECT_CATEGORIES real (non-"Altele") categories,
+ * folding the backend's own "Altele" plus any overflow past the cap into one
+ * trailing bucket - always last, regardless of its size, so a residual/mixed
+ * category is never mistaken for a single coherent one that happens to rank
+ * high. Categories arrive pre-sorted descending by amount (see
+ * categorize_transactions.py), so `.slice` alone preserves rank order. */
+function foldSpendingCategories(categories) {
+    const real = categories.filter(c => c.name !== SPENDING_OTHER_CATEGORY_NAME);
+    const backendOther = categories.find(c => c.name === SPENDING_OTHER_CATEGORY_NAME);
+
+    const kept = real.slice(0, SPENDING_MAX_DIRECT_CATEGORIES);
+    const overflow = real.slice(SPENDING_MAX_DIRECT_CATEGORIES);
+
+    let otherTotalMinor = backendOther ? backendOther.total_minor : 0;
+    let otherPercentage = backendOther ? backendOther.percentage : 0;
+    overflow.forEach(c => {
+        otherTotalMinor += c.total_minor;
+        otherPercentage += c.percentage;
+    });
+
+    const result = kept.map(c => ({ ...c, color: null }));
+    result.forEach((c, i) => { c.color = SPENDING_CATEGORY_PALETTE[i % SPENDING_CATEGORY_PALETTE.length]; });
+
+    if (otherTotalMinor > 0) {
+        result.push({
+            name: SPENDING_OTHER_CATEGORY_NAME,
+            total_minor: otherTotalMinor,
+            percentage: otherPercentage,
+            color: SPENDING_OTHER_COLOR,
+        });
+    }
+    return result;
+}
+
+//: Geometry shared between the SVG markup and the hover math below -
+//: viewBox is square, ring sits centered, with enough margin past the
+//: stroke for the hover "pop out" translate and drop-shadow to never clip.
+const SPENDING_DONUT_SIZE = 200;
+const SPENDING_DONUT_CENTER = SPENDING_DONUT_SIZE / 2;
+const SPENDING_DONUT_RADIUS = 68;
+const SPENDING_DONUT_STROKE = 26;
+const SPENDING_DONUT_GAP_PX = 3;
+const SPENDING_DONUT_HOVER_OFFSET = 8;
+const SPENDING_DONUT_CIRCUMFERENCE = 2 * Math.PI * SPENDING_DONUT_RADIUS;
+
+/** Outward (dx, dy) for a slice whose visual midpoint sits at `midAngleDeg`
+ * (0 = 12 o'clock, clockwise) - the direction a hovered slice "explodes"
+ * toward, and the direction its drop-shadow leans. */
+function angleToOffset(midAngleDeg, distance) {
+    const rad = (midAngleDeg * Math.PI) / 180;
+    return { dx: Math.sin(rad) * distance, dy: -Math.cos(rad) * distance };
+}
+
+/** Builds the ring's SVG markup: one <circle> per category, each a full
+ * circle whose stroke-dasharray only paints its own arc (with a small gap
+ * on either side instead of a border - see dataviz skill's anti-patterns.md
+ * on borders between marks). Positioning, the mount animation, and the
+ * hover pop-out are ALL one CSS `transform` chain on the circle itself
+ * (`translate() rotate() scale()`, right-to-left composition) driven by
+ * --rot/--hx/--hy/--scale custom properties - deliberately NOT split across
+ * an SVG `rotate` attribute on a wrapping <g> plus a separate CSS transform
+ * on the child, which would nest the child's translate inside the parent's
+ * rotation and swing the hover offset off in the wrong direction. */
+function buildSpendingDonutSegments(categories) {
+    let cumulativePercent = 0;
+    return categories.map((cat, i) => {
+        const startPercent = cumulativePercent;
+        cumulativePercent += cat.percentage;
+        const segLen = (cat.percentage / 100) * SPENDING_DONUT_CIRCUMFERENCE;
+        const visibleLen = Math.max(segLen - SPENDING_DONUT_GAP_PX, 1);
+        const startAngleDeg = (startPercent / 100) * 360;
+        const midAngleDeg = startAngleDeg + ((cat.percentage / 100) * 360) / 2;
+        const { dx, dy } = angleToOffset(midAngleDeg, SPENDING_DONUT_HOVER_OFFSET);
+
+        return `
+            <g class="spending-segment" data-index="${i}" tabindex="0"
+               role="img" aria-label="${escapeHTML(cat.name)}"
+               style="--rot: ${(startAngleDeg - 90).toFixed(3)}deg; --hx-active: ${dx.toFixed(2)}px; --hy-active: ${dy.toFixed(2)}px; --seg-delay: ${i * 70}ms;">
+                <circle
+                    cx="${SPENDING_DONUT_CENTER}" cy="${SPENDING_DONUT_CENTER}" r="${SPENDING_DONUT_RADIUS}"
+                    fill="none" stroke="${cat.color}" stroke-width="${SPENDING_DONUT_STROKE}"
+                    stroke-linecap="round"
+                    stroke-dasharray="0 ${SPENDING_DONUT_GAP_PX / 2} ${visibleLen} ${SPENDING_DONUT_CIRCUMFERENCE}"
+                ></circle>
+            </g>
+        `;
+    }).join('');
+}
+
+/** Renders the SVG donut + center total into `#spending-category-donut`
+ * (a plain wrapper div, not itself an SVG - built fresh each load since the
+ * category set can change). */
+function renderSpendingDonut(donutWrap, categories, primaryCurrency) {
+    const totalMinor = categories.reduce((sum, c) => sum + c.total_minor, 0);
+    donutWrap.innerHTML = `
+        <svg class="spending-donut" viewBox="0 0 ${SPENDING_DONUT_SIZE} ${SPENDING_DONUT_SIZE}" role="group" aria-label="Cheltuieli pe categorii">
+            ${buildSpendingDonutSegments(categories)}
+        </svg>
+        <div class="spending-donut-center">
+            <span class="spending-donut-total-label">Total</span>
+            <span class="spending-donut-total-value">${formatMoney(totalMinor, primaryCurrency)}</span>
+        </div>
+        <div class="spending-donut-tooltip" id="spending-donut-tooltip" hidden></div>
+    `;
+    // Segments mount at scale 0 (see CSS) and grow in, staggered - the
+    // "animated" entrance. Two rAFs so the browser commits the 0-scale
+    // frame before the transition-triggering class lands (one is flaky).
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        donutWrap.classList.add('is-mounting');
+        // Swap to the fast, undelayed transition once every staggered
+        // entrance has finished, so a later slice's hover response doesn't
+        // inherit its mount stagger and feel laggy (see the CSS comment).
+        const mountDurationMs = categories.length * 70 + 550;
+        setTimeout(() => {
+            donutWrap.classList.remove('is-mounting');
+            donutWrap.classList.add('is-mounted');
+        }, mountDurationMs);
+    }));
+}
+
+/** Cross-highlights a category across the donut and the legend: hovering or
+ * focusing either one highlights that category's slice + row and dims every
+ * other one, so a colorblind user can confirm "this slice = this row" by
+ * position/highlight rather than by matching hues. */
+function wireSpendingCategoryHover(container, categories, primaryCurrency) {
+    const donutWrap = container.querySelector('.spending-donut-wrap');
+    const svg = donutWrap.querySelector('.spending-donut');
+    const tooltip = donutWrap.querySelector('#spending-donut-tooltip');
+    const legend = container.querySelector('.legend');
+    if (!svg || !legend) return;
+
+    function setActive(index) {
+        svg.classList.toggle('has-active', index !== null);
+        legend.classList.toggle('has-active', index !== null);
+        svg.querySelectorAll('.spending-segment').forEach(seg => {
+            seg.classList.toggle('is-active', Number(seg.dataset.index) === index);
+        });
+        legend.querySelectorAll('.legend-item').forEach(row => {
+            row.classList.toggle('is-active', Number(row.dataset.index) === index);
+        });
+
+        if (index === null) {
+            tooltip.hidden = true;
+            return;
+        }
+        const cat = categories[index];
+        tooltip.innerHTML = `
+            <span class="spending-donut-tooltip-value">${formatMoney(cat.total_minor, primaryCurrency)}</span>
+            <span class="spending-donut-tooltip-label">${escapeHTML(cat.name)} &middot; ${cat.percentage.toFixed(0)}%</span>
+        `;
+        tooltip.hidden = false;
+    }
+
+    svg.querySelectorAll('.spending-segment').forEach(seg => {
+        const index = Number(seg.dataset.index);
+        seg.addEventListener('pointerenter', () => setActive(index));
+        seg.addEventListener('pointerleave', () => setActive(null));
+        seg.addEventListener('focus', () => setActive(index));
+        seg.addEventListener('blur', () => setActive(null));
+    });
+
+    legend.querySelectorAll('.legend-item').forEach(row => {
+        const index = Number(row.dataset.index);
+        row.addEventListener('pointerenter', () => setActive(index));
+        row.addEventListener('pointerleave', () => setActive(null));
+        row.addEventListener('focus', () => setActive(index));
+        row.addEventListener('blur', () => setActive(null));
+    });
+}
+
+async function loadSpendingByCategory() {
+    const donutWrap = document.getElementById('spending-category-donut');
+    const legend = document.getElementById('spending-category-legend');
+    const container = document.getElementById('spending-category-container');
+
+    const active = currentAccounts.filter(a => a.status === 'active');
+    if (active.length === 0) {
+        donutWrap.innerHTML = '';
+        donutWrap.style.display = 'none';
+        legend.innerHTML = '<div class="empty-state">Niciun cont activ încă.</div>';
+        return;
+    }
+
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const endDate = now.toISOString().slice(0, 10);
+
+    let data;
+    try {
+        data = await apiFetch(
+            `/insights/spending-by-category?start_date=${startDate}&end_date=${endDate}`
+        );
+    } catch (err) {
+        donutWrap.innerHTML = '';
+        donutWrap.style.display = 'none';
+        legend.innerHTML = `<div class="empty-state">Nu s-au putut încărca categoriile: ${escapeHTML(err.message)}</div>`;
+        return;
+    }
+
+    const rawCategories = data.categories.filter(c => c.total_minor > 0);
+    if (rawCategories.length === 0) {
+        donutWrap.innerHTML = '';
+        donutWrap.style.display = 'none';
+        legend.innerHTML = '<div class="empty-state">Nicio cheltuială luna aceasta încă.</div>';
+        return;
+    }
+
+    // Same "mixed currencies can't be summed" simplification as
+    // renderHeadlineBalance - amounts are shown in the first active
+    // account's currency, since the backend has no "home currency" concept.
+    const primaryCurrency = active[0].currency;
+    const categories = foldSpendingCategories(rawCategories);
+
+    donutWrap.style.display = '';
+    renderSpendingDonut(donutWrap, categories, primaryCurrency);
+
+    legend.innerHTML = categories.map((cat, i) => `
+        <div class="legend-item" data-index="${i}" tabindex="0">
+            <span class="dot" style="background-color: ${cat.color};"></span>
+            ${escapeHTML(cat.name)} (${cat.percentage.toFixed(0)}%) &middot; ${formatMoney(cat.total_minor, primaryCurrency)}
+        </div>
+    `).join('');
+
+    wireSpendingCategoryHover(container, categories, primaryCurrency);
 }
 
 async function loadAccounts() {
@@ -1129,6 +1557,144 @@ function wireTransferModal() {
     });
 }
 
+/* --- Scheduled/recurring transfers --- */
+
+const SCHEDULED_TRANSFER_FREQUENCY_LABELS = { weekly: 'Săptămânal', monthly: 'Lunar' };
+const SCHEDULED_TRANSFER_STATUS_LABELS = {
+    active: 'Activ', paused: 'Pauzat', cancelled: 'Anulat', completed: 'Finalizat',
+};
+
+function populateScheduledTransferAccountSelects() {
+    const fromSelect = document.getElementById('scheduled-transfer-from');
+    if (!fromSelect) return;
+    const spendable = currentAccounts.filter(isSpendable);
+    fromSelect.innerHTML = spendable.map(acc =>
+        `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`
+    ).join('');
+    populateScheduledTransferToOptions();
+}
+
+function populateScheduledTransferToOptions() {
+    const fromSelect = document.getElementById('scheduled-transfer-from');
+    const toSelect = document.getElementById('scheduled-transfer-to');
+    if (!fromSelect || !toSelect) return;
+    const active = currentAccounts.filter(a => a.status === 'active');
+    const fromCurrency = active.find(a => a.id === fromSelect.value)?.currency;
+    const eligible = active.filter(a => a.id !== fromSelect.value && a.currency === fromCurrency);
+    toSelect.innerHTML = eligible.length
+        ? eligible.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
+        : '<option value="" disabled selected>Niciun alt cont în aceeași monedă</option>';
+}
+
+function wireScheduledTransfersModal() {
+    const modal = document.getElementById('scheduled-transfer-modal');
+    const form = document.getElementById('scheduled-transfer-form');
+    const errorEl = document.getElementById('scheduled-transfer-error');
+    const fromSelect = document.getElementById('scheduled-transfer-from');
+    if (!modal || !form) return;
+
+    document.getElementById('open-scheduled-transfer-btn').addEventListener('click', () => {
+        errorEl.hidden = true;
+        form.reset();
+        populateScheduledTransferAccountSelects();
+        modal.hidden = false;
+    });
+    document.getElementById('close-scheduled-transfer-modal').addEventListener('click', () => { modal.hidden = true; });
+    document.getElementById('cancel-scheduled-transfer').addEventListener('click', () => { modal.hidden = true; });
+
+    fromSelect.addEventListener('change', () => populateScheduledTransferToOptions());
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorEl.hidden = true;
+
+        const fromAccount = currentAccounts.find(a => a.id === fromSelect.value);
+        const amountMajor = parseFloat(document.getElementById('scheduled-transfer-amount').value);
+        if (!fromAccount || !Number.isFinite(amountMajor) || amountMajor <= 0) {
+            errorEl.textContent = 'Completează toate câmpurile obligatorii.';
+            errorEl.hidden = false;
+            return;
+        }
+
+        const frequency = document.getElementById('scheduled-transfer-frequency').value || null;
+        const startInDays = parseInt(document.getElementById('scheduled-transfer-start-days').value, 10) || 0;
+
+        try {
+            await apiFetch('/scheduled-transfers', {
+                method: 'POST',
+                body: JSON.stringify({
+                    from_account_id: fromSelect.value,
+                    to_account_id: document.getElementById('scheduled-transfer-to').value,
+                    amount_minor: Math.round(amountMajor * 100),
+                    currency: fromAccount.currency,
+                    frequency,
+                    start_at: new Date(Date.now() + startInDays * 86400000).toISOString(),
+                    description: document.getElementById('scheduled-transfer-description').value || undefined,
+                }),
+            });
+            modal.hidden = true;
+            await loadScheduledTransfers();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        }
+    });
+}
+
+async function loadScheduledTransfers() {
+    const list = document.getElementById('scheduled-transfers-list');
+    if (!list) return;
+    try {
+        const scheduled = await apiFetch('/scheduled-transfers');
+        renderScheduledTransfersList(scheduled);
+    } catch (err) {
+        list.innerHTML = `<div class="empty-state">Nu s-au putut încărca transferurile programate: ${escapeHTML(err.message)}</div>`;
+    }
+}
+
+function renderScheduledTransfersList(scheduled) {
+    const list = document.getElementById('scheduled-transfers-list');
+    if (scheduled.length === 0) {
+        list.innerHTML = '<div class="empty-state">Niciun transfer programat.</div>';
+        return;
+    }
+    list.innerHTML = scheduled.map(s => {
+        const fromAccount = currentAccounts.find(a => a.id === s.from_account_id);
+        const toAccount = currentAccounts.find(a => a.id === s.to_account_id);
+        const freqLabel = s.frequency ? SCHEDULED_TRANSFER_FREQUENCY_LABELS[s.frequency] : 'O singură dată';
+        const canAct = s.status === 'active' || s.status === 'paused';
+        return `
+        <div class="scheduled-transfer-item">
+            <div>
+                <div class="name">${escapeHTML(fromAccount ? fromAccount.name : '?')} → ${escapeHTML(toAccount ? toAccount.name : '?')}</div>
+                <div class="meta">${formatMoney(s.amount_minor, s.currency)} &middot; ${freqLabel} &middot; ${SCHEDULED_TRANSFER_STATUS_LABELS[s.status] || s.status}</div>
+                ${s.last_error ? `<div class="meta scheduled-transfer-error-note">${escapeHTML(s.last_error)}</div>` : ''}
+            </div>
+            ${canAct ? `
+                <div class="scheduled-transfer-actions">
+                    ${s.status === 'active'
+                        ? `<button class="link-btn" data-id="${s.id}" data-action="pause">Pauză</button>`
+                        : `<button class="link-btn" data-id="${s.id}" data-action="resume">Reia</button>`
+                    }
+                    <button class="link-btn" data-id="${s.id}" data-action="cancel">Anulează</button>
+                </div>
+            ` : ''}
+        </div>
+        `;
+    }).join('');
+
+    list.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            try {
+                await apiFetch(`/scheduled-transfers/${btn.dataset.id}/${btn.dataset.action}`, { method: 'POST' });
+                await loadScheduledTransfers();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+}
+
 // Sentinel returned by submitWithFaceConfirmation when the user cancels the
 // face-confirm modal - distinguishes "cancelled, do nothing" from a real
 // response, without resorting to throwing a non-Error value.
@@ -1160,11 +1726,74 @@ async function submitWithFaceConfirmation(path, idempotencyKey, body) {
     }
 }
 
+/** Payment-only wrapper around submitWithFaceConfirmation: if the backend
+ * blocks the payment with 409 subscription_price_increase (see
+ * payments/service.py::_detect_subscription_price_increase), asks the user
+ * whether to continue anyway - mentioning the merchant's cancel URL if one
+ * was saved on that contact - and retries once with confirm_price_increase
+ * set, which can itself still hit the face-confirmation step above. */
+async function submitPayment(idempotencyKey, bodyObj) {
+    try {
+        return await submitWithFaceConfirmation('/payments', idempotencyKey, JSON.stringify(bodyObj));
+    } catch (err) {
+        if (err.status !== 409 || err.code !== 'subscription_price_increase') throw err;
+
+        const wantsToContinue = await showPriceIncreaseModal(err.details || {});
+        if (!wantsToContinue) return CONFIRMATION_CANCELLED;
+
+        bodyObj.confirm_price_increase = true;
+        return await submitWithFaceConfirmation('/payments', idempotencyKey, JSON.stringify(bodyObj));
+    }
+}
+
+/** In-app replacement for window.confirm() when a payment is blocked as a
+ * likely subscription price hike - resolves true ("Continuă oricum") or
+ * false (cancel/close), never rejects. */
+function showPriceIncreaseModal(details) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('price-increase-modal');
+        const merchantEl = document.getElementById('price-increase-merchant');
+        const oldEl = document.getElementById('price-increase-old');
+        const newEl = document.getElementById('price-increase-new');
+        const websiteLink = document.getElementById('price-increase-website-link');
+        const confirmBtn = document.getElementById('price-increase-confirm');
+        const cancelBtn = document.getElementById('price-increase-cancel');
+
+        merchantEl.textContent = details.beneficiary_name || 'Acest abonament';
+        oldEl.textContent = formatMoney(details.previous_amount_minor, details.currency);
+        newEl.textContent = formatMoney(details.new_amount_minor, details.currency);
+
+        if (details.website) {
+            websiteLink.href = details.website;
+            websiteLink.hidden = false;
+        } else {
+            websiteLink.hidden = true;
+        }
+
+        modal.hidden = false;
+        if (window.lucide) lucide.createIcons();
+
+        function cleanup(result) {
+            modal.hidden = true;
+            confirmBtn.onclick = null;
+            cancelBtn.onclick = null;
+            resolve(result);
+        }
+
+        confirmBtn.onclick = () => cleanup(true);
+        cancelBtn.onclick = () => cleanup(false);
+    });
+}
+
+const FACE_CONFIRM_DEFAULT_REASON = 'Suma depășește pragul de confirmare - verifică-ți identitatea prin cameră.';
+
 /** Opens the face-confirm modal, captures a photo, exchanges it for a
  * short-lived confirmation token via POST /auth/face/confirm. Resolves with
  * the token, or null if the user cancels. Never rejects - camera/API errors
- * show inline in the modal and let the user retry or cancel. */
-function requestFaceConfirmationToken() {
+ * show inline in the modal and let the user retry or cancel. `reason`
+ * overrides the modal's explanatory text for callers other than the
+ * large-transfer step-up this was originally built for. */
+function requestFaceConfirmationToken(reason = FACE_CONFIRM_DEFAULT_REASON) {
     return new Promise((resolve) => {
         const modal = document.getElementById('face-confirm-modal');
         const video = document.getElementById('face-confirm-video');
@@ -1176,6 +1805,7 @@ function requestFaceConfirmationToken() {
 
         let stream = null;
         errorEl.hidden = true;
+        document.getElementById('face-confirm-reason').textContent = reason;
         modal.hidden = false;
 
         function cleanup(result) {
@@ -1259,6 +1889,17 @@ function populateTransferToOptions() {
 const CARD_STATUS_LABELS = { active: 'Activ', frozen: 'Blocat', cancelled: 'Anulat' };
 let loadedCards = [];
 
+/** Shows or re-masks a card's expiry/CVV and flips the eye icon to match.
+ * Split out of the eye button's click handler so the Face ID gate above it
+ * can decide WHETHER to reveal before this actually does it. */
+function applyCardSecretsVisibility(card, btn, revealing) {
+    const secrets = card.querySelectorAll('.card-secret');
+    secrets.forEach(el => { el.textContent = revealing ? el.dataset.value : (el.dataset.reveal === 'cvv' ? '•••' : '••/••'); });
+    btn.innerHTML = `<i data-lucide="${revealing ? 'eye-off' : 'eye'}"></i>`;
+    btn.title = revealing ? 'Ascunde expirare și CVV' : 'Arată expirare și CVV';
+    if (window.lucide) lucide.createIcons();
+}
+
 async function loadCards() {
     const list = document.getElementById('cards-list');
     if (!list) return;
@@ -1310,9 +1951,20 @@ function renderCardsList(cards) {
                     ` : ''}
                     <button class="card-eye-btn" title="${t('cards.show_details', 'Arată expirarea și CVV')}" aria-label="${t('cards.show_details', 'Arată expirarea și CVV')}"><i data-lucide="eye"></i></button>
                 </div>
-                <div class="status-indicator ${card.status}">${t(`cards.status_${card.status}`, CARD_STATUS_LABELS[card.status] || card.status)}</div>
+                ${isCancelled
+                    ? `<div class="status-indicator cancelled">${t('cards.status_cancelled', CARD_STATUS_LABELS.cancelled)}</div>`
+                    : `<button class="status-toggle-btn ${card.status}" data-card-id="${card.id}" data-action="${card.status === 'frozen' ? 'unfreeze' : 'freeze'}" title="${t(card.status === 'frozen' ? 'cards.unfreeze_hint' : 'cards.freeze_hint', card.status === 'frozen' ? 'Apasă pentru a debloca cardul' : 'Apasă pentru a bloca temporar cardul')}">
+                        <i data-lucide="${card.status === 'frozen' ? 'snowflake' : 'shield-check'}"></i>
+                        <span>${t(`cards.status_${card.status}`, CARD_STATUS_LABELS[card.status] || card.status)}</span>
+                    </button>`
+                }
             </div>
-            ${!isCancelled ? `<button class="card-cancel-btn" data-card-id="${card.id}">${t('cards.cancel')}</button>` : ''}
+            ${!isCancelled ? `
+                <div class="card-actions-row">
+                    <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}">${t('cards.limit')}</button>
+                    <button class="card-cancel-btn" data-card-id="${card.id}">${t('cards.cancel')}</button>
+                </div>
+            ` : ''}
         </div>
         `;
     }).join('');
@@ -1320,15 +1972,33 @@ function renderCardsList(cards) {
     if (window.lucide) lucide.createIcons();
 
     list.querySelectorAll('.card-eye-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             const card = btn.closest('.credit-card');
             const secrets = card.querySelectorAll('.card-secret');
             const revealing = secrets[0].textContent !== secrets[0].dataset.value;
-            secrets.forEach(el => { el.textContent = revealing ? el.dataset.value : (el.dataset.reveal === 'cvv' ? '•••' : '••/••'); });
-            btn.innerHTML = `<i data-lucide="${revealing ? 'eye-off' : 'eye'}"></i>`;
-            btn.title = revealing ? t('cards.hide_details', 'Ascunde expirarea și CVV') : t('cards.show_details', 'Arată expirarea și CVV');
-            btn.setAttribute('aria-label', btn.title);
-            if (window.lucide) lucide.createIcons();
+            // Hiding back to masked never needs a fresh proof of identity -
+            // only revealing the real expiry/CVV does, and only for users who
+            // actually opted into Face ID (same "optional extra" philosophy
+            // as the face-confirmation step-up on large transfers).
+            if (revealing) {
+                let faceEnrolled = false;
+                try {
+                    faceEnrolled = (await apiFetch('/auth/face/status')).enrolled;
+                } catch (err) {
+                    // Can't check - fail open to the pre-existing behaviour
+                    // rather than locking the user out of their own card.
+                }
+                if (faceEnrolled) {
+                    btn.disabled = true;
+                    const token = await requestFaceConfirmationToken(
+                        'Verifică-ți identitatea prin cameră ca să vezi numărul complet și CVV-ul cardului.'
+                    );
+                    btn.disabled = false;
+                    if (!token) return;
+                }
+            }
+
+            applyCardSecretsVisibility(card, btn, revealing);
         });
     });
 
@@ -1337,6 +2007,52 @@ function renderCardsList(cards) {
             if (!confirm(t('cards.cancel_confirm', 'Sigur anulezi acest card? Nu poate fi reactivat.'))) return;
             try {
                 await apiFetch(`/cards/${btn.dataset.cardId}`, { method: 'DELETE' });
+                await loadCards();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+
+    list.querySelectorAll('.status-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const path = btn.dataset.action === 'freeze' ? 'freeze' : 'unfreeze';
+            btn.disabled = true;
+            btn.classList.add('is-toggling');
+            try {
+                await apiFetch(`/cards/${btn.dataset.cardId}/${path}`, { method: 'POST' });
+                await loadCards();
+            } catch (err) {
+                btn.disabled = false;
+                btn.classList.remove('is-toggling');
+                alert(err.message);
+            }
+        });
+    });
+
+    list.querySelectorAll('.card-limit-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const currentLimit = btn.dataset.currentLimit
+                ? (Number(btn.dataset.currentLimit) / 100).toString()
+                : '';
+            const input = prompt(
+                'Noua limită de cheltuieli (lasă gol pentru a elimina limita):',
+                currentLimit
+            );
+            if (input === null) return;
+
+            const trimmed = input.trim();
+            const spendingLimitMinor = trimmed ? Math.round(parseFloat(trimmed) * 100) : null;
+            if (trimmed && (!Number.isFinite(spendingLimitMinor) || spendingLimitMinor <= 0)) {
+                alert('Introdu o sumă validă, mai mare decât 0.');
+                return;
+            }
+
+            try {
+                await apiFetch(`/cards/${btn.dataset.cardId}/spending-limit`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ spending_limit_minor: spendingLimitMinor }),
+                });
                 await loadCards();
             } catch (err) {
                 alert(err.message);
@@ -1474,21 +2190,72 @@ function renderBeneficiariesList(contacts) {
         return;
     }
     list.innerHTML = contacts.map(c => `
-        <div class="contact-item" data-iban="${escapeHTML(c.iban)}" data-name="${escapeHTML(c.display_name)}">
-            <div>
-                <div class="name">${escapeHTML(c.display_name)}</div>
+        <div class="contact-item" data-id="${c.id}" data-iban="${escapeHTML(c.iban)}" data-name="${escapeHTML(c.display_name)}">
+            <div class="contact-item-fill">
+                <div class="name">${escapeHTML(c.display_name)}${c.is_subscription ? ' <span class="contact-subscription-badge">Abonament</span>' : ''}</div>
                 <div class="iban">${escapeHTML(c.iban)}</div>
+                ${c.website ? `<a class="contact-website" href="${escapeHTML(c.website)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHTML(c.website)}</a>` : ''}
             </div>
+            <button type="button" class="contact-remove-btn" data-id="${c.id}" title="Șterge contactul" aria-label="Șterge contactul"><i data-lucide="x"></i></button>
             <i data-lucide="chevron-right" class="icon"></i>
         </div>
     `).join('');
     if (window.lucide) lucide.createIcons();
 
-    list.querySelectorAll('.contact-item').forEach(el => {
+    list.querySelectorAll('.contact-item-fill').forEach(el => {
         el.addEventListener('click', () => {
-            document.getElementById('payments-iban').value = el.dataset.iban;
-            document.getElementById('payments-beneficiary').value = el.dataset.name;
+            const item = el.closest('.contact-item');
+            document.getElementById('payments-iban').value = item.dataset.iban;
+            document.getElementById('payments-beneficiary').value = item.dataset.name;
         });
+    });
+
+    list.querySelectorAll('.contact-remove-btn').forEach(btn => {
+        btn.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            if (!confirm('Ștergi acest contact salvat?')) return;
+            try {
+                await apiFetch(`/beneficiaries/${btn.dataset.id}`, { method: 'DELETE' });
+                await loadBeneficiaries();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    });
+}
+
+function wireAddBeneficiaryForm() {
+    const toggleBtn = document.getElementById('add-beneficiary-btn');
+    const form = document.getElementById('add-beneficiary-form');
+    const errorEl = document.getElementById('add-beneficiary-error');
+    if (!toggleBtn || !form) return;
+
+    toggleBtn.addEventListener('click', () => {
+        form.hidden = !form.hidden;
+        errorEl.hidden = true;
+        if (!form.hidden) document.getElementById('add-beneficiary-name').focus();
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorEl.hidden = true;
+        try {
+            await apiFetch('/beneficiaries', {
+                method: 'POST',
+                body: JSON.stringify({
+                    display_name: document.getElementById('add-beneficiary-name').value,
+                    iban: document.getElementById('add-beneficiary-iban').value.replace(/\s+/g, '').toUpperCase(),
+                    website: document.getElementById('add-beneficiary-website').value || undefined,
+                    is_subscription: document.getElementById('add-beneficiary-is-subscription').checked,
+                }),
+            });
+            form.reset();
+            form.hidden = true;
+            await loadBeneficiaries();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        }
     });
 }
 
@@ -1529,8 +2296,52 @@ function wirePaymentsForm() {
     const ibanHolderEl = document.getElementById('payments-iban-holder');
     const beneficiaryInput = document.getElementById('payments-beneficiary');
     const saveBeneficiaryCheckbox = document.getElementById('payments-save-beneficiary');
+    const ibanScanBtn = document.getElementById('iban-scan-btn');
+    const ibanScanInput = document.getElementById('iban-scan-input');
+    const ibanScanStatus = document.getElementById('iban-scan-status');
 
     accountSelect.addEventListener('change', updateMyIbanDisplay);
+
+    // Scan a photo (card, invoice, screenshot) instead of typing/pasting
+    // the IBAN - see backend/app/modules/iban_ocr.
+    ibanScanBtn.addEventListener('click', () => ibanScanInput.click());
+    ibanScanInput.addEventListener('change', async () => {
+        const file = ibanScanInput.files[0];
+        if (!file) return;
+
+        ibanScanStatus.hidden = false;
+        ibanScanStatus.className = 'field-hint';
+        ibanScanStatus.textContent = 'Se citește fișierul...';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const res = await fetch(`${API_BASE_URL}/iban-ocr/extract`, {
+                method: 'POST',
+                credentials: 'include',
+                body: formData,
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.error?.message || `Request failed (${res.status})`);
+            }
+            const result = await res.json();
+            if (result.iban && !result.low_confidence) {
+                ibanInput.value = result.iban;
+                ibanInput.dispatchEvent(new Event('input'));
+                ibanScanStatus.className = 'field-hint ocr-success';
+                ibanScanStatus.textContent = `IBAN citit: ${result.iban}`;
+            } else {
+                ibanScanStatus.className = 'field-hint ocr-warning';
+                ibanScanStatus.textContent = 'Nu am găsit un IBAN clar în fișier - introdu-l manual.';
+            }
+        } catch (err) {
+            ibanScanStatus.className = 'field-hint ocr-warning';
+            ibanScanStatus.textContent = err.message;
+        } finally {
+            ibanScanInput.value = '';
+        }
+    });
 
     // Live IBAN -> holder name lookup, like a real bank's payee-name check
     // before you send money. Debounced so it doesn't fire on every keystroke.
@@ -1574,17 +2385,17 @@ function wirePaymentsForm() {
         const iban = document.getElementById('payments-iban').value.replace(/\s+/g, '').toUpperCase();
 
         const idempotencyKey = crypto.randomUUID();
-        const body = JSON.stringify({
+        const bodyObj = {
             from_account_id: accountSelect.value,
             to_iban: iban,
             beneficiary_name: document.getElementById('payments-beneficiary').value,
             amount_minor: amountMinor,
             description: document.getElementById('payments-description').value || undefined,
             save_beneficiary: saveBeneficiaryCheckbox.checked,
-        });
+        };
 
         try {
-            const result = await submitWithFaceConfirmation('/payments', idempotencyKey, body);
+            const result = await submitPayment(idempotencyKey, bodyObj);
             if (result === CONFIRMATION_CANCELLED) return; // user closed the camera modal - stay put, silently
             successEl.textContent = t('payments.sent_success');
             successEl.hidden = false;

@@ -12,8 +12,13 @@ class AppError(Exception):
     error_code = "internal_error"
     default_message = "Something went wrong."
 
-    def __init__(self, message: str | None = None):
+    def __init__(self, message: str | None = None, *, details: dict | None = None):
         self.message = message or self.default_message
+        #: Optional structured payload alongside the message (see
+        #: core/middleware.py's handle_app_error) - for callers that need
+        #: more than a string to render a proper response, e.g.
+        #: SubscriptionPriceIncreaseError's old/new amounts below.
+        self.details = details
         super().__init__(self.message)
 
 
@@ -60,6 +65,20 @@ class CurrencyMismatchError(AppError):
     status_code = 422
     error_code = "currency_mismatch"
     default_message = "Currencies do not match."
+
+
+class SubscriptionPriceIncreaseError(AppError):
+    """Raised by payments/service.py when a payment to a recognized
+    recurring merchant costs more than the sender's last payment to that
+    same IBAN - see _detect_subscription_price_increase. `details` carries
+    previous_amount_minor/new_amount_minor/currency/beneficiary_name(/
+    website) so the frontend can show the actual numbers, not just this
+    generic message. Retrying the same payload with confirm_price_increase
+    = true bypasses this - it's a warning, not a hard block."""
+
+    status_code = 409
+    error_code = "subscription_price_increase"
+    default_message = "This subscription's price appears to have gone up since your last payment."
 
 
 class InsufficientFundsError(AppError):
