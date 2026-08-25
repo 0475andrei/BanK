@@ -2011,15 +2011,26 @@ function renderCardsList(cards) {
         return;
     }
 
+    // A cancelled card never comes back to life (see the confirm() prompt
+    // below) - showing it grayed out forever is just clutter, so once it's
+    // cancelled it drops out of view entirely, same as if it were deleted.
+    // The backend still soft-cancels (status='cancelled', row + audit trail
+    // kept) rather than actually dropping the row - this filter is purely
+    // what the user sees.
+    const visibleCards = cards.filter(c => c.status !== 'cancelled');
+    if (visibleCards.length === 0) {
+        list.innerHTML = `<div class="empty-state">${t('cards.empty', 'Niciun card încă. Generează primul card virtual.')}</div>`;
+        return;
+    }
+
     const accountById = Object.fromEntries(currentAccounts.map(a => [a.id, a]));
 
-    list.innerHTML = cards.map(card => {
+    list.innerHTML = visibleCards.map(card => {
         const account = accountById[card.account_id];
-        const isCancelled = card.status === 'cancelled';
         const formattedNumber = card.card_number.replace(/(.{4})/g, '$1 ').trim();
         const expiry = `${String(card.expiry_month).padStart(2, '0')}/${String(card.expiry_year).slice(-2)}`;
         return `
-        <div class="credit-card virtual ${isCancelled ? 'cancelled' : ''}">
+        <div class="credit-card virtual">
             <div class="card-header">
                 <span class="card-type">${t('cards.label', 'Card')}${account ? ' &middot; ' + escapeHTML(account.name) : ''}</span>
                 <span class="card-logo">VISA</span>
@@ -2043,20 +2054,21 @@ function renderCardsList(cards) {
                     ` : ''}
                     <button class="card-eye-btn" title="${t('cards.show_details', 'Arată expirarea și CVV')}" aria-label="${t('cards.show_details', 'Arată expirarea și CVV')}"><i data-lucide="eye"></i></button>
                 </div>
-                ${isCancelled
-                    ? `<div class="status-indicator cancelled">${t('cards.status_cancelled', CARD_STATUS_LABELS.cancelled)}</div>`
-                    : `<button class="status-toggle-btn ${card.status}" data-card-id="${card.id}" data-action="${card.status === 'frozen' ? 'unfreeze' : 'freeze'}" title="${t(card.status === 'frozen' ? 'cards.unfreeze_hint' : 'cards.freeze_hint', card.status === 'frozen' ? 'Apasă pentru a debloca cardul' : 'Apasă pentru a bloca temporar cardul')}">
-                        <i data-lucide="${card.status === 'frozen' ? 'snowflake' : 'shield-check'}"></i>
-                        <span>${t(`cards.status_${card.status}`, CARD_STATUS_LABELS[card.status] || card.status)}</span>
-                    </button>`
-                }
+                <button class="status-toggle-btn ${card.status}" data-card-id="${card.id}" data-action="${card.status === 'frozen' ? 'unfreeze' : 'freeze'}" title="${t(card.status === 'frozen' ? 'cards.unfreeze_hint' : 'cards.freeze_hint', card.status === 'frozen' ? 'Apasă pentru a debloca cardul' : 'Apasă pentru a bloca temporar cardul')}">
+                    <i data-lucide="${card.status === 'frozen' ? 'snowflake' : 'shield-check'}"></i>
+                    <span>${t(`cards.status_${card.status}`, CARD_STATUS_LABELS[card.status] || card.status)}</span>
+                </button>
             </div>
-            ${!isCancelled ? `
-                <div class="card-actions-row">
-                    <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}">${t('cards.limit')}</button>
-                    <button class="card-cancel-btn" data-card-id="${card.id}">${t('cards.cancel')}</button>
-                </div>
-            ` : ''}
+            <div class="card-actions-row">
+                <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}" title="${t('cards.limit_hint', 'Setează limita de cheltuieli')}">
+                    <i data-lucide="sliders-horizontal"></i>
+                    <span>${t('cards.limit', 'Limită')}</span>
+                </button>
+                <button class="card-cancel-btn" data-card-id="${card.id}" title="${t('cards.cancel_hint', 'Anulează definitiv cardul')}">
+                    <i data-lucide="trash-2"></i>
+                    <span>${t('cards.cancel', 'Anulează')}</span>
+                </button>
+            </div>
         </div>
         `;
     }).join('');

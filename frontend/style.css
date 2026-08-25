@@ -1315,15 +1315,6 @@ body {
     height: 16px;
 }
 
-.status-indicator {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    background-color: rgba(16, 185, 129, 0.1);
-    color: var(--income-green);
-}
-
 .cards-actions {
     display: flex;
     gap: 16px;
@@ -2409,31 +2400,6 @@ html.i18n-pending body { visibility: hidden; }
 
 .logout-btn:hover { color: var(--text-main); background-color: rgba(255,255,255,0.05); }
 
-/* --- Real card statuses (issued via POST /cards) --- */
-.status-indicator.cancelled {
-    background-color: rgba(148, 163, 184, 0.12);
-    color: var(--text-muted);
-}
-
-.status-indicator.frozen {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(129, 140, 248, 0.16));
-    color: #7dd3fc;
-}
-
-.status-indicator.frozen i {
-    width: 12px;
-    height: 12px;
-    stroke-width: 2.5;
-    filter: drop-shadow(0 0 3px rgba(125, 211, 252, 0.65));
-}
-
-.credit-card.cancelled {
-    opacity: 0.5;
-}
-
 /* Card status + freeze/unfreeze action merged into one self-updating toggle:
    it shows the current state and, on click, becomes the other state. */
 .status-toggle-btn {
@@ -2490,26 +2456,57 @@ html.i18n-pending body { visibility: hidden; }
 
 .card-actions-row {
     display: flex;
-    gap: 16px;
+    gap: 10px;
     align-self: flex-start;
     margin-top: 10px;
     position: relative;
     z-index: 1;
 }
 
+/* Same icon-pill language as .status-toggle-btn - a semantic color wash at
+   rest (neutral for a reversible setting, red for the irreversible delete),
+   intensifying on hover. */
 .card-cancel-btn,
 .card-limit-btn {
-    background: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 12px;
     border: none;
-    color: var(--text-muted);
     font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
     cursor: pointer;
-    padding: 0;
-    text-decoration: underline;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
 }
 
-.card-cancel-btn:hover { color: var(--expense-red); }
-.card-limit-btn:hover { color: var(--primary-teal); }
+.card-cancel-btn:active,
+.card-limit-btn:active { transform: scale(0.96); }
+
+.card-limit-btn {
+    background-color: rgba(148, 163, 184, 0.12);
+    color: var(--text-muted);
+}
+.card-limit-btn:hover {
+    background-color: rgba(45, 212, 191, 0.16);
+    color: var(--primary-teal);
+}
+
+.card-cancel-btn {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: var(--expense-red);
+}
+.card-cancel-btn:hover {
+    background-color: rgba(239, 68, 68, 0.22);
+}
+
+.card-cancel-btn i,
+.card-limit-btn i {
+    width: 13px;
+    height: 13px;
+    stroke-width: 2.5;
+}
 
 .card-reveal-number {
     font-family: monospace;
