@@ -107,3 +107,65 @@ async def test_issue_card_rejects_unowned_account(authed_client, authed_client_f
 async def test_cards_require_authentication(client):
     resp = await client.get("/api/v1/cards")
     assert resp.status_code == 401
+
+
+async def test_freeze_and_unfreeze_card(authed_client):
+    client, _user = authed_client
+    account = await _open_account(client)
+    issued = (await client.post("/api/v1/cards", json={"account_id": account["id"]})).json()
+
+    freeze_resp = await client.post(f"/api/v1/cards/{issued['id']}/freeze")
+    assert freeze_resp.status_code == 200, freeze_resp.text
+    assert freeze_resp.json()["status"] == "frozen"
+
+    # Still listed as frozen.
+    cards = (await client.get("/api/v1/cards")).json()
+    assert cards[0]["status"] == "frozen"
+
+    unfreeze_resp = await client.post(f"/api/v1/cards/{issued['id']}/unfreeze")
+    assert unfreeze_resp.status_code == 200, unfreeze_resp.text
+    assert unfreeze_resp.json()["status"] == "active"
+
+
+async def test_freeze_cancelled_card_is_rejected(authed_client):
+    client, _user = authed_client
+    account = await _open_account(client)
+    issued = (await client.post("/api/v1/cards", json={"account_id": account["id"]})).json()
+    await client.delete(f"/api/v1/cards/{issued['id']}")
+
+    resp = await client.post(f"/api/v1/cards/{issued['id']}/freeze")
+    assert resp.status_code == 422
+
+
+async def test_freeze_unowned_card_is_404(authed_client, authed_client_factory):
+    owner_client, _owner = authed_client
+    account = await _open_account(owner_client)
+    issued = (await owner_client.post("/api/v1/cards", json={"account_id": account["id"]})).json()
+
+    other_client, _other = await authed_client_factory()
+    resp = await other_client.post(f"/api/v1/cards/{issued['id']}/freeze")
+    assert resp.status_code == 404
+
+
+async def test_update_spending_limit(authed_client):
+    client, _user = authed_client
+    account = await _open_account(client)
+    issued = (
+        await client.post(
+            "/api/v1/cards", json={"account_id": account["id"], "spending_limit_minor": 10_000}
+        )
+    ).json()
+    assert issued["spending_limit_minor"] == 10_000
+
+    resp = await client.patch(
+        f"/api/v1/cards/{issued['id']}/spending-limit", json={"spending_limit_minor": 50_000}
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["spending_limit_minor"] == 50_000
+
+    # null removes the limit entirely.
+    resp = await client.patch(
+        f"/api/v1/cards/{issued['id']}/spending-limit", json={"spending_limit_minor": None}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["spending_limit_minor"] is None

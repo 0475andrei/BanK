@@ -60,7 +60,12 @@ class ChatResponse(BaseModel):
     routing: RoutingDecision | None = None
     #: Set only when this turn's agent called a propose_* tool (see
     #: app/ai/tools/propose_tools.py) - same "optional, additive" pattern as
-    #: `routing`. None means no action was proposed this turn.
+    #: `routing`. None means no action was proposed this turn. NOTE:
+    #: propose_card_order (a separate, older propose-only tool - see
+    #: app/ai/tools/banking/propose_card_order.py) does NOT write into the
+    #: `proposals` table and so never populates this field; its result
+    #: currently only reaches the user as prose in the reply, not as a
+    #: confirm/reject card. Follow-up: migrate it onto proposals_service.
     proposal: ProposalRead | None = None
 
 

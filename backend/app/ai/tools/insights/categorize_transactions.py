@@ -25,14 +25,37 @@ if TYPE_CHECKING:
 #: category -> keywords, matched case-insensitively as a substring of
 #: "description reference". Order matters only in that the FIRST category
 #: whose keywords match wins - keep more specific categories earlier if two
-#: lists could ever overlap on the same merchant.
+#: lists could ever overlap on the same merchant (e.g. "bolt food" must be
+#: checked before plain "bolt", so a food-delivery order doesn't land in
+#: Transport just because "bolt" is a substring of "bolt food").
 CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "Abonamente / Streaming": ("spotify", "netflix", "hbo", "disney"),
-    "Cumpărături alimentare": ("mega image", "carrefour", "lidl", "kaufland", "penny"),
-    "Transport / Combustibil": ("omv", "petrom", "mol", "rompetrol"),
-    "Electronice": ("emag", "e-mag", "altex", "pcgarage"),
-    "Mâncare & Băutură": ("starbucks", "mcdonald", "kfc", "restaurant", "cafea"),
-    "Telecomunicații": ("vodafone", "orange", "digi"),
+    "Facturi & Utilități": (
+        "enel", "eon", "e.on", "electrica", "engie", "distrigaz", "apa nova",
+        "hidroelectrica", "restart energy", "premier energy",
+    ),
+    "Telecomunicații": ("vodafone", "orange", "digi", "upc", "telekom"),
+    "Divertisment": (
+        "spotify", "netflix", "hbo", "disney", "cinema", "eventim",
+        "bilete", "teatru", "twitch", "steam",
+    ),
+    "Mâncare & Băutură": (
+        "starbucks", "mcdonald", "kfc", "restaurant", "cafea", "glovo",
+        "tazz", "foodpanda", "bolt food",
+    ),
+    "Cumpărături alimentare": (
+        "mega image", "carrefour", "lidl", "kaufland", "penny", "profi", "auchan",
+    ),
+    "Transport / Combustibil": (
+        "omv", "petrom", "mol", "rompetrol", "uber", "bolt", "taxi", "cfr", "ratb", "stb",
+    ),
+    "Sănătate": (
+        "catena", "sensiblu", "dona", "farmacie", "clinica", "spital", "reginamaria", "medlife",
+    ),
+    "Electronice": ("emag", "e-mag", "altex", "pcgarage", "media galaxy"),
+    "Îmbrăcăminte": ("zara", "h&m", "bershka", "pull&bear", "decathlon"),
+    "Educație": ("udemy", "coursera", "scoala", "școala", "universitate"),
+    "Locuință & Amenajări": ("chirie", "ikea", "dedeman", "leroy merlin", "hornbach"),
+    "Asigurări": ("allianz", "groupama", "generali", "nn asigurari"),
     "Transferuri": ("revolut", "transfer"),
 }
 UNCATEGORIZED = "Altele"
@@ -44,6 +67,55 @@ def _categorize(text: str) -> str:
         if any(keyword in lowered for keyword in keywords):
             return category
     return UNCATEGORIZED
+
+
+async def categorize_spending(
+    supabase: AsyncClient,
+    context: Context,
+    *,
+    start_date: date,
+    end_date: date,
+    account_id: str | None = None,
+) -> dict[str, Any]:
+    """The actual work, shared by the chat tool below and the
+    /insights/spending-by-category REST endpoint (see
+    app/modules/insights/router.py) - the dashboard widget needs this
+    synchronously, without going through an LLM tool-call loop just to
+    render a chart on page load."""
+    date_from, date_to = day_bounds(start_date, end_date)
+    entries = await fetch_entries(
+        supabase, context, date_from=date_from, date_to=date_to, account_id=account_id
+    )
+    spending = [entry for entry in entries if entry.direction.value == "debit"]
+
+    buckets: dict[str, dict[str, int]] = {}
+    for entry in spending:
+        category = _categorize(f"{entry.description} {entry.reference}")
+        bucket = buckets.setdefault(category, {"count": 0, "total_minor": 0})
+        bucket["count"] += 1
+        bucket["total_minor"] += entry.amount_minor
+
+    total_minor = sum(bucket["total_minor"] for bucket in buckets.values())
+    categories: list[dict[str, Any]] = [
+        {
+            "name": name,
+            "count": bucket["count"],
+            "total_minor": bucket["total_minor"],
+            "percentage": (
+                round(bucket["total_minor"] / total_minor * 100, 2) if total_minor else 0.0
+            ),
+        }
+        for name, bucket in buckets.items()
+    ]
+    categories.sort(key=lambda c: int(c["total_minor"]), reverse=True)
+
+    return {
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "total_transactions": len(spending),
+        "categories": categories,
+        "uncategorized_count": buckets.get(UNCATEGORIZED, {}).get("count", 0),
+    }
 
 
 class CategorizeTransactionsInput(BaseModel):
@@ -89,44 +161,11 @@ class CategorizeTransactionsTool(Tool):
     async def run(self, validated_input: BaseModel, context: Context) -> ToolResult:
         assert isinstance(validated_input, CategorizeTransactionsInput)
 
-        date_from, date_to = day_bounds(validated_input.start_date, validated_input.end_date)
-        entries = await fetch_entries(
+        data = await categorize_spending(
             self._supabase,
             context,
-            date_from=date_from,
-            date_to=date_to,
+            start_date=validated_input.start_date,
+            end_date=validated_input.end_date,
             account_id=validated_input.account_id,
         )
-        spending = [entry for entry in entries if entry.direction.value == "debit"]
-
-        buckets: dict[str, dict[str, int]] = {}
-        for entry in spending:
-            category = _categorize(f"{entry.description} {entry.reference}")
-            bucket = buckets.setdefault(category, {"count": 0, "total_minor": 0})
-            bucket["count"] += 1
-            bucket["total_minor"] += entry.amount_minor
-
-        total_minor = sum(bucket["total_minor"] for bucket in buckets.values())
-        categories: list[dict[str, Any]] = [
-            {
-                "name": name,
-                "count": bucket["count"],
-                "total_minor": bucket["total_minor"],
-                "percentage": (
-                    round(bucket["total_minor"] / total_minor * 100, 2) if total_minor else 0.0
-                ),
-            }
-            for name, bucket in buckets.items()
-        ]
-        categories.sort(key=lambda c: int(c["total_minor"]), reverse=True)
-
-        return ToolResult(
-            name=self.name,
-            data={
-                "start_date": validated_input.start_date.isoformat(),
-                "end_date": validated_input.end_date.isoformat(),
-                "total_transactions": len(spending),
-                "categories": categories,
-                "uncategorized_count": buckets.get(UNCATEGORIZED, {}).get("count", 0),
-            },
-        )
+        return ToolResult(name=self.name, data=data)

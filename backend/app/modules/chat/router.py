@@ -172,7 +172,13 @@ async def _extract_proposal(
 
     Scans the tool-result trace rather than threading a return value through
     handle_message/dispatch - same reasoning as `routing`: the trace is
-    already the single source of truth for what happened this turn."""
+    already the single source of truth for what happened this turn.
+
+    NOTE: propose_card_order (see app/ai/tools/banking/propose_card_order.py)
+    is NOT in PROPOSE_TOOL_NAMES and does not write a `proposals` row, so it
+    never surfaces here - its result currently only reaches the user as
+    prose in the reply. Follow-up: migrate it onto proposals_service so it
+    gets the same confirm/reject card as the other propose_* tools."""
     for message in new_messages:
         if message.role != "tool" or message.name not in PROPOSE_TOOL_NAMES:
             continue

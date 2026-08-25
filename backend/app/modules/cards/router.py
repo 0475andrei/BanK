@@ -6,7 +6,7 @@ from supabase import AsyncClient
 from app.core.dependencies import get_current_user
 from app.db.supabase_client import get_supabase
 from app.modules.cards import service
-from app.modules.cards.schemas import CardCreate, CardRead
+from app.modules.cards.schemas import CardCreate, CardRead, CardSpendingLimitUpdate
 from app.modules.users.schemas import UserRead
 
 router = APIRouter()
@@ -36,3 +36,31 @@ async def cancel_card(
     user: UserRead = Depends(get_current_user),
 ) -> dict:
     return await service.cancel_card(supabase, user, card_id)
+
+
+@router.post("/{card_id}/freeze", response_model=CardRead)
+async def freeze_card(
+    card_id: uuid.UUID,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> dict:
+    return await service.freeze_card(supabase, user, card_id)
+
+
+@router.post("/{card_id}/unfreeze", response_model=CardRead)
+async def unfreeze_card(
+    card_id: uuid.UUID,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> dict:
+    return await service.unfreeze_card(supabase, user, card_id)
+
+
+@router.patch("/{card_id}/spending-limit", response_model=CardRead)
+async def update_spending_limit(
+    card_id: uuid.UUID,
+    payload: CardSpendingLimitUpdate,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> dict:
+    return await service.set_spending_limit(supabase, user, card_id, payload.spending_limit_minor)

@@ -1024,6 +1024,37 @@ body {
     margin-bottom: 8px;
 }
 
+.proposal-field {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.proposal-field span:first-child { color: var(--text-muted); }
+.proposal-field span:last-child { font-weight: 500; text-align: right; }
+
+.proposal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+}
+.proposal-actions .btn { flex: 1; justify-content: center; padding: 8px 16px; font-size: 13px; }
+
+.proposal-confirmed {
+    color: var(--income-green);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.proposal-confirmed .icon { width: 18px; height: 18px; }
+
+.proposal-cancelled {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
 .action-proposal p { font-size: 14px; margin-bottom: 16px; }
 
 .hitl-actions {
@@ -1609,6 +1640,14 @@ html.i18n-pending body { visibility: hidden; }
     margin-bottom: 20px;
 }
 
+.iban-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.iban-input-row .field-input { flex: 1; }
+
 .my-iban-box {
     display: flex;
     align-items: center;
@@ -1640,8 +1679,9 @@ html.i18n-pending body { visibility: hidden; }
     border-bottom: none;
 }
 
-.contact-item { cursor: pointer; }
-.contact-item:hover { color: var(--primary-teal); }
+.contact-item { cursor: default; }
+.contact-item-fill { cursor: pointer; flex: 1; min-width: 0; }
+.contact-item-fill:hover { color: var(--primary-teal); }
 
 .contact-item .name, .payment-item .name {
     font-weight: 500;
@@ -1654,10 +1694,93 @@ html.i18n-pending body { visibility: hidden; }
     font-family: monospace;
 }
 
+.contact-subscription-badge {
+    display: inline-block;
+    background-color: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 8px;
+    border-radius: 10px;
+    vertical-align: middle;
+}
+
+.contact-website {
+    display: block;
+    font-size: 12px;
+    color: var(--primary-teal);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.contact-website:hover {
+    text-decoration: underline;
+}
+
 .payment-item .amount {
     font-weight: 600;
     font-size: 14px;
 }
+
+.contact-remove-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    margin-right: 4px;
+}
+.contact-remove-btn:hover { color: var(--expense-red); }
+.contact-remove-btn i { width: 14px; height: 14px; }
+
+.pots-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn-icon-add {
+    background: none;
+    border: 1px solid var(--border-color);
+    color: var(--primary-teal);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.btn-icon-add:hover { border-color: var(--primary-teal); }
+.btn-icon-add i { width: 16px; height: 16px; }
+
+.inline-add-form {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0;
+    flex-wrap: wrap;
+}
+.inline-add-form .field-input { flex: 1; min-width: 120px; }
+
+.scheduled-transfer-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+.scheduled-transfer-item:last-child { border-bottom: none; }
+.scheduled-transfer-item .name { font-weight: 500; font-size: 14px; }
+.scheduled-transfer-item .meta { font-size: 12px; color: var(--text-muted); }
+.scheduled-transfer-error-note { color: var(--expense-red); }
+.scheduled-transfer-actions { display: flex; gap: 12px; flex-shrink: 0; }
 
 .field-label {
     display: block;
@@ -1696,6 +1819,10 @@ html.i18n-pending body { visibility: hidden; }
 
 .field-hint.ocr-success { color: var(--income-green); }
 .field-hint.ocr-warning { color: var(--expense-red); }
+
+#chat-attach-status {
+    margin: -10px 20px 12px;
+}
 
 .ocr-upload-box { margin-bottom: 20px; }
 
@@ -1834,6 +1961,118 @@ html.i18n-pending body { visibility: hidden; }
 
 .modal-actions .btn { flex: 1; justify-content: center; }
 
+/* --- Subscription price-increase block --- */
+@keyframes price-increase-pop-in {
+    0% { opacity: 0; transform: scale(0.9) translateY(12px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes price-increase-icon-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.35); }
+    50% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
+}
+
+@keyframes price-increase-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+#price-increase-modal {
+    animation: price-increase-fade-in 0.2s ease-out;
+}
+
+.price-increase-modal {
+    text-align: center;
+    animation: price-increase-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.price-increase-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    animation: price-increase-icon-pulse 2s ease-out 0.35s 2;
+}
+
+.price-increase-icon i { width: 26px; height: 26px; }
+
+.price-increase-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.price-increase-message {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+.price-increase-message #price-increase-merchant {
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+.price-increase-amounts {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.price-increase-old {
+    color: var(--text-muted);
+    text-decoration: line-through;
+    font-size: 15px;
+}
+
+.price-increase-amounts .icon {
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+}
+
+.price-increase-new {
+    color: #f59e0b;
+    font-weight: 700;
+    font-size: 20px;
+}
+
+.price-increase-blocked-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+}
+
+.price-increase-website-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--primary-teal);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+
+.price-increase-website-link:hover { text-decoration: underline; }
+.price-increase-website-link .icon { width: 14px; height: 14px; }
+.price-increase-website-link[hidden] { display: none; }
+
 /* --- Step-up auth modal (proposal confirm - see Step 11) --- */
 .step-up-option { margin-top: 16px; }
 .step-up-option:first-of-type { margin-top: 4px; }
@@ -1963,21 +2202,30 @@ html.i18n-pending body { visibility: hidden; }
     opacity: 0.5;
 }
 
-.card-cancel-btn {
+.card-actions-row {
+    display: flex;
+    gap: 16px;
     align-self: flex-start;
+    margin-top: 10px;
+    position: relative;
+    z-index: 1;
+}
+
+.card-cancel-btn,
+.card-freeze-btn,
+.card-limit-btn {
     background: none;
     border: none;
     color: var(--text-muted);
     font-size: 12px;
     cursor: pointer;
     padding: 0;
-    margin-top: 10px;
-    position: relative;
-    z-index: 1;
     text-decoration: underline;
 }
 
 .card-cancel-btn:hover { color: var(--expense-red); }
+.card-freeze-btn:hover,
+.card-limit-btn:hover { color: var(--primary-teal); }
 
 .card-reveal-number {
     font-family: monospace;

@@ -27,8 +27,13 @@ class Tool(ABC):
     description: ClassVar[str]
     input_schema: ClassVar[type[BaseModel]]
 
-    #: Read-only tools may run freely; a write tool would have to be proposed to
-    #: the user instead of executed. No write tools exist yet.
+    #: Read-only tools run freely. Write tools come in two shapes: low-stakes,
+    #: reversible ones execute directly (see e.g. app/ai/tools/banking/
+    #: freeze_card.py - the system prompt asks the model to get a "yes" from
+    #: the user in conversation first, but nothing enforces that here), while
+    #: a higher-stakes one (propose_card_order.py) stays read_only and only
+    #: ever proposes - the actual write happens through a normal authenticated
+    #: REST call the user's own UI click triggers, never from inside the tool.
     read_only: ClassVar[bool] = True
 
     @abstractmethod
