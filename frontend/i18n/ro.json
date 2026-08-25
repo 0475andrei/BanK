@@ -1,3 +1,184 @@
 {
-  "Prezentare Generală": "Prezentare Generală", "Asistent AI & Proiecții": "Asistent AI & Proiecții", "Toate Tranzacțiile": "Toate Tranzacțiile", "Cardurile Mele": "Cardurile Mele", "Investiții & Bugetare": "Investiții & Bugetare", "Plăți": "Plăți", "Conversații recente": "Conversații recente", "Caută tranzacții, carduri, contacte...": "Caută tranzacții, carduri, contacte...", "Notificări": "Notificări", "Nicio notificare încă.": "Nicio notificare încă.", "Profilul meu": "Profilul meu", "Log out": "Deconectare", "Total Balance": "Sold total", "Cont nou": "Cont nou", "Transferă": "Transferă", "Conturile mele": "Conturile mele", "Tranzacții Recente": "Tranzacții recente", "Vezi toate": "Vezi toate", "Se încarcă...": "Se încarcă...", "Conversație nouă": "Conversație nouă", "Întreabă asistentul AI...": "Întreabă asistentul AI...", "Generează Card Virtual": "Generează card virtual", "Comandă Card Fizic": "Comandă card fizic", "Deschide un cont nou": "Deschide un cont nou", "Anulează": "Anulează", "Confirmă": "Confirmă", "Email": "Email", "Password": "Parolă", "Log in": "Autentificare", "Log in to your account": "Autentifică-te în cont", "No account yet?": "Nu ai încă un cont?", "Register": "Înregistrare", "Create your account": "Creează-ți contul", "First name": "Prenume", "Last name": "Nume", "At least 8 characters": "Cel puțin 8 caractere", "Resetare parolă": "Resetare parolă", "Trimite codul": "Trimite codul", "Verifică codul": "Verifică codul", "Parolă nouă": "Parolă nouă", "Alege limba": "Alege limba", "Choose language": "Alege limba"
+    "common":  {
+                   "Prezentare Generală":  "Prezentare Generală",
+                   "Asistent AI \u0026 Proiecții":  "Asistent AI \u0026 Proiecții",
+                   "Toate Tranzacțiile":  "Toate Tranzacțiile",
+                   "Cardurile Mele":  "Cardurile Mele",
+                   "Investiții \u0026 Bugetare":  "Investiții \u0026 Bugetare",
+                   "Plăți":  "Plăți",
+                   "Conversații recente":  "Conversații recente",
+                   "Caută tranzacții, carduri, contacte...":  "Caută tranzacții, carduri, contacte...",
+                   "Notificări":  "Notificări",
+                   "Nicio notificare încă.":  "Nicio notificare încă.",
+                   "Profilul meu":  "Profilul meu",
+                   "Log out":  "Deconectare",
+                   "Total Balance":  "Sold total",
+                   "Cont nou":  "Cont nou",
+                   "Transferă":  "Transferă",
+                   "Conturile mele":  "Conturile mele",
+                   "Tranzacții Recente":  "Tranzacții recente",
+                   "Vezi toate":  "Vezi toate",
+                   "Se încarcă...":  "Se încarcă...",
+                   "Conversație nouă":  "Conversație nouă",
+                   "Întreabă asistentul AI...":  "Întreabă asistentul AI...",
+                   "Generează Card Virtual":  "Generează card virtual",
+                   "Comandă Card Fizic":  "Comandă card fizic",
+                   "Deschide un cont nou":  "Deschide un cont nou",
+                   "Anulează":  "Anulează",
+                   "Confirmă":  "Confirmă",
+                   "Email":  "Email",
+                   "Password":  "Parolă",
+                   "Log in":  "Autentificare",
+                   "Log in to your account":  "Autentifică-te în cont",
+                   "No account yet?":  "Nu ai încă un cont?",
+                   "Register":  "Înregistrare",
+                   "Create your account":  "Creează-ți contul",
+                   "First name":  "Prenume",
+                   "Last name":  "Nume",
+                   "At least 8 characters":  "Cel puțin 8 caractere",
+                   "Resetare parolă":  "Resetare parolă",
+                   "Trimite codul":  "Trimite codul",
+                   "Verifică codul":  "Verifică codul",
+                   "Parolă nouă":  "Parolă nouă",
+                   "Alege limba":  "Alege limba",
+                   "Choose language":  "Alege limba",
+                   "Caută tranzacții, carduri, contacte":  {
+
+                                                           },
+                   "Nicio notificare încă":  {
+
+                                             },
+                   "Se încarcă":  {
+
+                                  },
+                   "Întreabă asistentul AI":  {
+
+                                              },
+                   "search_placeholder":  "Caută tranzacții, carduri, contacte..."
+               },
+    "dashboard":  {
+                      "Fără activitate încă.":  "Fără activitate încă.",
+                      "Conectat • poate citi soldurile conturilor tale":  "Conectat • poate citi soldurile conturilor tale",
+                      "Conversație nouă":  "Conversație nouă",
+                      "Anulează cardul":  "Anulează cardul",
+                      "Generează Card Virtual":  "Generează card virtual",
+                      "Comandă Card Fizic":  "Comandă card fizic",
+                      "Cheltuieli pe Categorii (Luna curentă)":  "Cheltuieli pe categorii (luna curentă)",
+                      "Supermarket (40%)":  "Supermarket (40%)",
+                      "Facturi (35%)":  "Facturi (35%)",
+                      "Divertisment (25%)":  "Divertisment (25%)",
+                      "Deschide un cont nou":  "Deschide un cont nou",
+                      "Cont de economii":  "Cont de economii",
+                      "Flexibil - retragi oricând":  "Flexibil — retragi oricând",
+                      "Cont cu dobândă fixă":  "Cont cu dobândă fixă",
+                      "Alegi perioada - rată mai mare":  "Alegi perioada — rată mai mare",
+                      "Conturile mele de economii":  "Conturile mele de economii",
+                      "Fără activitate încă":  {
+
+                                               },
+                      "No activity":  "No activity yet.",
+                      "no_activity":  "Fără activitate încă."
+                  },
+    "savings":  {
+                    "up_to_rate":  "până la {rate}% p.a.",
+                    "no_accounts":  "Niciun cont de economii încă."
+                },
+    "cards":  {
+                  "cancel":  "Anulează cardul",
+                  "label":  "Card",
+                  "expiry":  "Expiră",
+                  "cvv":  "CVV",
+                  "limit":  "Limită",
+                  "show_details":  "Arată expirarea și CVV",
+                  "hide_details":  "Ascunde expirarea și CVV",
+                  "status_active":  "Activ",
+                  "status_frozen":  "Blocat",
+                  "status_cancelled":  "Anulat",
+                  "empty":  "Niciun card încă. Generează primul card virtual.",
+                  "cancel_confirm":  "Sigur anulezi acest card? Nu poate fi reactivat."
+              },
+    "brand":  { "tagline":  "CONFORTUL TAU FINANCIAR" },
+    "registration":  {
+                    "drop_id_optional":  "Trage poza buletinului aici sau alege un fișier (opțional)",
+                    "title":  "Creează-ți contul", "first_name":  "Prenume", "last_name":  "Nume", "email":  "Email", "password":  "Parolă", "password_hint":  "Cel puțin 8 caractere", "submit":  "Înregistrare",
+                    "manual":  "Completare manuală",
+                    "chat_mode":  "Chat cu Comodul",
+                    "ocr_label":  "Completare automată din buletin (opțional)",
+                    "drop_id":  "Trage poza buletinului aici sau alege un fișier",
+                    "ocr_status":  "Doar PNG. Completează automat numele, CNP-ul și adresa mai jos.",
+                    "national_id":  "Cod numeric personal (CNP)",
+                    "national_id_hint":  "Sexul și data nașterii sunt citite automat",
+                    "phone":  "Telefon (opțional)",
+                    "address":  "Adresă (opțional)",
+                    "referral":  "Cod referral (opțional)",
+                    "referral_hint":  "Ai un cod de referral? Contul tău nou primește 500 RON cadou.",
+                    "chat_status":  "Te ajut să deschizi un cont, în ritmul tău",
+                    "chat_welcome":  "Salut! Sunt Comodul și te ajut să deschizi un cont la BanK. Spune-mi numele tău sau încarcă o poză a buletinului.",
+                    "chat_placeholder":  "Scrie un mesaj...",
+                    "already_account":  "Ai deja un cont?"
+                },
+    "auth":  {
+                    "face_login":  "Login cu Face",
+                    "face_password":  "Login cu parolă",
+                    "forgot_password":  "Ai uitat parola?"
+                },
+    "profile":  {
+                    "avatar":  "Avatar",
+                    "referral":  "Codul meu de referral",
+                    "change_password":  "Schimbă parola",
+                    "face_login":  "Face Login",
+                    "back":  "Înapoi",
+                    "choose_avatar":  "Alege o emoji pentru avatarul tău",
+                    "referral_hint":  "Cine se înregistrează cu acest cod primește 500 RON la primul cont.",
+                    "current_password":  "Parola curentă",
+                    "new_password":  "Parolă nouă",
+                    "confirm_password":  "Confirmă parola nouă",
+                    "start_camera":  "Pornește camera",
+                    "capture_activate":  "Capturează și activează",
+                    "disable_face_login":  "Dezactivează Face Login",
+                    "face_active":  "Face Login este activat pe contul tău.",
+                    "face_inactive":  "Face Login nu este activat încă. Pornește camera și fă o poză ca să-l activezi.",
+                    "face_success":  "Face Login activat cu succes!"
+                },
+    "payments":  {
+                     "Trimite bani printr-un IBAN":  "Trimite bani printr-un IBAN",
+                     "Din contul":  "Din contul",
+                     "Copiază IBAN-ul":  "Copiază IBAN-ul",
+                     "IBAN destinatar":  "IBAN destinatar",
+                     "Nume beneficiar":  "Nume beneficiar",
+                     "Sumă":  "Sumă",
+                     "Descriere":  "Descriere",
+                     "(opțional)":  "(opțional)",
+                     "Salvează acest beneficiar în Contactele mele":  "Salvează acest beneficiar în Contactele mele",
+                     "Trimite plata":  "Trimite plata",
+                     "Contactele mele":  "Contactele mele",
+                     "Istoric plăți":  "Istoric plăți",
+                     "contacts_load_error":  "Nu s-au putut încărca contactele",
+                     "no_contacts":  "Niciun contact încă — apare automat după prima plată.",
+                     "history_load_error":  "Nu s-a putut încărca istoricul",
+                     "no_payments":  "Nicio plată încă.",
+                     "account_holder":  "Titular",
+                     "iban_not_found":  "Niciun cont găsit cu acest IBAN.",
+                     "sent_success":  "Plata a fost trimisă cu succes!"
+                 },
+    "chat":  {
+                 "welcome":  "Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?",
+                 "typing":  "Asistentul gândește...",
+                 "errors":  {
+                                "unavailable":  "Asistentul AI nu este disponibil momentan. Încearcă din nou.",
+                                "invalid":  "Mesajul nu poate fi trimis. Verifică ce ai scris."
+                            },
+                 "time":  {
+                              "seconds":  "a few seconds ago",
+                              "minute":  "a minute ago",
+                              "minutes":  "{count} minutes ago",
+                              "hour":  "an hour ago",
+                              "hours":  "{count} hours ago",
+                              "yesterday":  "yesterday",
+                              "days":  "{count} days ago"
+                          }
+             },
+    "errors":  {
+                   "generic":  "A apărut o problemă. Încearcă din nou."
+               }
 }

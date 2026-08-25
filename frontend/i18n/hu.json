@@ -1,1 +1,170 @@
-{"Prezentare Generală":"Áttekintés","Asistent AI & Proiecții":"AI asszisztens és előrejelzések","Toate Tranzacțiile":"Minden tranzakció","Cardurile Mele":"Kártyáim","Investiții & Bugetare":"Befektetések és költségvetés","Plăți":"Fizetések","Conversații recente":"Legutóbbi beszélgetések","Notificări":"Értesítések","Nicio notificare încă.":"Még nincsenek értesítések.","Profilul meu":"Profilom","Log out":"Kijelentkezés","Total Balance":"Teljes egyenleg","Cont nou":"Új számla","Transferă":"Átutalás","Conturile mele":"Számláim","Tranzacții Recente":"Legutóbbi tranzakciók","Vezi toate":"Összes megtekintése","Se încarcă...":"Betöltés...","Anulează":"Mégse","Confirmă":"Megerősítés","Password":"Jelszó","Log in":"Bejelentkezés","Log in to your account":"Jelentkezzen be fiókjába","Register":"Regisztráció","Create your account":"Hozza létre fiókját","Resetare parolă":"Jelszó visszaállítása","Alege limba":"Nyelv kiválasztása","Choose language":"Nyelv kiválasztása"}
+{
+    "common":  {
+                   "Prezentare Generală":  "Áttekintés",
+                   "Asistent AI \u0026 Proiecții":  "AI asszisztens és előrejelzések",
+                   "Toate Tranzacțiile":  "Minden tranzakció",
+                   "Cardurile Mele":  "Kártyáim",
+                   "Investiții \u0026 Bugetare":  "Befektetések és költségvetés",
+                   "Plăți":  "Fizetések",
+                   "Conversații recente":  "Legutóbbi beszélgetések",
+                   "Notificări":  "Értesítések",
+                   "Nicio notificare încă.":  "Még nincsenek értesítések.",
+                   "Profilul meu":  "Profilom",
+                   "Log out":  "Kijelentkezés",
+                   "Total Balance":  "Teljes egyenleg",
+                   "Cont nou":  "Új számla",
+                   "Transferă":  "Átutalás",
+                   "Conturile mele":  "Számláim",
+                   "Tranzacții Recente":  "Legutóbbi tranzakciók",
+                   "Vezi toate":  "Összes megtekintése",
+                   "Se încarcă...":  "Betöltés...",
+                   "Anulează":  "Mégse",
+                   "Confirmă":  "Megerősítés",
+                   "Password":  "Jelszó",
+                   "Log in":  "Bejelentkezés",
+                   "Log in to your account":  "Jelentkezzen be fiókjába",
+                   "Register":  "Regisztráció",
+                   "Create your account":  "Hozza létre fiókját",
+                   "Resetare parolă":  "Jelszó visszaállítása",
+                   "Alege limba":  "Nyelv kiválasztása",
+                   "Choose language":  "Nyelv kiválasztása",
+                   "Caută tranzacții, carduri, contacte":  {
+
+                                                           },
+                   "Nicio notificare încă":  {
+
+                                             },
+                   "Se încarcă":  {
+
+                                  },
+                   "Conversație nouă":  "New conversation",
+                   "Întreabă asistentul AI":  {
+
+                                              },
+                   "Generează Card Virtual":  "Create virtual card",
+                   "Comandă Card Fizic":  "Order physical card",
+                   "Deschide un cont nou":  "Open a new account",
+                   "Email":  "Email",
+                   "No account yet?":  "No account yet?",
+                   "First name":  "First name",
+                   "Last name":  "Last name",
+                   "At least 8 characters":  "At least 8 characters",
+                   "Trimite codul":  "Send code",
+                   "Verifică codul":  "Verify code",
+                   "Parolă nouă":  "New password",
+                   "Caută tranzacții, carduri, contacte...":  "Search transactions, cards, contacts...",
+                   "Întreabă asistentul AI...":  "Ask the AI assistant...",
+                   "search_placeholder":  "Tranzakciók, kártyák és névjegyek keresése..."
+               },
+    "dashboard":  {
+                      "Fără activitate încă.":  "Még nincs aktivitás.",
+                      "Conectat • poate citi soldurile conturilor tale":  "Kapcsolódva • olvashatja számlaegyenlegeit",
+                      "Conversație nouă":  "Új beszélgetés",
+                      "Anulează cardul":  "Kártya törlése",
+                      "Generează Card Virtual":  "Virtuális kártya létrehozása",
+                      "Comandă Card Fizic":  "Fizikai kártya rendelése",
+                      "Cheltuieli pe Categorii (Luna curentă)":  "Kiadások kategóriánként (aktuális hónap)",
+                      "Supermarket (40%)":  "Élelmiszer (40%)",
+                      "Facturi (35%)":  "Számlák (35%)",
+                      "Divertisment (25%)":  "Szórakozás (25%)",
+                      "Deschide un cont nou":  "Új számla nyitása",
+                      "Cont de economii":  "Megtakarítási számla",
+                      "Flexibil - retragi oricând":  "Rugalmas — bármikor felvehető",
+                      "Cont cu dobândă fixă":  "Fix kamatozású számla",
+                      "Alegi perioada - rată mai mare":  "Válasszon futamidőt — magasabb kamat",
+                      "Conturile mele de economii":  "Megtakarítási számláim",
+                      "Fără activitate încă":  {
+
+                                               },
+                      "No activity":  "No activity yet.",
+                      "no_activity":  "Még nincs aktivitás."
+                  },
+    "savings":  {
+                    "up_to_rate":  "akár {rate}% évente",
+                    "no_accounts":  "Még nincs megtakarítási számla."
+                },
+    "cards":  {
+                  "cancel":  "Kártya törlése",
+                  "label":  "Kártya",
+                  "expiry":  "Lejárat",
+                  "cvv":  "CVV",
+                  "limit":  "Limit",
+                  "show_details":  "Lejárat és CVV megjelenítése",
+                  "hide_details":  "Lejárat és CVV elrejtése",
+                  "status_active":  "Aktív",
+                  "status_frozen":  "Zárolva",
+                  "status_cancelled":  "Lemondva",
+                  "empty":  "Még nincsenek kártyák. Hozd létre az első virtuális kártyádat.",
+                  "cancel_confirm":  "Biztosan lemondod ezt a kártyát? Nem lehet újra aktiválni."
+              },
+    "brand":  { "tagline":  "PÉNZÜGYI KÉNYELME" },
+    "registration":  {
+                    "drop_id_optional":  "Húzd ide az igazolványképet, vagy válassz fájlt (opcionális)",
+                    "title":  "Hozd létre a fiókodat", "first_name":  "Keresztnév", "last_name":  "Vezetéknév", "email":  "E-mail", "password":  "Jelszó", "password_hint":  "Legalább 8 karakter", "submit":  "Regisztráció",
+                    "manual":  "Kézi bevitel", "chat_mode":  "Csevegés Comodullal", "ocr_label":  "Automatikus bevitel személyazonosító okmányból (opcionális)", "drop_id":  "Húzd ide az igazolványképet, vagy válassz fájlt", "ocr_status":  "Csak PNG. A név, a CNP és a cím automatikusan kitöltődik.", "national_id":  "Nemzeti azonosító (CNP)", "national_id_hint":  "A nem és a születési dátum automatikusan beolvasásra kerül", "phone":  "Telefon (opcionális)", "address":  "Cím (opcionális)", "referral":  "Ajánlói kód (opcionális)", "referral_hint":  "Van ajánlói kódod? Az új számlád 500 RON ajándékot kap.", "chat_status":  "Segítek a saját tempódban számlát nyitni", "chat_welcome":  "Szia! Comodul vagyok, és segítek BanK-számlát nyitni. Mondd el a neved, vagy tölts fel egy igazolványképet.", "chat_placeholder":  "Írj üzenetet...", "already_account":  "Már van fiókod?"
+                },
+    "auth":  {
+                    "face_login":  "Bejelentkezés arcfelismeréssel",
+                    "face_password":  "Bejelentkezés jelszóval",
+                    "forgot_password":  "Elfelejtetted a jelszavad?"
+                },
+    "profile":  {
+                    "avatar":  "Avatar",
+                    "referral":  "Ajánlói kódom",
+                    "change_password":  "Jelszó módosítása",
+                    "face_login":  "Face Login",
+                    "back":  "Vissza",
+                    "choose_avatar":  "Válassz emojit az avatarodhoz",
+                    "referral_hint":  "Aki ezzel a kóddal regisztrál, 500 RON-t kap az első számlájára.",
+                    "current_password":  "Jelenlegi jelszó",
+                    "new_password":  "Új jelszó",
+                    "confirm_password":  "Új jelszó megerősítése",
+                    "start_camera":  "Kamera indítása",
+                    "capture_activate":  "Rögzítés és aktiválás",
+                    "disable_face_login":  "Face Login kikapcsolása",
+                    "face_active":  "A Face Login aktiválva van a fiókodban.",
+                    "face_inactive":  "A Face Login még nincs aktiválva. Indítsd el a kamerát és készíts egy fényképet.",
+                    "face_success":  "A Face Login sikeresen aktiválva!"
+                },
+    "payments":  {
+                     "Trimite bani printr-un IBAN":  "Pénzküldés IBAN-nal",
+                     "Din contul":  "Számláról",
+                     "Copiază IBAN-ul":  "IBAN másolása",
+                     "IBAN destinatar":  "Kedvezményezett IBAN",
+                     "Nume beneficiar":  "Kedvezményezett neve",
+                     "Sumă":  "Összeg",
+                     "Descriere":  "Leírás",
+                     "(opțional)":  "(nem kötelező)",
+                     "Salvează acest beneficiar în Contactele mele":  "Kedvezményezett mentése a névjegyek közé",
+                     "Trimite plata":  "Fizetés küldése",
+                     "Contactele mele":  "Névjegyeim",
+                     "Istoric plăți":  "Fizetési előzmények",
+                     "contacts_load_error":  "A névjegyek betöltése sikertelen",
+                     "no_contacts":  "Még nincsenek névjegyek — az első fizetés után automatikusan megjelennek.",
+                     "history_load_error":  "A fizetési előzmények betöltése sikertelen",
+                     "no_payments":  "Még nincsenek fizetések.",
+                     "account_holder":  "Számlatulajdonos",
+                     "iban_not_found":  "Nem található számla ehhez az IBAN-hoz.",
+                     "sent_success":  "A fizetés sikeresen elküldve!"
+                 },
+    "chat":  {
+                 "welcome":  "Hello! I am your banking assistant. I can check your account balances and answer banking questions. How can I help?",
+                 "typing":  "The assistant is thinking...",
+                 "errors":  {
+                                "unavailable":  "The AI assistant is currently unavailable. Please try again.",
+                                "invalid":  "The message could not be sent. Check what you wrote."
+                            },
+                 "time":  {
+                              "seconds":  "a few seconds ago",
+                              "minute":  "a minute ago",
+                              "minutes":  "{count} minutes ago",
+                              "hour":  "an hour ago",
+                              "hours":  "{count} hours ago",
+                              "yesterday":  "yesterday",
+                              "days":  "{count} days ago"
+                          }
+             },
+    "errors":  {
+                   "generic":  "Something went wrong. Please try again."
+               }
+}

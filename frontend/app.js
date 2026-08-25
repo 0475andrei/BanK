@@ -65,6 +65,28 @@ document.addEventListener('DOMContentLoaded', () => {
     wireChatAttach();
     wireDocumentAttach();
     initDashboard();
+
+    window.addEventListener('languagechange', () => {
+        const messages = document.getElementById('chat-messages');
+        const hasOnlyWelcome = messages?.querySelectorAll('.message').length === 1;
+        if (hasOnlyWelcome) {
+            const welcome = messages.querySelector('.message.ai .bubble');
+            if (welcome) welcome.textContent = chatWelcomeText();
+        }
+        if (!document.getElementById('view-chat')?.classList.contains('hidden')) {
+            void loadConversationHistory();
+        }
+        if (document.getElementById('view-cards')?.classList.contains('active')) {
+            renderCardsList(loadedCards);
+        }
+        if (document.getElementById('view-dashboard')?.classList.contains('active')) {
+            renderSavingsAccountsList();
+        }
+        if (document.getElementById('view-face-login')?.classList.contains('active') && faceStatusEnrolled !== null) {
+            renderFaceStatus(faceStatusEnrolled);
+        }
+        window.refreshTranslations?.();
+    });
 });
 
 /** Lets the user attach a photo/PDF (e.g. "extras de cont") to the chat to
@@ -236,14 +258,15 @@ function clearActiveDocument() {
 let currentConversationId = null;
 let conversationHistory = [];
 
-const CHAT_WELCOME_TEXT =
-    'Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?';
-
 const CHAT_ERRORS = {
-    unavailable: 'Asistentul AI nu este disponibil momentan. Încearcă din nou.',
-    invalid: 'Mesajul nu poate fi trimis. Verifică ce ai scris.',
-    generic: 'A apărut o problemă. Încearcă din nou.',
+    unavailable: ['chat.errors.unavailable', 'Asistentul AI nu este disponibil momentan. Încearcă din nou.'],
+    invalid: ['chat.errors.invalid', 'Mesajul nu poate fi trimis. Verifică ce ai scris.'],
+    generic: ['errors.generic', 'A apărut o problemă. Încearcă din nou.'],
 };
+
+function chatWelcomeText() {
+    return t('chat.welcome', 'Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?');
+}
 
 /** Builds a chat bubble matching the existing markup and appends it. */
 function appendChatBubble(role, text, options = {}) {
@@ -280,10 +303,10 @@ function chatErrorMessage(err) {
     // No status at all means the request never reached the API (backend down,
     // DNS, CORS) - to the user that is the same thing as "AI unavailable".
     if (!err.status || err.status === 502 || err.status === 503) {
-        return CHAT_ERRORS.unavailable;
+        return t(...CHAT_ERRORS.unavailable);
     }
-    if (err.status === 422) return CHAT_ERRORS.invalid;
-    return CHAT_ERRORS.generic;
+    if (err.status === 422) return t(...CHAT_ERRORS.invalid);
+    return t(...CHAT_ERRORS.generic);
 }
 
 // Function to send a message in the AI Chat view
@@ -303,7 +326,7 @@ async function sendMessage() {
     const typingBubble = appendChatBubble('ai', '', {
         bubbleClass: 'typing',
         html:
-            '<div class="typing-label">Asistentul gândește...</div>' +
+            `<div class="typing-label">${escapeHTML(t('chat.typing', 'Asistentul gândește...'))}</div>` +
             '<div class="typing-dots">' +
             '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>' +
             '</div>',
@@ -358,7 +381,7 @@ function startNewConversation() {
     clearActiveDocument();
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = '';
-    appendChatBubble('ai', CHAT_WELCOME_TEXT);
+    appendChatBubble('ai', chatWelcomeText());
     renderConversationHistory();
 }
 
@@ -386,20 +409,19 @@ function formatRelativeConversationTime(value) {
     if (Number.isNaN(date.getTime())) return '';
 
     const elapsedMinutes = Math.floor((Date.now() - date.getTime()) / 60000);
-    if (elapsedMinutes < 1) return 'acum câteva secunde';
-    if (elapsedMinutes === 1) return 'acum un minut';
-    if (elapsedMinutes < 60) return `acum ${elapsedMinutes} minute`;
-    if (elapsedMinutes < 120) return 'acum o oră';
-    if (elapsedMinutes < 24 * 60) return `acum ${Math.floor(elapsedMinutes / 60)} ore`;
+    const locale = document.documentElement.lang || 'ro';
+    const relativeTime = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+    if (elapsedMinutes < 1) return relativeTime.format(0, 'second');
+    if (elapsedMinutes < 60) return relativeTime.format(-elapsedMinutes, 'minute');
+    if (elapsedMinutes < 24 * 60) return relativeTime.format(-Math.floor(elapsedMinutes / 60), 'hour');
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const conversationDay = new Date(date);
     conversationDay.setHours(0, 0, 0, 0);
     const dayDifference = Math.floor((today - conversationDay) / 86400000);
-    if (dayDifference === 1) return 'ieri';
-    if (dayDifference < 7) return `acum ${dayDifference} zile`;
-    return date.toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' });
+    if (dayDifference < 7) return relativeTime.format(-dayDifference, 'day');
+    return date.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 }
 
 function showConversationHistoryError(message = '') {
@@ -414,7 +436,7 @@ async function loadConversationHistory() {
     if (!list) return;
 
     showConversationHistoryError();
-    list.innerHTML = '<p class="conversation-history-empty">Se încarcă...</p>';
+    list.innerHTML = `<p class="conversation-history-empty">${escapeHTML(t('common.loading', 'Se încarcă...'))}</p>`;
 
     try {
         const conversations = await apiFetch('/chat/conversations');
@@ -452,7 +474,7 @@ function renderConversationHistory() {
     list.innerHTML = '';
 
     if (!conversationHistory.length) {
-        list.innerHTML = '<p class="conversation-history-empty">Nu ai conversații salvate.</p>';
+        list.innerHTML = `<p class="conversation-history-empty">${escapeHTML(t('chat.history.empty', 'Nu ai conversații salvate.'))}</p>`;
         return;
     }
 
@@ -1155,9 +1177,10 @@ async function loadTransactions() {
     const list = document.getElementById('transactions-list');
     const active = currentAccounts.filter(a => a.status === 'active');
     if (active.length === 0) {
-        list.innerHTML = `<div class="empty-state">${t('dashboard.no_activity')}</div>`;
+        list.innerHTML = `<div class="empty-state" data-i18n="dashboard.no_activity">${t('dashboard.no_activity')}</div>`;
         return;
     }
+
 
     try {
         // Fetch the 5 most recent per account, then re-sort/trim across
@@ -1169,7 +1192,7 @@ async function loadTransactions() {
         const entries = perAccount.flat().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
 
         if (entries.length === 0) {
-            list.innerHTML = `<div class="empty-state">${t('dashboard.no_activity')}</div>`;
+            list.innerHTML = `<div class="empty-state" data-i18n="dashboard.no_activity">${t('dashboard.no_activity')}</div>`;
             return;
         }
 
@@ -1201,7 +1224,7 @@ async function loadAllTransactions() {
 
     const active = currentAccounts.filter(a => a.status === 'active');
     if (active.length === 0) {
-        container.innerHTML = `<div class="empty-state">${t('dashboard.no_activity')}</div>`;
+        container.innerHTML = `<div class="empty-state" data-i18n="dashboard.no_activity">${t('dashboard.no_activity')}</div>`;
         return;
     }
 
@@ -1220,7 +1243,7 @@ async function loadAllTransactions() {
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
         if (entries.length === 0) {
-            container.innerHTML = `<div class="empty-state">${t('dashboard.no_activity')}</div>`;
+            container.innerHTML = `<div class="empty-state" data-i18n="dashboard.no_activity">${t('dashboard.no_activity')}</div>`;
             return;
         }
 
@@ -1457,7 +1480,7 @@ function renderSavingsAccountsList() {
     if (!list) return;
     const savingsAccounts = currentAccounts.filter((a) => a.product_type !== 'checking');
     if (savingsAccounts.length === 0) {
-        list.innerHTML = '<div class="empty-state">Niciun cont de economii încă.</div>';
+        list.innerHTML = `<div class="empty-state" data-i18n="savings.no_accounts">${t('savings.no_accounts', 'Niciun cont de economii încă.')}</div>`;
         return;
     }
     list.innerHTML = savingsAccounts.map((acc) => {
@@ -1864,6 +1887,7 @@ function populateTransferToOptions() {
 /* --- Cards --- */
 
 const CARD_STATUS_LABELS = { active: 'Activ', frozen: 'Blocat', cancelled: 'Anulat' };
+let loadedCards = [];
 
 /** Shows or re-masks a card's expiry/CVV and flips the eye icon to match.
  * Split out of the eye button's click handler so the Face ID gate above it
@@ -1881,6 +1905,7 @@ async function loadCards() {
     if (!list) return;
     try {
         const cards = await apiFetch('/cards');
+        loadedCards = cards;
         renderCardsList(cards);
     } catch (err) {
         list.innerHTML = `<div class="empty-state">Nu s-au putut încărca cardurile: ${escapeHTML(err.message)}</div>`;
@@ -1890,7 +1915,7 @@ async function loadCards() {
 function renderCardsList(cards) {
     const list = document.getElementById('cards-list');
     if (cards.length === 0) {
-        list.innerHTML = '<div class="empty-state">Niciun card încă. Generează primul card virtual.</div>';
+        list.innerHTML = `<div class="empty-state">${t('cards.empty', 'Niciun card încă. Generează primul card virtual.')}</div>`;
         return;
     }
 
@@ -1904,33 +1929,33 @@ function renderCardsList(cards) {
         return `
         <div class="credit-card virtual ${isCancelled ? 'cancelled' : ''}">
             <div class="card-header">
-                <span class="card-type">Card${account ? ' &middot; ' + escapeHTML(account.name) : ''}</span>
+                <span class="card-type">${t('cards.label', 'Card')}${account ? ' &middot; ' + escapeHTML(account.name) : ''}</span>
                 <span class="card-logo">VISA</span>
             </div>
             <div class="card-number">${escapeHTML(formattedNumber)}</div>
             <div class="card-footer">
                 <div class="card-details">
                     <div class="detail">
-                        <span class="label">Expiră</span>
+                        <span class="label">${t('cards.expiry', 'Expiră')}</span>
                         <span class="card-secret" data-reveal="expiry" data-value="${escapeHTML(expiry)}">••/••</span>
                     </div>
                     <div class="detail">
-                        <span class="label">CVV</span>
+                        <span class="label">${t('cards.cvv', 'CVV')}</span>
                         <span class="card-secret" data-reveal="cvv" data-value="${escapeHTML(card.cvv)}">•••</span>
                     </div>
                     ${card.spending_limit_minor != null ? `
                         <div class="detail">
-                            <span class="label">Limită</span>
+                            <span class="label">${t('cards.limit', 'Limită')}</span>
                             <span>${formatMoney(card.spending_limit_minor, account ? account.currency : 'RON')}</span>
                         </div>
                     ` : ''}
-                    <button class="card-eye-btn" title="Arată expirare și CVV" aria-label="Arată expirare și CVV"><i data-lucide="eye"></i></button>
+                    <button class="card-eye-btn" title="${t('cards.show_details', 'Arată expirarea și CVV')}" aria-label="${t('cards.show_details', 'Arată expirarea și CVV')}"><i data-lucide="eye"></i></button>
                 </div>
                 ${isCancelled
-                    ? `<div class="status-indicator cancelled">${CARD_STATUS_LABELS.cancelled}</div>`
-                    : `<button class="status-toggle-btn ${card.status}" data-card-id="${card.id}" data-action="${card.status === 'frozen' ? 'unfreeze' : 'freeze'}" title="${card.status === 'frozen' ? 'Apasă pentru a debloca cardul' : 'Apasă pentru a bloca temporar cardul'}">
+                    ? `<div class="status-indicator cancelled">${t('cards.status_cancelled', CARD_STATUS_LABELS.cancelled)}</div>`
+                    : `<button class="status-toggle-btn ${card.status}" data-card-id="${card.id}" data-action="${card.status === 'frozen' ? 'unfreeze' : 'freeze'}" title="${t(card.status === 'frozen' ? 'cards.unfreeze_hint' : 'cards.freeze_hint', card.status === 'frozen' ? 'Apasă pentru a debloca cardul' : 'Apasă pentru a bloca temporar cardul')}">
                         <i data-lucide="${card.status === 'frozen' ? 'snowflake' : 'shield-check'}"></i>
-                        <span>${CARD_STATUS_LABELS[card.status] || card.status}</span>
+                        <span>${t(`cards.status_${card.status}`, CARD_STATUS_LABELS[card.status] || card.status)}</span>
                     </button>`
                 }
             </div>
@@ -1951,7 +1976,6 @@ function renderCardsList(cards) {
             const card = btn.closest('.credit-card');
             const secrets = card.querySelectorAll('.card-secret');
             const revealing = secrets[0].textContent !== secrets[0].dataset.value;
-
             // Hiding back to masked never needs a fresh proof of identity -
             // only revealing the real expiry/CVV does, and only for users who
             // actually opted into Face ID (same "optional extra" philosophy
@@ -1980,7 +2004,7 @@ function renderCardsList(cards) {
 
     list.querySelectorAll('.card-cancel-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-            if (!confirm('Sigur anulezi acest card? Nu poate fi reactivat.')) return;
+            if (!confirm(t('cards.cancel_confirm', 'Sigur anulezi acest card? Nu poate fi reactivat.'))) return;
             try {
                 await apiFetch(`/cards/${btn.dataset.cardId}`, { method: 'DELETE' });
                 await loadCards();
@@ -2162,7 +2186,7 @@ async function loadBeneficiaries() {
 function renderBeneficiariesList(contacts) {
     const list = document.getElementById('beneficiaries-list');
     if (contacts.length === 0) {
-        list.innerHTML = `<div class="empty-state">${t('payments.no_contacts')}</div>`;
+        list.innerHTML = `<div class="empty-state" data-i18n="payments.no_contacts">${t('payments.no_contacts')}</div>`;
         return;
     }
     list.innerHTML = contacts.map(c => `
@@ -2249,7 +2273,7 @@ async function loadPayments() {
 function renderPaymentsList(payments) {
     const list = document.getElementById('payments-list');
     if (payments.length === 0) {
-        list.innerHTML = `<div class="empty-state">${t('payments.no_payments')}</div>`;
+        list.innerHTML = `<div class="empty-state" data-i18n="payments.no_payments">${t('payments.no_payments')}</div>`;
         return;
     }
     list.innerHTML = payments.map(p => `
@@ -2511,17 +2535,24 @@ function stopFaceCamera() {
     document.getElementById('face-capture-btn').hidden = true;
 }
 
-async function loadFaceStatus() {
+let faceStatusEnrolled = null;
+
+function renderFaceStatus(enrolled) {
     const statusText = document.getElementById('face-status-text');
     const removeBtn = document.getElementById('face-remove-btn');
+    statusText.textContent = enrolled
+        ? t('profile.face_active', 'Face Login e activat pe contul tău.')
+        : t('profile.face_inactive', 'Face Login nu e activat încă. Pornește camera și fă o poză ca să-l activezi.');
+    removeBtn.hidden = !enrolled;
+}
+
+async function loadFaceStatus() {
     try {
         const { enrolled } = await apiFetch('/auth/face/status');
-        statusText.textContent = enrolled
-            ? 'Face Login e activat pe contul tău.'
-            : 'Face Login nu e activat încă. Pornește camera și fă o poză ca să-l activezi.';
-        removeBtn.hidden = !enrolled;
+        faceStatusEnrolled = enrolled;
+        renderFaceStatus(enrolled);
     } catch (err) {
-        statusText.textContent = `Nu s-a putut verifica starea: ${err.message}`;
+        document.getElementById('face-status-text').textContent = `${t('profile.face_status_error', 'Nu s-a putut verifica starea')}: ${err.message}`;
     }
 }
 
@@ -2570,7 +2601,7 @@ function wireFaceLoginPanel() {
                         throw new Error(body?.error?.message || `Request failed (${res.status})`);
                     }
                 });
-                successEl.textContent = 'Face Login activat cu succes!';
+                successEl.textContent = t('profile.face_success', 'Face Login activat cu succes!');
                 successEl.hidden = false;
                 stopFaceCamera();
                 await loadFaceStatus();
