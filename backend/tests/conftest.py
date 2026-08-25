@@ -292,3 +292,37 @@ async def authed_client_factory(app, user_factory, session_token_factory):
 @pytest_asyncio.fixture
 async def authed_client(authed_client_factory) -> tuple[HTTPXAsyncClient, UserRead]:
     return await authed_client_factory()
+
+
+@pytest_asyncio.fixture
+def enroll_face(supabase: AsyncClient) -> Callable[[uuid.UUID], Awaitable[str]]:
+    """Test-only shortcut for the mandatory face-confirmation step-up (see
+    face_auth/service.py::enforce_face_confirmation): seeds a
+    face_credentials row directly (a fake embedding - real face matching is
+    vision-service's own concern, not this test's) and a face_confirmations
+    row already eligible to be consumed, returning its plaintext token so a
+    test can pass it straight as X-Face-Confirmation. Mirrors
+    create_face_confirmation's own token_hash scheme exactly, since that
+    function needs a real photo an integration test can't produce."""
+
+    async def _enroll(user_id: uuid.UUID) -> str:
+        import hashlib
+        import secrets
+
+        await supabase.table("face_credentials").insert(
+            {"user_id": str(user_id), "embedding": [0.0] * 128}
+        ).execute()
+
+        token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        expires_at = datetime.now(UTC) + timedelta(minutes=3)
+        await supabase.table("face_confirmations").insert(
+            {
+                "user_id": str(user_id),
+                "token_hash": token_hash,
+                "expires_at": expires_at.isoformat(),
+            }
+        ).execute()
+        return token
+
+    return _enroll

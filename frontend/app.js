@@ -1822,6 +1822,18 @@ async function submitWithFaceConfirmation(path, idempotencyKey, body) {
             body,
         });
     } catch (err) {
+        // Distinct from a plain 428: there is no token this user could
+        // possibly supply (Face ID was never enrolled at all), so the fix
+        // is "go enroll it", not "retry the camera".
+        if (err.code === 'face_enrollment_required') {
+            // The backend's own message is an English default (same as
+            // FaceConfirmationRequiredError) - use the Romanian one here
+            // instead, matching the rest of this flow.
+            promptFaceEnrollmentRequired(
+                'Această plată necesită Face ID activat, pentru că e prima ta plată către această persoană sau depășește pragul de siguranță.'
+            );
+            return CONFIRMATION_CANCELLED;
+        }
         if (err.status !== 428) throw err;
 
         const token = await requestFaceConfirmationToken();
@@ -1833,6 +1845,16 @@ async function submitWithFaceConfirmation(path, idempotencyKey, body) {
             body,
         });
     }
+}
+
+/** Shown when a mandatory Face ID action (see face_auth/service.py::
+ * enforce_face_confirmation - a large transfer, a first payment to someone
+ * new) hits a user with no Face ID enrolled at all: there is no token they
+ * could supply, so the fix is "go enroll it", not "retry". Navigates
+ * straight to the Face Login settings view once acknowledged. */
+function promptFaceEnrollmentRequired(message) {
+    alert(message || 'Această acțiune necesită Face ID activat. Te redirecționăm către activare.');
+    goToProfileView('face-login');
 }
 
 /** Payment-only wrapper around submitWithFaceConfirmation: if the backend
@@ -2100,25 +2122,29 @@ function renderCardsList(cards) {
             const secrets = card.querySelectorAll('.card-secret');
             const revealing = secrets[0].textContent !== secrets[0].dataset.value;
             // Hiding back to masked never needs a fresh proof of identity -
-            // only revealing the real expiry/CVV does, and only for users who
-            // actually opted into Face ID (same "optional extra" philosophy
-            // as the face-confirmation step-up on large transfers).
+            // only revealing the real expiry/CVV does. Face ID is mandatory
+            // for this, not an optional extra: a user who hasn't enrolled it
+            // gets sent to set it up instead of seeing the card.
             if (revealing) {
                 let faceEnrolled = false;
                 try {
                     faceEnrolled = (await apiFetch('/auth/face/status')).enrolled;
                 } catch (err) {
-                    // Can't check - fail open to the pre-existing behaviour
-                    // rather than locking the user out of their own card.
+                    alert('Nu am putut verifica starea Face ID. Încearcă din nou.');
+                    return;
                 }
-                if (faceEnrolled) {
-                    btn.disabled = true;
-                    const token = await requestFaceConfirmationToken(
-                        'Verifică-ți identitatea prin cameră ca să vezi numărul complet și CVV-ul cardului.'
+                if (!faceEnrolled) {
+                    promptFaceEnrollmentRequired(
+                        'Activează Face ID ca să poți vedea numărul complet și CVV-ul cardului.'
                     );
-                    btn.disabled = false;
-                    if (!token) return;
+                    return;
                 }
+                btn.disabled = true;
+                const token = await requestFaceConfirmationToken(
+                    'Verifică-ți identitatea prin cameră ca să vezi numărul complet și CVV-ul cardului.'
+                );
+                btn.disabled = false;
+                if (!token) return;
             }
 
             applyCardSecretsVisibility(card, btn, revealing);

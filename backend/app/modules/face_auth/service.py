@@ -22,6 +22,7 @@ from app.core import vision_client
 from app.core.audit import record_audit_event
 from app.core.exceptions import (
     FaceConfirmationRequiredError,
+    FaceEnrollmentRequiredError,
     InvalidFaceConfirmationError,
     LoginRateLimitedError,
     UnauthorizedError,
@@ -285,15 +286,21 @@ async def enforce_face_confirmation(
     before executing a money movement. `required` is the caller's decision -
     transfers only ever pass `requires_face_confirmation(amount_minor)`;
     payments additionally OR it with "first payment to this person" (see
-    payments/service.py). No-ops when `required` is False, and also no-ops
-    (can't require what was never set up) when the user has no face
-    enrolled - otherwise raises FaceConfirmationRequiredError when no token
-    was supplied, or InvalidFaceConfirmationError when the supplied one
-    doesn't check out."""
+    payments/service.py). No-ops when `required` is False; otherwise Face
+    ID is mandatory - raises FaceEnrollmentRequiredError when the user has
+    never enrolled it at all (there is no token they could supply),
+    FaceConfirmationRequiredError when they have but didn't supply a token
+    for THIS request, or InvalidFaceConfirmationError when the supplied
+    one doesn't check out.
+
+    This used to no-op for a user with no Face ID enrolled, treating it as
+    an optional extra rather than a real requirement - changed so a large
+    transfer or a first payment to someone new can never go through
+    unverified just because the sender skipped enrolling."""
     if not required:
         return
     if not await has_face_enrolled(supabase, user):
-        return
+        raise FaceEnrollmentRequiredError()
 
     if token is None:
         raise FaceConfirmationRequiredError()

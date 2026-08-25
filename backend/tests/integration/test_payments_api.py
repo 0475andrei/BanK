@@ -4,13 +4,19 @@ async def _open_account(client, name="Checking", currency="USD"):
     return resp.json()
 
 
-async def test_create_payment_moves_balance_between_users(authed_client, authed_client_factory):
-    payer, _payer_user = authed_client
+async def test_create_payment_moves_balance_between_users(
+    authed_client, authed_client_factory, enroll_face
+):
+    payer, payer_user = authed_client
     payer_account = await _open_account(payer, "Payer")
 
     payee, _payee_user = await authed_client_factory()
     payee_account = await _open_account(payee, "Payee")
 
+    # First payment to a person the payer has never paid before - now a
+    # mandatory face-confirmation trigger (see
+    # face_auth/service.py::enforce_face_confirmation).
+    face_token = await enroll_face(payer_user.id)
     resp = await payer.post(
         "/api/v1/payments",
         json={
@@ -19,7 +25,7 @@ async def test_create_payment_moves_balance_between_users(authed_client, authed_
             "beneficiary_name": "Payee Person",
             "amount_minor": 1_000,
         },
-        headers={"Idempotency-Key": "payment-1"},
+        headers={"Idempotency-Key": "payment-1", "X-Face-Confirmation": face_token},
     )
     assert resp.status_code == 201, resp.text
     body = resp.json()
@@ -34,13 +40,16 @@ async def test_create_payment_moves_balance_between_users(authed_client, authed_
     assert payee_after["balance_minor"] == payee_account["balance_minor"] + 1_000
 
 
-async def test_create_payment_saves_and_updates_beneficiary(authed_client, authed_client_factory):
-    payer, _payer_user = authed_client
+async def test_create_payment_saves_and_updates_beneficiary(
+    authed_client, authed_client_factory, enroll_face
+):
+    payer, payer_user = authed_client
     payer_account = await _open_account(payer, "Payer")
 
     payee, _payee_user = await authed_client_factory()
     payee_account = await _open_account(payee, "Payee")
 
+    face_token = await enroll_face(payer_user.id)
     await payer.post(
         "/api/v1/payments",
         json={
@@ -49,7 +58,7 @@ async def test_create_payment_saves_and_updates_beneficiary(authed_client, authe
             "beneficiary_name": "First Name",
             "amount_minor": 500,
         },
-        headers={"Idempotency-Key": "payment-a"},
+        headers={"Idempotency-Key": "payment-a", "X-Face-Confirmation": face_token},
     )
 
     contacts = (await payer.get("/api/v1/beneficiaries")).json()
@@ -168,7 +177,10 @@ async def test_payment_requires_idempotency_key(authed_client, authed_client_fac
     assert resp.status_code == 400
 
 
-async def _pay(payer, payer_account, payee_account, amount_minor, key, **extra):
+async def _pay(payer, payer_account, payee_account, amount_minor, key, *, face_token=None, **extra):
+    headers = {"Idempotency-Key": key}
+    if face_token is not None:
+        headers["X-Face-Confirmation"] = face_token
     return await payer.post(
         "/api/v1/payments",
         json={
@@ -178,7 +190,7 @@ async def _pay(payer, payer_account, payee_account, amount_minor, key, **extra):
             "amount_minor": amount_minor,
             **extra,
         },
-        headers={"Idempotency-Key": key},
+        headers=headers,
     )
 
 
@@ -190,16 +202,22 @@ async def _mark_as_subscription(client, iban, display_name="Netflix", **extra):
     assert resp.status_code == 201, resp.text
 
 
-async def test_payment_blocks_subscription_price_increase(authed_client, authed_client_factory):
-    payer, _payer_user = authed_client
+async def test_payment_blocks_subscription_price_increase(
+    authed_client, authed_client_factory, enroll_face
+):
+    payer, payer_user = authed_client
     payer_account = await _open_account(payer, "Payer")
     payee, _payee_user = await authed_client_factory()
     payee_account = await _open_account(payee, "Payee")
     await _mark_as_subscription(payer, payee_account["iban"])
 
     # Two prior payments at the same amount establish the "recurring at
-    # this price" pattern (see _detect_subscription_price_increase).
-    assert (await _pay(payer, payer_account, payee_account, 4_000, "p1")).status_code == 201
+    # this price" pattern (see _detect_subscription_price_increase). Only
+    # the first needs a face token - it's the only "new person" payment.
+    face_token = await enroll_face(payer_user.id)
+    assert (
+        await _pay(payer, payer_account, payee_account, 4_000, "p1", face_token=face_token)
+    ).status_code == 201
     assert (await _pay(payer, payer_account, payee_account, 4_000, "p2")).status_code == 201
 
     resp = await _pay(payer, payer_account, payee_account, 6_000, "p3")
@@ -216,15 +234,16 @@ async def test_payment_blocks_subscription_price_increase(authed_client, authed_
 
 
 async def test_payment_price_increase_can_be_confirmed_and_retried(
-    authed_client, authed_client_factory
+    authed_client, authed_client_factory, enroll_face
 ):
-    payer, _payer_user = authed_client
+    payer, payer_user = authed_client
     payer_account = await _open_account(payer, "Payer")
     payee, _payee_user = await authed_client_factory()
     payee_account = await _open_account(payee, "Payee")
     await _mark_as_subscription(payer, payee_account["iban"])
 
-    await _pay(payer, payer_account, payee_account, 4_000, "q1")
+    face_token = await enroll_face(payer_user.id)
+    await _pay(payer, payer_account, payee_account, 4_000, "q1", face_token=face_token)
     await _pay(payer, payer_account, payee_account, 4_000, "q2")
 
     blocked = await _pay(payer, payer_account, payee_account, 6_000, "q3")
@@ -239,15 +258,16 @@ async def test_payment_price_increase_can_be_confirmed_and_retried(
 
 
 async def test_payment_price_increase_includes_saved_website(
-    authed_client, authed_client_factory
+    authed_client, authed_client_factory, enroll_face
 ):
-    payer, _payer_user = authed_client
+    payer, payer_user = authed_client
     payer_account = await _open_account(payer, "Payer")
     payee, _payee_user = await authed_client_factory()
     payee_account = await _open_account(payee, "Payee")
 
     await _mark_as_subscription(payer, payee_account["iban"], website="https://netflix.com")
-    await _pay(payer, payer_account, payee_account, 4_000, "r1")
+    face_token = await enroll_face(payer_user.id)
+    await _pay(payer, payer_account, payee_account, 4_000, "r1", face_token=face_token)
     await _pay(payer, payer_account, payee_account, 4_000, "r2")
 
     resp = await _pay(payer, payer_account, payee_account, 6_000, "r3")
@@ -256,19 +276,22 @@ async def test_payment_price_increase_includes_saved_website(
 
 
 async def test_payment_blocks_price_increase_via_known_subscription_name(
-    authed_client, authed_client_factory
+    authed_client, authed_client_factory, enroll_face
 ):
     """The new automatic trigger: a recipient NAME matching the hardcoded
     known-subscription list (see known_subscriptions.py) is enough on its
     own - no beneficiary ever saved, no is_subscription flag ever set. Same
     recurring-then-higher pattern and default beneficiary_name="Netflix" as
     _pay - deliberately does NOT call _mark_as_subscription."""
-    payer, _payer_user = authed_client
+    payer, payer_user = authed_client
     payer_account = await _open_account(payer, "Payer")
     payee, _payee_user = await authed_client_factory()
     payee_account = await _open_account(payee, "Payee")
 
-    assert (await _pay(payer, payer_account, payee_account, 4_000, "v1")).status_code == 201
+    face_token = await enroll_face(payer_user.id)
+    assert (
+        await _pay(payer, payer_account, payee_account, 4_000, "v1", face_token=face_token)
+    ).status_code == 201
     assert (await _pay(payer, payer_account, payee_account, 4_000, "v2")).status_code == 201
 
     resp = await _pay(payer, payer_account, payee_account, 6_000, "v3")
@@ -279,15 +302,16 @@ async def test_payment_blocks_price_increase_via_known_subscription_name(
 
 
 async def test_payment_name_match_is_case_insensitive_and_substring(
-    authed_client, authed_client_factory
+    authed_client, authed_client_factory, enroll_face
 ):
-    payer, _payer_user = authed_client
+    payer, payer_user = authed_client
     payer_account = await _open_account(payer, "Payer")
     payee, _payee_user = await authed_client_factory()
     payee_account = await _open_account(payee, "Payee")
 
+    face_token = await enroll_face(payer_user.id)
     name = "SPOTIFY AB (Sweden)"
-    await _pay(payer, payer_account, payee_account, 3_000, "w1", beneficiary_name=name)
+    await _pay(payer, payer_account, payee_account, 3_000, "w1", beneficiary_name=name, face_token=face_token)
     await _pay(payer, payer_account, payee_account, 3_000, "w2", beneficiary_name=name)
 
     resp = await _pay(payer, payer_account, payee_account, 5_000, "w3", beneficiary_name=name)
@@ -295,23 +319,24 @@ async def test_payment_name_match_is_case_insensitive_and_substring(
 
 
 async def test_payment_without_recurring_history_is_not_blocked(
-    authed_client, authed_client_factory
+    authed_client, authed_client_factory, enroll_face
 ):
     """A single prior payment isn't a "pattern" yet - only the second
     repeat proves it's recurring, same threshold as the tool this reuses
     the logic from (detect_recurring_payments)."""
-    payer, _payer_user = authed_client
+    payer, payer_user = authed_client
     payer_account = await _open_account(payer, "Payer")
     payee, _payee_user = await authed_client_factory()
     payee_account = await _open_account(payee, "Payee")
 
-    await _pay(payer, payer_account, payee_account, 4_000, "s1")
+    face_token = await enroll_face(payer_user.id)
+    await _pay(payer, payer_account, payee_account, 4_000, "s1", face_token=face_token)
     resp = await _pay(payer, payer_account, payee_account, 6_000, "s2")
     assert resp.status_code == 201, resp.text
 
 
 async def test_payment_to_an_unmarked_person_is_never_blocked(
-    authed_client, authed_client_factory
+    authed_client, authed_client_factory, enroll_face
 ):
     """The whole point of is_subscription: a friend/family member paid the
     same recurring amount twice, then a higher one (e.g. splitting a
@@ -320,29 +345,31 @@ async def test_payment_to_an_unmarked_person_is_never_blocked(
     explicitly marked is_subscription can ever trigger the block - see
     test_payment_blocks_subscription_price_increase for the contrasting
     case with the same amounts, marked."""
-    payer, _payer_user = authed_client
+    payer, payer_user = authed_client
     payer_account = await _open_account(payer, "Payer")
     payee, _payee_user = await authed_client_factory()
     payee_account = await _open_account(payee, "Payee")
 
-    await _pay(payer, payer_account, payee_account, 4_000, "t1", beneficiary_name="Ana")
+    face_token = await enroll_face(payer_user.id)
+    await _pay(payer, payer_account, payee_account, 4_000, "t1", beneficiary_name="Ana", face_token=face_token)
     await _pay(payer, payer_account, payee_account, 4_000, "t2", beneficiary_name="Ana")
     resp = await _pay(payer, payer_account, payee_account, 6_000, "t3", beneficiary_name="Ana")
     assert resp.status_code == 201, resp.text
 
 
 async def test_payment_to_a_saved_person_marked_not_subscription_is_never_blocked(
-    authed_client, authed_client_factory
+    authed_client, authed_client_factory, enroll_face
 ):
     """Same as above, but the contact IS saved (auto-saved by the payments
     themselves) - is_subscription defaults to false, so it still must not
     block."""
-    payer, _payer_user = authed_client
+    payer, payer_user = authed_client
     payer_account = await _open_account(payer, "Payer")
     payee, _payee_user = await authed_client_factory()
     payee_account = await _open_account(payee, "Payee")
+    face_token = await enroll_face(payer_user.id)
 
-    await _pay(payer, payer_account, payee_account, 4_000, "u1", beneficiary_name="Ana")
+    await _pay(payer, payer_account, payee_account, 4_000, "u1", beneficiary_name="Ana", face_token=face_token)
     await _pay(payer, payer_account, payee_account, 4_000, "u2", beneficiary_name="Ana")
 
     contacts = (await payer.get("/api/v1/beneficiaries")).json()
