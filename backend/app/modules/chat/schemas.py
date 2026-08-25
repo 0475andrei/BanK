@@ -20,6 +20,11 @@ class ChatRequest(BaseModel):
     #: Null starts a new conversation. Otherwise the caller is continuing one
     #: it was handed by an earlier response - ownership is checked server-side.
     conversation_id: uuid.UUID | None = None
+    #: Set by the frontend after a successful /documents/upload, to route this
+    #: turn to DocumentAgent (see app/ai/orchestrator.py's context-first
+    #: check). Ownership is verified server-side in router.py before this
+    #: ever reaches Context - never trusted as-is, same as conversation_id.
+    document_id: uuid.UUID | None = None
 
 
 class ProposalRead(BaseModel):

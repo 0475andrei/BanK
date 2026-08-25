@@ -63,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     wireStepUpModal();
     wireChatAttach();
+    wireDocumentAttach();
     initDashboard();
 });
 
@@ -119,6 +120,111 @@ function wireChatAttach() {
             attachInput.value = '';
         }
     });
+}
+
+/** Lets the user attach a PDF to the chat so DocumentAgent can answer
+ * questions about it - separate from wireChatAttach above, which reads an
+ * IBAN out of a scanned statement and is unrelated to this feature. Posts to
+ * POST /documents/upload; the returned document_id is remembered in
+ * currentDocumentId and sent along with every chat message until detached
+ * or the conversation changes (see clearActiveDocument, sendMessage). */
+function wireDocumentAttach() {
+    const attachBtn = document.getElementById('document-attach-btn');
+    const attachInput = document.getElementById('document-attach-input');
+    const statusEl = document.getElementById('document-attach-status');
+    if (!attachBtn || !attachInput) return;
+
+    const MAX_DOCUMENT_SIZE_BYTES = 5 * 1024 * 1024;
+
+    attachBtn.addEventListener('click', () => attachInput.click());
+
+    attachInput.addEventListener('change', async () => {
+        const file = attachInput.files[0];
+        if (!file) return;
+
+        if (file.size > MAX_DOCUMENT_SIZE_BYTES) {
+            statusEl.hidden = false;
+            statusEl.className = 'field-hint ocr-warning';
+            statusEl.textContent = 'Fișierul depășește 5 MB.';
+            attachInput.value = '';
+            return;
+        }
+
+        statusEl.hidden = false;
+        statusEl.className = 'field-hint';
+        statusEl.textContent = 'Se încarcă documentul...';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        if (currentConversationId) {
+            formData.append('conversation_id', currentConversationId);
+        }
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/documents/upload`, {
+                method: 'POST',
+                credentials: 'include',
+                body: formData,
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.error?.message || `Request failed (${res.status})`);
+            }
+            const result = await res.json();
+
+            statusEl.hidden = true;
+            setCurrentConversationId(result.conversation_id);
+            renderDocumentChip(result.document);
+            showToast('Document atașat. Poți pune întrebări despre el.');
+        } catch (err) {
+            statusEl.hidden = false;
+            statusEl.className = 'field-hint ocr-warning';
+            statusEl.textContent = err.message;
+        } finally {
+            attachInput.value = '';
+        }
+    });
+}
+
+let currentDocumentId = null;
+
+/** Shows the small "N pag. · nume.pdf · ✕" pill above the chat input and
+ * remembers the document so sendMessage can include it on the next turn. */
+function renderDocumentChip(document_) {
+    currentDocumentId = document_.id;
+
+    const chip = document.getElementById('document-chip');
+    if (!chip) return;
+    chip.innerHTML = '';
+
+    const label = document.createElement('span');
+    label.textContent = `${document_.page_count} pag. · ${document_.filename}`;
+    chip.appendChild(label);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'document-chip-close';
+    closeBtn.setAttribute('aria-label', 'Detașează documentul');
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', () => {
+        clearActiveDocument();
+        showToast('Document detașat.');
+    });
+    chip.appendChild(closeBtn);
+
+    chip.hidden = false;
+}
+
+/** Detaches the active document from the chat, without touching the stored
+ * conversation - the document itself stays in the conversation's history in
+ * the database, this only clears what the client sends on future turns. */
+function clearActiveDocument() {
+    currentDocumentId = null;
+    const chip = document.getElementById('document-chip');
+    if (chip) {
+        chip.hidden = true;
+        chip.innerHTML = '';
+    }
 }
 
 /* -------------------------------------------------------------------------
@@ -208,7 +314,11 @@ async function sendMessage() {
         // apiFetch already prefixes /api/v1 and sends the session cookie.
         const response = await apiFetch('/chat', {
             method: 'POST',
-            body: JSON.stringify({ message, conversation_id: currentConversationId }),
+            body: JSON.stringify({
+                message,
+                conversation_id: currentConversationId,
+                document_id: currentDocumentId,
+            }),
         });
 
         typingBubble.remove();
@@ -238,6 +348,7 @@ async function sendMessage() {
  * from the current conversation - the next message starts a new one. */
 function startNewConversation() {
     setCurrentConversationId(null);
+    clearActiveDocument();
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = '';
     appendChatBubble('ai', CHAT_WELCOME_TEXT);
@@ -386,6 +497,7 @@ function renderConversationHistory() {
 
 async function openConversation(conversationId) {
     setCurrentConversationId(conversationId);
+    clearActiveDocument();
     renderConversationHistory();
     showConversationHistoryError();
 

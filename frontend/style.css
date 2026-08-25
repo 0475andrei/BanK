@@ -1824,6 +1824,35 @@ html.i18n-pending body { visibility: hidden; }
     margin: -10px 20px 12px;
 }
 
+#document-attach-status {
+    margin: -10px 20px 12px;
+}
+
+.document-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 20px 0;
+    padding: 6px 10px;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--primary-teal);
+    border-radius: var(--border-radius-sm);
+    font-size: 12px;
+    color: var(--text-muted);
+    width: fit-content;
+}
+
+.document-chip-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    padding: 0;
+}
+.document-chip-close:hover { color: var(--expense-red); }
+
 .ocr-upload-box { margin-bottom: 20px; }
 
 .file-dropzone {

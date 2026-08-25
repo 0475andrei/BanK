@@ -23,9 +23,8 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 if TYPE_CHECKING:
-    from supabase import AsyncClient
-
     from app.modules.users.schemas import UserRead
+    from supabase import AsyncClient
 
 
 class IdentityError(Exception):
@@ -68,6 +67,17 @@ class Context(BaseModel):
     #: no conversation (the CLI's `dev_context`) - a propose-tool used from
     #: there fails cleanly as a tool error, not a crash.
     conversation_id: str | None = None
+    #: Set only when the incoming ChatRequest named a document (see
+    #: chat/router.py, which verifies ownership via
+    #: documents_service.get_document BEFORE this is ever set - so by the
+    #: time a tool or the orchestrator sees this field, "the caller owns
+    #: this document" is already an established fact, not something either
+    #: of them re-checks). This is the ONLY thing that scopes
+    #: `read_document` - the tool takes no document_id argument, precisely
+    #: so the model can never ask to read a document by naming one (see
+    #: app/ai/tools/document_tools.py). None means no document is active in
+    #: this turn, the ordinary case for every agent except DocumentAgent.
+    active_document_id: str | None = None
 
     @field_validator("account_ids", mode="before")
     @classmethod
@@ -140,7 +150,11 @@ def dev_context() -> Context:
 
 
 def build_context(
-    user_id: str, account_ids: Sequence[str], *, conversation_id: str | None = None
+    user_id: str,
+    account_ids: Sequence[str],
+    *,
+    conversation_id: str | None = None,
+    active_document_id: str | None = None,
 ) -> Context:
     """Explicit construction point for callers that already know the user.
 
@@ -148,11 +162,20 @@ def build_context(
     account list should use `build_context_for_user` instead, which looks the
     accounts up rather than trusting a caller-supplied list.
     """
-    return Context(user_id=user_id, account_ids=tuple(account_ids), conversation_id=conversation_id)
+    return Context(
+        user_id=user_id,
+        account_ids=tuple(account_ids),
+        conversation_id=conversation_id,
+        active_document_id=active_document_id,
+    )
 
 
 async def build_context_for_user(
-    user: UserRead, supabase: AsyncClient, *, conversation_id: str | None = None
+    user: UserRead,
+    supabase: AsyncClient,
+    *,
+    conversation_id: str | None = None,
+    active_document_id: str | None = None,
 ) -> Context:
     """Build a verified `Context` for an already-authenticated user.
 
@@ -181,4 +204,5 @@ async def build_context_for_user(
         user_id=str(user.id),
         account_ids=tuple(str(account["id"]) for account in accounts),
         conversation_id=conversation_id,
+        active_document_id=active_document_id,
     )

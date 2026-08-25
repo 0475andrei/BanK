@@ -6,6 +6,7 @@ from app.modules.beneficiaries.router import router as beneficiaries_router
 from app.modules.card_orders.router import router as card_orders_router
 from app.modules.cards.router import router as cards_router
 from app.modules.chat.router import router as chat_router
+from app.modules.documents.router import router as documents_router
 from app.modules.face_auth.router import router as face_auth_router
 from app.modules.iban_ocr.router import router as iban_ocr_router
 from app.modules.id_ocr.router import router as id_ocr_router
@@ -34,6 +35,7 @@ api_router.include_router(payments_router, prefix="/payments", tags=["payments"]
 api_router.include_router(beneficiaries_router, prefix="/beneficiaries", tags=["beneficiaries"])
 api_router.include_router(users_router, prefix="/users", tags=["users"])
 api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
+api_router.include_router(documents_router, prefix="/documents", tags=["documents"])
 api_router.include_router(id_ocr_router, prefix="/id-ocr", tags=["id-ocr"])
 api_router.include_router(iban_ocr_router, prefix="/iban-ocr", tags=["iban-ocr"])
 api_router.include_router(onboarding_router, prefix="/onboarding", tags=["onboarding"])
