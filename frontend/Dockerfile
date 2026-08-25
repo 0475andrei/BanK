@@ -9,7 +9,8 @@ WORKDIR /usr/share/nginx/html
 # Only the static app - deliberately explicit rather than `COPY . .`, so
 # stray files in this directory never end up published by the web server.
 COPY index.html login.html register.html forgot-password.html enroll-device.html ./
+COPY admin.html ./
 COPY api.js app.js language.js style.css ./
-COPY i18n ./i18n
+COPY admin.js admin.css ./
 COPY i18n ./i18n
 COPY static ./static

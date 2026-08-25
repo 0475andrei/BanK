@@ -13,6 +13,7 @@ from supabase import AsyncClient
 from app.config import settings
 from app.core.audit import record_audit_event
 from app.core.exceptions import (
+    AccountBlockedError,
     EmailAlreadyRegisteredError,
     InvalidResetCodeError,
     LoginRateLimitedError,
@@ -86,7 +87,29 @@ async def _resolve_referral(supabase: AsyncClient, referral_code: str | None) ->
 
 async def start_session(supabase: AsyncClient, user: UserRead) -> str:
     """Creates a session row and returns the raw token to put in the
-    cookie. Shared by register (auto-login) and login."""
+    cookie. Shared by register (auto-login) and login.
+
+    Also THE login-side block check. Every way into a session goes through
+    here - password login, register's auto-login, face login
+    (face_auth/service.py) and trusted-device login
+    (trusted_devices/service.py) - so a blocked user is refused a cookie
+    once, here, instead of in four places that could drift apart.
+
+    The state is re-read from the database rather than taken from `user`:
+    callers build that object in different ways (some from `select("*")`,
+    one from a fresh insert), and authorisation must not depend on which.
+    """
+    blocked_resp = (
+        await supabase.table("users")
+        .select("blocked_at")
+        .eq("id", str(user.id))
+        .maybe_single()
+        .execute()
+    )
+    blocked_row = blocked_resp.data if blocked_resp is not None else None
+    if blocked_row is not None and blocked_row.get("blocked_at") is not None:
+        raise AccountBlockedError()
+
     token = generate_session_token()
     expires_at = datetime.now(UTC) + timedelta(seconds=settings.SESSION_TTL_SECONDS)
     await supabase.table("sessions").insert(

@@ -105,6 +105,17 @@ class ForbiddenError(AppError):
     default_message = "Not allowed to access this resource."
 
 
+class AccountBlockedError(AppError):
+    """The credentials are valid; the account itself has been disabled by an
+    admin. Distinct from UnauthorizedError on purpose - "wrong password" and
+    "your account is blocked" are different situations, and the user can do
+    nothing about the second by retrying."""
+
+    status_code = 403
+    error_code = "account_blocked"
+    default_message = "This account has been blocked. Contact support."
+
+
 class InvalidIdempotencyKeyError(AppError):
     status_code = 400
     error_code = "invalid_idempotency_key"

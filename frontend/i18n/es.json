@@ -1,1 +1,170 @@
-{"Prezentare Generală":"Resumen","Asistent AI & Proiecții":"Asistente de IA y proyecciones","Toate Tranzacțiile":"Todas las transacciones","Cardurile Mele":"Mis tarjetas","Investiții & Bugetare":"Inversiones y presupuesto","Plăți":"Pagos","Conversații recente":"Conversaciones recientes","Notificări":"Notificaciones","Nicio notificare încă.":"Aún no hay notificaciones.","Profilul meu":"Mi perfil","Log out":"Cerrar sesión","Total Balance":"Saldo total","Cont nou":"Nueva cuenta","Transferă":"Transferir","Conturile mele":"Mis cuentas","Tranzacții Recente":"Transacciones recientes","Vezi toate":"Ver todo","Se încarcă...":"Cargando...","Anulează":"Cancelar","Confirmă":"Confirmar","Password":"Contraseña","Log in":"Iniciar sesión","Log in to your account":"Inicia sesión en tu cuenta","Register":"Registrarse","Create your account":"Crea tu cuenta","Resetare parolă":"Restablecer contraseña","Alege limba":"Elegir idioma","Choose language":"Elegir idioma"}
+{
+    "common":  {
+                   "Prezentare Generală":  "Resumen",
+                   "Asistent AI \u0026 Proiecții":  "Asistente de IA y proyecciones",
+                   "Toate Tranzacțiile":  "Todas las transacciones",
+                   "Cardurile Mele":  "Mis tarjetas",
+                   "Investiții \u0026 Bugetare":  "Inversiones y presupuesto",
+                   "Plăți":  "Pagos",
+                   "Conversații recente":  "Conversaciones recientes",
+                   "Notificări":  "Notificaciones",
+                   "Nicio notificare încă.":  "Aún no hay notificaciones.",
+                   "Profilul meu":  "Mi perfil",
+                   "Log out":  "Cerrar sesión",
+                   "Total Balance":  "Saldo total",
+                   "Cont nou":  "Nueva cuenta",
+                   "Transferă":  "Transferir",
+                   "Conturile mele":  "Mis cuentas",
+                   "Tranzacții Recente":  "Transacciones recientes",
+                   "Vezi toate":  "Ver todo",
+                   "Se încarcă...":  "Cargando...",
+                   "Anulează":  "Cancelar",
+                   "Confirmă":  "Confirmar",
+                   "Password":  "Contraseña",
+                   "Log in":  "Iniciar sesión",
+                   "Log in to your account":  "Inicia sesión en tu cuenta",
+                   "Register":  "Registrarse",
+                   "Create your account":  "Crea tu cuenta",
+                   "Resetare parolă":  "Restablecer contraseña",
+                   "Alege limba":  "Elegir idioma",
+                   "Choose language":  "Elegir idioma",
+                   "Caută tranzacții, carduri, contacte":  {
+
+                                                           },
+                   "Nicio notificare încă":  {
+
+                                             },
+                   "Se încarcă":  {
+
+                                  },
+                   "Conversație nouă":  "New conversation",
+                   "Întreabă asistentul AI":  {
+
+                                              },
+                   "Generează Card Virtual":  "Create virtual card",
+                   "Comandă Card Fizic":  "Order physical card",
+                   "Deschide un cont nou":  "Open a new account",
+                   "Email":  "Email",
+                   "No account yet?":  "No account yet?",
+                   "First name":  "First name",
+                   "Last name":  "Last name",
+                   "At least 8 characters":  "At least 8 characters",
+                   "Trimite codul":  "Send code",
+                   "Verifică codul":  "Verify code",
+                   "Parolă nouă":  "New password",
+                   "Caută tranzacții, carduri, contacte...":  "Search transactions, cards, contacts...",
+                   "Întreabă asistentul AI...":  "Ask the AI assistant...",
+                   "search_placeholder":  "Buscar transacciones, tarjetas y contactos..."
+               },
+    "dashboard":  {
+                      "Fără activitate încă.":  "Aún no hay actividad.",
+                      "Conectat • poate citi soldurile conturilor tale":  "Conectado • puede leer los saldos de tus cuentas",
+                      "Conversație nouă":  "Nueva conversación",
+                      "Anulează cardul":  "Cancelar tarjeta",
+                      "Generează Card Virtual":  "Crear tarjeta virtual",
+                      "Comandă Card Fizic":  "Pedir tarjeta física",
+                      "Cheltuieli pe Categorii (Luna curentă)":  "Gastos por categoría (mes actual)",
+                      "Supermarket (40%)":  "Supermercado (40%)",
+                      "Facturi (35%)":  "Facturas (35%)",
+                      "Divertisment (25%)":  "Entretenimiento (25%)",
+                      "Deschide un cont nou":  "Abrir una cuenta nueva",
+                      "Cont de economii":  "Cuenta de ahorro",
+                      "Flexibil - retragi oricând":  "Flexible — retira cuando quieras",
+                      "Cont cu dobândă fixă":  "Cuenta con interés fijo",
+                      "Alegi perioada - rată mai mare":  "Elige el plazo — mayor tasa",
+                      "Conturile mele de economii":  "Mis cuentas de ahorro",
+                      "Fără activitate încă":  {
+
+                                               },
+                      "No activity":  "No activity yet.",
+                      "no_activity":  "Aún no hay actividad."
+                  },
+    "savings":  {
+                    "up_to_rate":  "hasta {rate}% anual",
+                    "no_accounts":  "Aún no hay cuentas de ahorro."
+                },
+    "cards":  {
+                  "cancel":  "Cancelar tarjeta",
+                  "label":  "Tarjeta",
+                  "expiry":  "Caduca",
+                  "cvv":  "CVV",
+                  "limit":  "Límite",
+                  "show_details":  "Mostrar caducidad y CVV",
+                  "hide_details":  "Ocultar caducidad y CVV",
+                  "status_active":  "Activa",
+                  "status_frozen":  "Bloqueada",
+                  "status_cancelled":  "Cancelada",
+                  "empty":  "Aún no tienes tarjetas. Crea tu primera tarjeta virtual.",
+                  "cancel_confirm":  "¿Seguro que quieres cancelar esta tarjeta? No se puede reactivar."
+              },
+    "brand":  { "tagline":  "TU COMODIDAD FINANCIERA" },
+    "registration":  {
+                    "drop_id_optional":  "Arrastra la foto del documento aquí o elige un archivo (opcional)",
+                    "title":  "Crea tu cuenta", "first_name":  "Nombre", "last_name":  "Apellidos", "email":  "Correo electrónico", "password":  "Contraseña", "password_hint":  "Al menos 8 caracteres", "submit":  "Registrarse",
+                    "manual":  "Entrada manual", "chat_mode":  "Chat con Comodul", "ocr_label":  "Entrada automática del documento (opcional)", "drop_id":  "Arrastra la foto del documento aquí o elige un archivo", "ocr_status":  "Solo PNG. Completa automáticamente el nombre, CNP y dirección.", "national_id":  "Documento nacional (CNP)", "national_id_hint":  "El sexo y la fecha de nacimiento se leen automáticamente", "phone":  "Teléfono (opcional)", "address":  "Dirección (opcional)", "referral":  "Código de referido (opcional)", "referral_hint":  "¿Tienes un código de referido? Tu nueva cuenta recibe 500 RON de regalo.", "chat_status":  "Te ayudaré a abrir una cuenta a tu ritmo", "chat_welcome":  "¡Hola! Soy Comodul y te ayudaré a abrir una cuenta BanK. Dime tu nombre o sube una foto del documento.", "chat_placeholder":  "Escribe un mensaje...", "already_account":  "¿Ya tienes una cuenta?"
+                },
+    "auth":  {
+                    "face_login":  "Iniciar sesión con Face",
+                    "face_password":  "Iniciar sesión con contraseña",
+                    "forgot_password":  "¿Has olvidado la contraseña?"
+                },
+    "profile":  {
+                    "avatar":  "Avatar",
+                    "referral":  "Mi código de referido",
+                    "change_password":  "Cambiar contraseña",
+                    "face_login":  "Inicio con Face",
+                    "back":  "Atrás",
+                    "choose_avatar":  "Elige un emoji para tu avatar",
+                    "referral_hint":  "Quien se registre con este código recibirá 500 RON en su primera cuenta.",
+                    "current_password":  "Contraseña actual",
+                    "new_password":  "Nueva contraseña",
+                    "confirm_password":  "Confirmar nueva contraseña",
+                    "start_camera":  "Iniciar cámara",
+                    "capture_activate":  "Capturar y activar",
+                    "disable_face_login":  "Desactivar inicio con Face",
+                    "face_active":  "El inicio con Face está activado en tu cuenta.",
+                    "face_inactive":  "El inicio con Face aún no está activado. Inicia la cámara y toma una foto.",
+                    "face_success":  "¡Inicio con Face activado correctamente!"
+                },
+    "payments":  {
+                     "Trimite bani printr-un IBAN":  "Enviar dinero por IBAN",
+                     "Din contul":  "Desde la cuenta",
+                     "Copiază IBAN-ul":  "Copiar IBAN",
+                     "IBAN destinatar":  "IBAN del beneficiario",
+                     "Nume beneficiar":  "Nombre del beneficiario",
+                     "Sumă":  "Importe",
+                     "Descriere":  "Descripción",
+                     "(opțional)":  "(opcional)",
+                     "Salvează acest beneficiar în Contactele mele":  "Guardar este beneficiario en Mis contactos",
+                     "Trimite plata":  "Enviar pago",
+                     "Contactele mele":  "Mis contactos",
+                     "Istoric plăți":  "Historial de pagos",
+                     "contacts_load_error":  "No se pudieron cargar los contactos",
+                     "no_contacts":  "Aún no hay contactos; aparecerán automáticamente tras el primer pago.",
+                     "history_load_error":  "No se pudo cargar el historial",
+                     "no_payments":  "Aún no hay pagos.",
+                     "account_holder":  "Titular de la cuenta",
+                     "iban_not_found":  "No se encontró ninguna cuenta para este IBAN.",
+                     "sent_success":  "¡Pago enviado correctamente!"
+                 },
+    "chat":  {
+                 "welcome":  "Hello! I am your banking assistant. I can check your account balances and answer banking questions. How can I help?",
+                 "typing":  "The assistant is thinking...",
+                 "errors":  {
+                                "unavailable":  "The AI assistant is currently unavailable. Please try again.",
+                                "invalid":  "The message could not be sent. Check what you wrote."
+                            },
+                 "time":  {
+                              "seconds":  "a few seconds ago",
+                              "minute":  "a minute ago",
+                              "minutes":  "{count} minutes ago",
+                              "hour":  "an hour ago",
+                              "hours":  "{count} hours ago",
+                              "yesterday":  "yesterday",
+                              "days":  "{count} days ago"
+                          }
+             },
+    "errors":  {
+                   "generic":  "Something went wrong. Please try again."
+               }
+}
