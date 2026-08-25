@@ -2192,7 +2192,7 @@ function renderBeneficiariesList(contacts) {
     list.innerHTML = contacts.map(c => `
         <div class="contact-item" data-id="${c.id}" data-iban="${escapeHTML(c.iban)}" data-name="${escapeHTML(c.display_name)}">
             <div class="contact-item-fill">
-                <div class="name">${escapeHTML(c.display_name)}${c.is_subscription ? ' <span class="contact-subscription-badge">Abonament</span>' : ''}</div>
+                <div class="name">${escapeHTML(c.display_name)}${c.is_subscription ? ` <span class="contact-subscription-badge" data-i18n="payments.subscription_badge">${t('payments.subscription_badge', 'Abonament')}</span>` : ''}</div>
                 <div class="iban">${escapeHTML(c.iban)}</div>
                 ${c.website ? `<a class="contact-website" href="${escapeHTML(c.website)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHTML(c.website)}</a>` : ''}
             </div>

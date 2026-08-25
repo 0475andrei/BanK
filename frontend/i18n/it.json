@@ -57,6 +57,7 @@
                    "search_placeholder":  "Cerca transazioni, carte e contatti..."
                },
     "dashboard":  {
+                      "Demo": "Demo", "scheduled_title": "Bonifici programmati",
                       "Fără activitate încă.":  "Nessuna attività ancora.",
                       "Conectat • poate citi soldurile conturilor tale":  "Connesso • può leggere i saldi dei tuoi conti",
                       "Conversație nouă":  "Nuova conversazione",
@@ -108,7 +109,10 @@
                     "face_password":  "Accedi con password",
                     "forgot_password":  "Password dimenticata?"
                 },
+    "recovery": { "title": "Reimposta password - BanK", "heading": "Reimposta password", "request_hint": "Inserisci l’e-mail del tuo conto. Se esiste, riceverai un codice di 6 cifre tramite Teams.", "code_sent": "Se l’indirizzo esiste, è stato inviato un codice tramite Teams.", "code_label": "Codice (6 cifre)", "resend_prompt": "Non hai ricevuto il codice?", "resend": "Invia di nuovo", "code_confirmed": "Codice confermato. Scegli una nuova password.", "confirm_password": "Conferma nuova password", "submit": "Reimposta password", "remembered": "Ricordi la password?", "password_mismatch": "Le password non coincidono." },
+    "enrollment": { "title": "Verifica dispositivo - BanK", "heading": "Riconosci questo dispositivo", "description": "Ti abbiamo inviato un codice di 6 cifre tramite Teams. Inseriscilo per accedere la prossima volta solo con la password.", "confirm": "Conferma dispositivo", "later": "Più tardi" },
     "profile":  {
+                    "show_password": "Mostra password",
                     "avatar":  "Avatar",
                     "referral":  "Il mio codice referral",
                     "change_password":  "Cambia password",
@@ -126,7 +130,7 @@
                     "face_inactive":  "L’accesso Face non è ancora attivo. Avvia la fotocamera e scatta una foto.",
                     "face_success":  "Accesso Face attivato con successo!"
                 },
-    "payments":  {
+    "payments":  { "add_contact": "Aggiungi contatto", "name": "Nome", "iban": "IBAN", "website": "Sito web (facoltativo, ad es. per abbonamenti)", "subscription": "È un abbonamento (Netflix, Spotify, ecc.)", "save": "Salva", "subscription_badge": "Abbonamento",
                      "Trimite bani printr-un IBAN":  "Invia denaro tramite IBAN",
                      "Din contul":  "Dal conto",
                      "Copiază IBAN-ul":  "Copia IBAN",
