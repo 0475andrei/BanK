@@ -2217,6 +2217,60 @@ html.i18n-pending body { visibility: hidden; }
     opacity: 0.5;
 }
 
+/* Card status + freeze/unfreeze action merged into one self-updating toggle:
+   it shows the current state and, on click, becomes the other state. */
+.status-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border-radius: 12px;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease, opacity 0.2s ease;
+}
+
+.status-toggle-btn:active { transform: scale(0.96); }
+
+.status-toggle-btn.active {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: var(--income-green);
+}
+
+.status-toggle-btn.active:hover {
+    background-color: rgba(16, 185, 129, 0.2);
+}
+
+.status-toggle-btn.frozen {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(129, 140, 248, 0.16));
+    color: #7dd3fc;
+}
+
+.status-toggle-btn.frozen:hover {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.28), rgba(129, 140, 248, 0.28));
+}
+
+.status-toggle-btn i {
+    width: 12px;
+    height: 12px;
+    stroke-width: 2.5;
+}
+
+.status-toggle-btn.frozen i {
+    filter: drop-shadow(0 0 3px rgba(125, 211, 252, 0.65));
+}
+
+.status-toggle-btn.is-toggling {
+    opacity: 0.6;
+    cursor: default;
+    transform: none;
+}
+
+.status-toggle-btn:disabled { cursor: default; }
+
 .card-actions-row {
     display: flex;
     gap: 16px;
@@ -2227,7 +2281,6 @@ html.i18n-pending body { visibility: hidden; }
 }
 
 .card-cancel-btn,
-.card-freeze-btn,
 .card-limit-btn {
     background: none;
     border: none;
@@ -2239,7 +2292,6 @@ html.i18n-pending body { visibility: hidden; }
 }
 
 .card-cancel-btn:hover { color: var(--expense-red); }
-.card-freeze-btn:hover,
 .card-limit-btn:hover { color: var(--primary-teal); }
 
 .card-reveal-number {

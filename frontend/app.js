@@ -1615,14 +1615,16 @@ function renderCardsList(cards) {
                     ` : ''}
                     <button class="card-eye-btn" title="Arată expirare și CVV" aria-label="Arată expirare și CVV"><i data-lucide="eye"></i></button>
                 </div>
-                <div class="status-indicator ${card.status}">${card.status === 'frozen' ? '<i data-lucide="snowflake"></i>' : ''}${CARD_STATUS_LABELS[card.status] || card.status}</div>
+                ${isCancelled
+                    ? `<div class="status-indicator cancelled">${CARD_STATUS_LABELS.cancelled}</div>`
+                    : `<button class="status-toggle-btn ${card.status}" data-card-id="${card.id}" data-action="${card.status === 'frozen' ? 'unfreeze' : 'freeze'}" title="${card.status === 'frozen' ? 'Apasă pentru a debloca cardul' : 'Apasă pentru a bloca temporar cardul'}">
+                        <i data-lucide="${card.status === 'frozen' ? 'snowflake' : 'shield-check'}"></i>
+                        <span>${CARD_STATUS_LABELS[card.status] || card.status}</span>
+                    </button>`
+                }
             </div>
             ${!isCancelled ? `
                 <div class="card-actions-row">
-                    ${card.status === 'frozen'
-                        ? `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="unfreeze">${t('cards.unfreeze')}</button>`
-                        : `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="freeze">${t('cards.freeze')}</button>`
-                    }
                     <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}">${t('cards.limit')}</button>
                     <button class="card-cancel-btn" data-card-id="${card.id}">${t('cards.cancel')}</button>
                 </div>
@@ -1657,13 +1659,17 @@ function renderCardsList(cards) {
         });
     });
 
-    list.querySelectorAll('.card-freeze-btn').forEach(btn => {
+    list.querySelectorAll('.status-toggle-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const path = btn.dataset.action === 'freeze' ? 'freeze' : 'unfreeze';
+            btn.disabled = true;
+            btn.classList.add('is-toggling');
             try {
                 await apiFetch(`/cards/${btn.dataset.cardId}/${path}`, { method: 'POST' });
                 await loadCards();
             } catch (err) {
+                btn.disabled = false;
+                btn.classList.remove('is-toggling');
                 alert(err.message);
             }
         });
