@@ -736,22 +736,208 @@ async function refreshDashboard() {
     await loadScheduledTransfers();
 }
 
-//: Cycled through in order for however many categories come back - the
-//: backend doesn't assign colors (it's just names/amounts), so the mapping
-//: is purely a frontend rendering concern.
-const SPENDING_CATEGORY_COLORS = [
-    '#2DD4BF', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444',
-    '#ec4899', '#22c55e', '#06b6d4', '#a855f7', '#f97316',
-    '#84cc16', '#e11d48', '#64748b',
+//: Fixed hue order, validated (CVD-safe under protan/deuteranopia simulation,
+//: normal-vision floor, contrast on this app's --bg-surface #1A2235 - see
+//: dataviz skill's palette.md/color-formula.md) - never cycled, never
+//: generated. Assigned to real categories only, in order of first
+//: appearance; "Altele" always gets SPENDING_OTHER_COLOR instead, win or
+//: lose, so a residual/mixed bucket never impersonates a real category's hue.
+const SPENDING_CATEGORY_PALETTE = [
+    '#3987e5', // blue
+    '#d95926', // orange
+    '#199e70', // aqua
+    '#c98500', // yellow
+    '#d55181', // magenta
+    '#008300', // green
 ];
+const SPENDING_OTHER_CATEGORY_NAME = 'Altele';
+const SPENDING_OTHER_COLOR = '#898781';
+
+//: Donut/pie is only honest "at a glance" up to ~6 slices (see dataviz
+//: skill's anti-patterns.md) - past that, distinct hues run out and slivers
+//: blur together. Anything past the cap folds into one trailing "Altele",
+//: merged with the backend's own "Altele" if it sent one.
+const SPENDING_MAX_DIRECT_CATEGORIES = 6;
+
+/** Caps at SPENDING_MAX_DIRECT_CATEGORIES real (non-"Altele") categories,
+ * folding the backend's own "Altele" plus any overflow past the cap into one
+ * trailing bucket - always last, regardless of its size, so a residual/mixed
+ * category is never mistaken for a single coherent one that happens to rank
+ * high. Categories arrive pre-sorted descending by amount (see
+ * categorize_transactions.py), so `.slice` alone preserves rank order. */
+function foldSpendingCategories(categories) {
+    const real = categories.filter(c => c.name !== SPENDING_OTHER_CATEGORY_NAME);
+    const backendOther = categories.find(c => c.name === SPENDING_OTHER_CATEGORY_NAME);
+
+    const kept = real.slice(0, SPENDING_MAX_DIRECT_CATEGORIES);
+    const overflow = real.slice(SPENDING_MAX_DIRECT_CATEGORIES);
+
+    let otherTotalMinor = backendOther ? backendOther.total_minor : 0;
+    let otherPercentage = backendOther ? backendOther.percentage : 0;
+    overflow.forEach(c => {
+        otherTotalMinor += c.total_minor;
+        otherPercentage += c.percentage;
+    });
+
+    const result = kept.map(c => ({ ...c, color: null }));
+    result.forEach((c, i) => { c.color = SPENDING_CATEGORY_PALETTE[i % SPENDING_CATEGORY_PALETTE.length]; });
+
+    if (otherTotalMinor > 0) {
+        result.push({
+            name: SPENDING_OTHER_CATEGORY_NAME,
+            total_minor: otherTotalMinor,
+            percentage: otherPercentage,
+            color: SPENDING_OTHER_COLOR,
+        });
+    }
+    return result;
+}
+
+//: Geometry shared between the SVG markup and the hover math below -
+//: viewBox is square, ring sits centered, with enough margin past the
+//: stroke for the hover "pop out" translate and drop-shadow to never clip.
+const SPENDING_DONUT_SIZE = 200;
+const SPENDING_DONUT_CENTER = SPENDING_DONUT_SIZE / 2;
+const SPENDING_DONUT_RADIUS = 68;
+const SPENDING_DONUT_STROKE = 26;
+const SPENDING_DONUT_GAP_PX = 3;
+const SPENDING_DONUT_HOVER_OFFSET = 8;
+const SPENDING_DONUT_CIRCUMFERENCE = 2 * Math.PI * SPENDING_DONUT_RADIUS;
+
+/** Outward (dx, dy) for a slice whose visual midpoint sits at `midAngleDeg`
+ * (0 = 12 o'clock, clockwise) - the direction a hovered slice "explodes"
+ * toward, and the direction its drop-shadow leans. */
+function angleToOffset(midAngleDeg, distance) {
+    const rad = (midAngleDeg * Math.PI) / 180;
+    return { dx: Math.sin(rad) * distance, dy: -Math.cos(rad) * distance };
+}
+
+/** Builds the ring's SVG markup: one <circle> per category, each a full
+ * circle whose stroke-dasharray only paints its own arc (with a small gap
+ * on either side instead of a border - see dataviz skill's anti-patterns.md
+ * on borders between marks). Positioning, the mount animation, and the
+ * hover pop-out are ALL one CSS `transform` chain on the circle itself
+ * (`translate() rotate() scale()`, right-to-left composition) driven by
+ * --rot/--hx/--hy/--scale custom properties - deliberately NOT split across
+ * an SVG `rotate` attribute on a wrapping <g> plus a separate CSS transform
+ * on the child, which would nest the child's translate inside the parent's
+ * rotation and swing the hover offset off in the wrong direction. */
+function buildSpendingDonutSegments(categories) {
+    let cumulativePercent = 0;
+    return categories.map((cat, i) => {
+        const startPercent = cumulativePercent;
+        cumulativePercent += cat.percentage;
+        const segLen = (cat.percentage / 100) * SPENDING_DONUT_CIRCUMFERENCE;
+        const visibleLen = Math.max(segLen - SPENDING_DONUT_GAP_PX, 1);
+        const startAngleDeg = (startPercent / 100) * 360;
+        const midAngleDeg = startAngleDeg + ((cat.percentage / 100) * 360) / 2;
+        const { dx, dy } = angleToOffset(midAngleDeg, SPENDING_DONUT_HOVER_OFFSET);
+
+        return `
+            <g class="spending-segment" data-index="${i}" tabindex="0"
+               role="img" aria-label="${escapeHTML(cat.name)}"
+               style="--rot: ${(startAngleDeg - 90).toFixed(3)}deg; --hx-active: ${dx.toFixed(2)}px; --hy-active: ${dy.toFixed(2)}px; --seg-delay: ${i * 70}ms;">
+                <circle
+                    cx="${SPENDING_DONUT_CENTER}" cy="${SPENDING_DONUT_CENTER}" r="${SPENDING_DONUT_RADIUS}"
+                    fill="none" stroke="${cat.color}" stroke-width="${SPENDING_DONUT_STROKE}"
+                    stroke-linecap="round"
+                    stroke-dasharray="0 ${SPENDING_DONUT_GAP_PX / 2} ${visibleLen} ${SPENDING_DONUT_CIRCUMFERENCE}"
+                ></circle>
+            </g>
+        `;
+    }).join('');
+}
+
+/** Renders the SVG donut + center total into `#spending-category-donut`
+ * (a plain wrapper div, not itself an SVG - built fresh each load since the
+ * category set can change). */
+function renderSpendingDonut(donutWrap, categories, primaryCurrency) {
+    const totalMinor = categories.reduce((sum, c) => sum + c.total_minor, 0);
+    donutWrap.innerHTML = `
+        <svg class="spending-donut" viewBox="0 0 ${SPENDING_DONUT_SIZE} ${SPENDING_DONUT_SIZE}" role="group" aria-label="Cheltuieli pe categorii">
+            ${buildSpendingDonutSegments(categories)}
+        </svg>
+        <div class="spending-donut-center">
+            <span class="spending-donut-total-label">Total</span>
+            <span class="spending-donut-total-value">${formatMoney(totalMinor, primaryCurrency)}</span>
+        </div>
+        <div class="spending-donut-tooltip" id="spending-donut-tooltip" hidden></div>
+    `;
+    // Segments mount at scale 0 (see CSS) and grow in, staggered - the
+    // "animated" entrance. Two rAFs so the browser commits the 0-scale
+    // frame before the transition-triggering class lands (one is flaky).
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        donutWrap.classList.add('is-mounting');
+        // Swap to the fast, undelayed transition once every staggered
+        // entrance has finished, so a later slice's hover response doesn't
+        // inherit its mount stagger and feel laggy (see the CSS comment).
+        const mountDurationMs = categories.length * 70 + 550;
+        setTimeout(() => {
+            donutWrap.classList.remove('is-mounting');
+            donutWrap.classList.add('is-mounted');
+        }, mountDurationMs);
+    }));
+}
+
+/** Cross-highlights a category across the donut and the legend: hovering or
+ * focusing either one highlights that category's slice + row and dims every
+ * other one, so a colorblind user can confirm "this slice = this row" by
+ * position/highlight rather than by matching hues. */
+function wireSpendingCategoryHover(container, categories, primaryCurrency) {
+    const donutWrap = container.querySelector('.spending-donut-wrap');
+    const svg = donutWrap.querySelector('.spending-donut');
+    const tooltip = donutWrap.querySelector('#spending-donut-tooltip');
+    const legend = container.querySelector('.legend');
+    if (!svg || !legend) return;
+
+    function setActive(index) {
+        svg.classList.toggle('has-active', index !== null);
+        legend.classList.toggle('has-active', index !== null);
+        svg.querySelectorAll('.spending-segment').forEach(seg => {
+            seg.classList.toggle('is-active', Number(seg.dataset.index) === index);
+        });
+        legend.querySelectorAll('.legend-item').forEach(row => {
+            row.classList.toggle('is-active', Number(row.dataset.index) === index);
+        });
+
+        if (index === null) {
+            tooltip.hidden = true;
+            return;
+        }
+        const cat = categories[index];
+        tooltip.innerHTML = `
+            <span class="spending-donut-tooltip-value">${formatMoney(cat.total_minor, primaryCurrency)}</span>
+            <span class="spending-donut-tooltip-label">${escapeHTML(cat.name)} &middot; ${cat.percentage.toFixed(0)}%</span>
+        `;
+        tooltip.hidden = false;
+    }
+
+    svg.querySelectorAll('.spending-segment').forEach(seg => {
+        const index = Number(seg.dataset.index);
+        seg.addEventListener('pointerenter', () => setActive(index));
+        seg.addEventListener('pointerleave', () => setActive(null));
+        seg.addEventListener('focus', () => setActive(index));
+        seg.addEventListener('blur', () => setActive(null));
+    });
+
+    legend.querySelectorAll('.legend-item').forEach(row => {
+        const index = Number(row.dataset.index);
+        row.addEventListener('pointerenter', () => setActive(index));
+        row.addEventListener('pointerleave', () => setActive(null));
+        row.addEventListener('focus', () => setActive(index));
+        row.addEventListener('blur', () => setActive(null));
+    });
+}
 
 async function loadSpendingByCategory() {
-    const donut = document.getElementById('spending-category-donut');
+    const donutWrap = document.getElementById('spending-category-donut');
     const legend = document.getElementById('spending-category-legend');
+    const container = document.getElementById('spending-category-container');
 
     const active = currentAccounts.filter(a => a.status === 'active');
     if (active.length === 0) {
-        donut.style.background = 'var(--bg-dark)';
+        donutWrap.innerHTML = '';
+        donutWrap.style.display = 'none';
         legend.innerHTML = '<div class="empty-state">Niciun cont activ încă.</div>';
         return;
     }
@@ -766,13 +952,16 @@ async function loadSpendingByCategory() {
             `/insights/spending-by-category?start_date=${startDate}&end_date=${endDate}`
         );
     } catch (err) {
+        donutWrap.innerHTML = '';
+        donutWrap.style.display = 'none';
         legend.innerHTML = `<div class="empty-state">Nu s-au putut încărca categoriile: ${escapeHTML(err.message)}</div>`;
         return;
     }
 
-    const categories = data.categories.filter(c => c.total_minor > 0);
-    if (categories.length === 0) {
-        donut.style.background = 'var(--bg-dark)';
+    const rawCategories = data.categories.filter(c => c.total_minor > 0);
+    if (rawCategories.length === 0) {
+        donutWrap.innerHTML = '';
+        donutWrap.style.display = 'none';
         legend.innerHTML = '<div class="empty-state">Nicio cheltuială luna aceasta încă.</div>';
         return;
     }
@@ -781,25 +970,19 @@ async function loadSpendingByCategory() {
     // renderHeadlineBalance - amounts are shown in the first active
     // account's currency, since the backend has no "home currency" concept.
     const primaryCurrency = active[0].currency;
+    const categories = foldSpendingCategories(rawCategories);
 
-    let cumulativePercent = 0;
-    const gradientStops = categories.map((cat, i) => {
-        const color = SPENDING_CATEGORY_COLORS[i % SPENDING_CATEGORY_COLORS.length];
-        const start = cumulativePercent;
-        cumulativePercent += cat.percentage;
-        return `${color} ${start}% ${cumulativePercent}%`;
-    });
-    donut.style.background = `conic-gradient(${gradientStops.join(', ')})`;
+    donutWrap.style.display = '';
+    renderSpendingDonut(donutWrap, categories, primaryCurrency);
 
-    legend.innerHTML = categories.map((cat, i) => {
-        const color = SPENDING_CATEGORY_COLORS[i % SPENDING_CATEGORY_COLORS.length];
-        return `
-            <div class="legend-item">
-                <span class="dot" style="background-color: ${color};"></span>
-                ${escapeHTML(cat.name)} (${cat.percentage.toFixed(0)}%) &middot; ${formatMoney(cat.total_minor, primaryCurrency)}
-            </div>
-        `;
-    }).join('');
+    legend.innerHTML = categories.map((cat, i) => `
+        <div class="legend-item" data-index="${i}" tabindex="0">
+            <span class="dot" style="background-color: ${cat.color};"></span>
+            ${escapeHTML(cat.name)} (${cat.percentage.toFixed(0)}%) &middot; ${formatMoney(cat.total_minor, primaryCurrency)}
+        </div>
+    `).join('');
+
+    wireSpendingCategoryHover(container, categories, primaryCurrency);
 }
 
 async function loadAccounts() {
