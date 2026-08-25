@@ -39,6 +39,31 @@ def _extract_tool_result(trace: list[Message], tool_name: str) -> dict | None:
     return None
 
 
+def _redact_passwords(history: list[Message]) -> list[Message]:
+    """Defense-in-depth, on top of propose_registration's schema having no
+    password field at all (see onboarding/tool.py): that schema only
+    validates the tool's RESULT. The raw arguments a model requested are
+    preserved verbatim on the assistant's own tool_calls (needed so the
+    provider sees its own prior turn correctly on the next request) - a
+    model that doesn't perfectly follow the "never ask for a password"
+    instruction could still put one there, and this is client-held history
+    that round-trips back to the client and to the model on every later
+    turn. Strips a `password` key from any tool call's arguments,
+    regardless of which tool, before the history ever leaves this
+    process."""
+    redacted = []
+    for message in history:
+        if not message.tool_calls or not any("password" in c.arguments for c in message.tool_calls):
+            redacted.append(message)
+            continue
+        cleaned_calls = [
+            call.model_copy(update={"arguments": {k: v for k, v in call.arguments.items() if k != "password"}})
+            for call in message.tool_calls
+        ]
+        redacted.append(message.model_copy(update={"tool_calls": cleaned_calls}))
+    return redacted
+
+
 @router.post("/chat", response_model=OnboardingChatResponse)
 async def chat(
     payload: OnboardingChatRequest,
@@ -60,7 +85,9 @@ async def chat(
     except ProviderError as exc:
         raise AIProviderError() from exc
 
-    updated_history = [*conversation, *trace, Message(role="assistant", content=reply)]
+    updated_history = _redact_passwords(
+        [*conversation, *trace, Message(role="assistant", content=reply)]
+    )
 
     account_conflict = _extract_tool_result(trace, CheckExistingAccountTool.name)
     if account_conflict is not None and not account_conflict.get("exists"):
