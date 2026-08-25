@@ -16,6 +16,7 @@ import pytest
 from httpx import AsyncClient as HTTPXAsyncClient
 from supabase import AsyncClient
 
+from app.config import settings
 from app.modules.users.schemas import UserRead
 
 #: (method, path) for every route in app/modules/admin/router.py.
@@ -199,7 +200,14 @@ async def test_blocking_locks_the_user_out(
     supabase, authed_client, authed_client_factory, user_factory
 ):
     """The property that matters: an ALREADY logged-in user stops working the
-    moment they are blocked, not at their next login."""
+    moment they are blocked, not at their next login.
+
+    The status is 401, not 403: blocking deletes the user's session rows, so
+    `get_current_user` fails on "no such session" before it ever reads
+    `blocked_at`. That is the intended order - the session teardown is the
+    faster, harder stop. The `blocked_at` guard is what catches a session
+    that somehow survives, and is covered by the next test.
+    """
     admin_client, admin = authed_client
     await _promote(supabase, admin)
     victim = await user_factory()
@@ -214,8 +222,37 @@ async def test_blocking_locks_the_user_out(
     assert resp.json()["blocked_at"] is not None
 
     blocked = await victim_client.get("/api/v1/users/me")
-    assert blocked.status_code == 403
-    assert blocked.json()["error"]["code"] == "account_blocked"
+    assert blocked.status_code == 401
+
+
+async def test_blocked_user_is_refused_even_with_a_live_session(
+    supabase, authed_client, authed_client_factory, user_factory, session_token_factory
+):
+    """The `blocked_at` guard in get_current_user, isolated.
+
+    Blocking normally deletes the user's sessions, which would mask this
+    check - so here a session is minted directly AFTER the block (the
+    factory writes to `sessions` without going through start_session, which
+    would itself refuse). That reproduces the case the guard exists for: a
+    session that exists while the account is blocked.
+    """
+    admin_client, admin = authed_client
+    await _promote(supabase, admin)
+    victim = await user_factory()
+
+    await admin_client.patch(
+        f"/api/v1/admin/users/{victim.id}/blocked", json={"blocked": True}
+    )
+
+    # Session created after the block, bypassing start_session.
+    token = await session_token_factory(victim)
+    victim_client, _ = await authed_client_factory(victim)
+    victim_client.cookies.set(settings.SESSION_COOKIE_NAME, token)
+
+    resp = await victim_client.get("/api/v1/users/me")
+
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "account_blocked"
 
 
 async def test_blocked_user_cannot_log_in_again(

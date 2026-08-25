@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Start the whole app - database, API and frontend - in Docker.
+# Start the whole app - API, vision-service and frontend - in Docker.
+# (The database is hosted Supabase, reached over HTTPS - nothing local.)
 #
 #   ./run.sh          start everything (rebuilds if code changed)
 #   ./run.sh stop     stop everything

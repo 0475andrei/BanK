@@ -5,13 +5,10 @@ pre-auth registration endpoint, this only ever runs from inside the
 dashboard. See extractor.py for what's actually extracted and why it's
 local-only."""
 
-import tempfile
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, File, UploadFile
 
 from app.core.dependencies import get_current_user
-from app.core.exceptions import ValidationError
+from app.core.exceptions import AppError, ValidationError
 from app.modules.iban_ocr.extractor import extract_iban
 from app.modules.iban_ocr.schemas import IbanOcrResult
 from app.modules.users.schemas import UserRead
@@ -44,18 +41,16 @@ async def extract(
     if len(contents) > _MAX_UPLOAD_BYTES:
         raise ValidationError("File is too large (max 8 MB).")
 
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(contents)
-        tmp_path = Path(tmp.name)
-
     try:
-        fields = extract_iban(str(tmp_path))
+        # The suffix travels with the upload: vision-service picks its PDF
+        # reader or its image reader from it, exactly as the local extractor
+        # used to branch on the temp file's suffix.
+        fields = await extract_iban(contents, filename=f"upload{suffix}")
+    except AppError:
+        # A ValidationError (unreadable file) and a 502 (vision-service
+        # down) are different problems - keep them distinguishable.
+        raise
     except Exception as exc:
-        # PIL/fitz/tesseract can fail in many library-specific ways for a
-        # corrupt or unreadable file - all of them mean the same thing to
-        # the client: this isn't readable, enter the IBAN manually.
         raise ValidationError("Could not read the file. Try a clearer photo or PDF.") from exc
-    finally:
-        tmp_path.unlink(missing_ok=True)
 
     return IbanOcrResult(**{key: value for key, value in fields.items() if key != "raw_text"})

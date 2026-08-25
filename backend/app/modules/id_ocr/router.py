@@ -3,12 +3,9 @@ of the user's ID card. No session required - this runs before an account
 exists. See extractor.py for what's actually extracted and why it's
 local-only (no image ever leaves this machine)."""
 
-import tempfile
-from pathlib import Path
-
 from fastapi import APIRouter, File, UploadFile
 
-from app.core.exceptions import ValidationError
+from app.core.exceptions import AppError, ValidationError
 from app.modules.id_ocr.extractor import extract_id_fields
 from app.modules.id_ocr.schemas import IdOcrResult
 
@@ -30,18 +27,16 @@ async def extract(file: UploadFile = File(...)) -> IdOcrResult:
     if len(contents) > _MAX_UPLOAD_BYTES:
         raise ValidationError("Image is too large (max 8 MB).")
 
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-        tmp.write(contents)
-        tmp_path = Path(tmp.name)
-
     try:
-        fields = extract_id_fields(str(tmp_path))
+        fields = await extract_id_fields(contents)
+    except AppError:
+        # Already a well-shaped error (a ValidationError for an unusable
+        # photo, or a 502 when vision-service is down) - don't flatten those
+        # two very different situations into one message.
+        raise
     except Exception as exc:
-        # PIL/tesseract can fail in many library-specific ways for a
-        # corrupt or unreadable image - all of them mean the same thing to
-        # the client: this isn't a readable ID photo, fill in manually.
+        # Anything else means the same thing to the client: this isn't a
+        # readable ID photo, fill it in manually.
         raise ValidationError("Could not read the ID photo. Try a clearer image.") from exc
-    finally:
-        tmp_path.unlink(missing_ok=True)
 
     return IdOcrResult(**{key: value for key, value in fields.items() if key != "raw_text"})

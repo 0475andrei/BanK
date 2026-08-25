@@ -110,6 +110,19 @@ class Settings(BaseSettings):
     AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT: str | None = None
     AZURE_DOCUMENT_INTELLIGENCE_KEY: str | None = None
 
+    # ------------------------------------------------------------------
+    # vision-service (see vision/ and app/core/vision_client.py)
+    # ------------------------------------------------------------------
+    # OCR and face-embedding extraction run in a separate container, so the
+    # heavy native toolchain (dlib, tesseract, pymupdf) stays out of this
+    # image. The default is the compose service name - it is internal to the
+    # compose network and has no published port.
+    VISION_SERVICE_URL: str = "http://vision:8100"
+    # Shared secret, must match VISION_SERVICE_TOKEN in the vision container.
+    # Unset means the vision service refuses every request rather than
+    # failing open - see vision/app/main.py::require_service_token.
+    VISION_SERVICE_TOKEN: str | None = None
+
     @field_validator("AZURE_OPENAI_ENDPOINT")
     @classmethod
     def _normalise_endpoint(cls, value: str | None) -> str | None:
