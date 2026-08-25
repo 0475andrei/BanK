@@ -904,20 +904,37 @@ function isSpendable(acc) {
     return true;
 }
 
-/** Shows the admin-panel link if this user is an admin.
+/** Shows or hides the admin-panel link to match whoever is CURRENTLY
+ * signed in.
  *
  * Asks the server (GET /admin/me) rather than reading a role off the user
  * object: the role is not part of UserRead, and a client-side flag would be
- * cosmetic anyway - the real gate is require_admin on every /admin route.
- * Any failure (403 for a normal user, or anything else) just leaves the link
- * hidden, so this can never break the dashboard for a non-admin. */
+ * cosmetic anyway - the real gate is require_admin on every /admin route,
+ * so this link is only ever a convenience, never the actual security
+ * boundary. Explicitly sets `hidden` BOTH ways (not just true->false) and
+ * gets re-run on tab focus (see wireAdminLinkRefresh) - the session cookie
+ * is shared per-browser, not per-tab, so logging into a different account
+ * in another tab silently changes who this tab is authenticated as too;
+ * without re-checking on focus, an admin's link would stay visible (and a
+ * newly-promoted admin's would stay hidden) until the next full reload. */
 async function revealAdminLinkIfAdmin() {
+    const link = document.getElementById('admin-panel-link');
+    if (!link) return;
     try {
         await apiFetch('/admin/me');
-        document.getElementById('admin-panel-link').hidden = false;
+        link.hidden = false;
     } catch {
-        /* not an admin, or the admin module is unavailable - leave it hidden */
+        link.hidden = true;
     }
+}
+
+/** Re-checks admin status whenever this tab regains focus/visibility - see
+ * revealAdminLinkIfAdmin's doc comment for why that's necessary. */
+function wireAdminLinkRefresh() {
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') void revealAdminLinkIfAdmin();
+    });
+    window.addEventListener('focus', () => void revealAdminLinkIfAdmin());
 }
 
 async function initDashboard() {
@@ -927,6 +944,7 @@ async function initDashboard() {
     document.getElementById('user-name').textContent = `${user.first_name} ${user.last_name}`;
     applyAvatar(user);
     void revealAdminLinkIfAdmin();
+    wireAdminLinkRefresh();
 
     document.getElementById('logout-btn').addEventListener('click', async () => {
         try {
