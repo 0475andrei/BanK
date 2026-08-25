@@ -268,7 +268,64 @@ function chatWelcomeText() {
     return t('chat.welcome', 'Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?');
 }
 
-/** Builds a chat bubble matching the existing markup and appends it. */
+// Romanian labels for the routing tag - keys match RoutingDecision.agent_name
+// (see backend app/ai/orchestrator.py). Anything not listed falls back to a
+// capitalized version of the raw agent name.
+const AGENT_TAG_LABELS = {
+    banking: 'Bancar',
+    insights: 'Analiză',
+    planning: 'Planificare',
+    documents: 'Documente',
+    docs: 'Ajutor',
+};
+
+function agentTagLabel(agentName) {
+    if (AGENT_TAG_LABELS[agentName]) return AGENT_TAG_LABELS[agentName];
+    return agentName.charAt(0).toUpperCase() + agentName.slice(1);
+}
+
+/** One "Label: value" row in the agent tag's tooltip. Built with
+ * createElement/textContent, not innerHTML, so `value` (which may echo
+ * server-controlled text like routing.reason) is never parsed as markup. */
+function agentTagTooltipRow(label, value) {
+    const row = document.createElement('div');
+    const strong = document.createElement('strong');
+    strong.textContent = `${label}:`;
+    row.appendChild(strong);
+    row.appendChild(document.createTextNode(` ${value}`));
+    return row;
+}
+
+/** Small metadata pill naming which agent produced a reply (see
+ * ChatResponse.routing / RoutingDecision). Appended to `container` before
+ * the bubble is added, so it renders above it, not inside it. Hover/focus
+ * reveals a custom tooltip (see .agent-tag-tooltip) instead of the OS-styled
+ * `title` attribute tooltip. */
+function renderAgentTag(routing, container) {
+    const tag = document.createElement('div');
+    tag.className = 'agent-tag';
+    tag.tabIndex = 0;
+    tag.appendChild(document.createTextNode(`→ ${agentTagLabel(routing.agent_name)}`));
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'agent-tag-tooltip';
+    tooltip.appendChild(agentTagTooltipRow('Agent', routing.agent_name));
+    tooltip.appendChild(agentTagTooltipRow('Motiv', routing.reason));
+    tooltip.appendChild(agentTagTooltipRow('Regulă', routing.matched_rule ?? '—'));
+    // Keyword rules always match at confidence=1.0 - showing it there is just
+    // noise. Only LLM-fallback routing (confidence < 1.0) is worth surfacing.
+    if (routing.confidence !== undefined && routing.confidence < 1.0) {
+        const pct = Math.round(routing.confidence * 100);
+        tooltip.appendChild(agentTagTooltipRow('Încredere', `${pct}%`));
+    }
+    tag.appendChild(tooltip);
+
+    container.appendChild(tag);
+}
+
+/** Builds a chat bubble matching the existing markup and appends it.
+ * `options.routing`, when present on an 'ai' message, renders the agent tag
+ * (see renderAgentTag) above the bubble. */
 function appendChatBubble(role, text, options = {}) {
     const chatMessages = document.getElementById('chat-messages');
 
@@ -282,6 +339,15 @@ function appendChatBubble(role, text, options = {}) {
         wrapper.appendChild(avatar);
     }
 
+    // Column wrapper so the agent tag stacks above the bubble instead of
+    // sitting beside it in .message's horizontal flex row.
+    const content = document.createElement('div');
+    content.className = 'message-content';
+
+    if (role === 'ai' && options.routing) {
+        renderAgentTag(options.routing, content);
+    }
+
     const bubble = document.createElement('div');
     bubble.className = options.bubbleClass ? `bubble ${options.bubbleClass}` : 'bubble';
     if (options.html) {
@@ -291,7 +357,8 @@ function appendChatBubble(role, text, options = {}) {
         // never be interpreted as markup.
         bubble.textContent = text;
     }
-    wrapper.appendChild(bubble);
+    content.appendChild(bubble);
+    wrapper.appendChild(content);
 
     chatMessages.appendChild(wrapper);
     if (window.lucide) lucide.createIcons();
@@ -345,7 +412,9 @@ async function sendMessage() {
         });
 
         typingBubble.remove();
-        const aiBubble = appendChatBubble('ai', response.reply);
+        const aiBubble = appendChatBubble('ai', response.reply, {
+            routing: response.routing || undefined,
+        });
         if (response.proposal) {
             renderProposalCard(response.proposal, aiBubble);
         }
@@ -538,9 +607,13 @@ async function openConversation(conversationId) {
             (message.role === 'user' || message.role === 'assistant') && message.content
         );
         if (dialogue.length) {
-            dialogue.forEach(message => appendChatBubble(message.role === 'user' ? 'user' : 'ai', message.content));
+            dialogue.forEach(message => appendChatBubble(
+                message.role === 'user' ? 'user' : 'ai',
+                message.content,
+                { routing: message.routing || undefined }
+            ));
         } else {
-            appendChatBubble('ai', CHAT_WELCOME_TEXT);
+            appendChatBubble('ai', chatWelcomeText());
         }
     } catch (err) {
         showConversationHistoryError('Conversația nu a putut fi încărcată. Încearcă din nou.');

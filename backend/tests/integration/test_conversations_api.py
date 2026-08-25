@@ -100,3 +100,30 @@ async def test_conversation_created_by_chat_appears_in_the_list(authed_client, s
     list_resp = await client.get("/api/v1/chat/conversations")
 
     assert conversation_id in [c["id"] for c in list_resp.json()]
+
+
+async def test_conversation_history_includes_routing_on_assistant_messages(
+    authed_client, scripted_provider
+):
+    """The history endpoint surfaces the same routing decision the live reply
+    carried (see ChatResponse.routing) - so a reopened conversation can still
+    show which agent answered each turn (Step 14)."""
+    client, _user = authed_client
+    scripted_provider(ModelResponse(text="salut"))
+
+    chat_resp = await client.post("/api/v1/chat", json={"message": "care este soldul meu?"})
+    conversation_id = chat_resp.json()["conversation_id"]
+
+    resp = await client.get(f"/api/v1/chat/conversations/{conversation_id}/messages")
+
+    assert resp.status_code == 200, resp.text
+    messages = resp.json()
+    assert [m["role"] for m in messages] == ["user", "assistant"]
+
+    # Never on the user's own turn.
+    assert messages[0]["routing"] is None
+
+    routing = messages[1]["routing"]
+    assert routing["agent_name"] == "banking"
+    assert routing["confidence"] == 1.0
+    assert routing["matched_rule"] == "banking_keywords"
