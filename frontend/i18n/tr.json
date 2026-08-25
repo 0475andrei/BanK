@@ -1,1 +1,184 @@
-{"Prezentare Generală":"Genel bakış","Asistent AI & Proiecții":"Yapay zekâ asistanı ve tahminler","Toate Tranzacțiile":"Tüm işlemler","Cardurile Mele":"Kartlarım","Investiții & Bugetare":"Yatırımlar ve bütçe","Plăți":"Ödemeler","Conversații recente":"Son konuşmalar","Notificări":"Bildirimler","Nicio notificare încă.":"Henüz bildirim yok.","Profilul meu":"Profilim","Log out":"Çıkış yap","Total Balance":"Toplam bakiye","Cont nou":"Yeni hesap","Transferă":"Transfer","Conturile mele":"Hesaplarım","Tranzacții Recente":"Son işlemler","Vezi toate":"Tümünü gör","Se încarcă...":"Yükleniyor...","Anulează":"İptal","Confirmă":"Onayla","Password":"Parola","Log in":"Giriş yap","Log in to your account":"Hesabınıza giriş yapın","Register":"Kayıt ol","Create your account":"Hesabınızı oluşturun","Resetare parolă":"Parolayı sıfırla","Alege limba":"Dil seçin","Choose language":"Dil seçin"}
+{
+    "common":  {
+                   "Prezentare Generală":  "Genel bakış",
+                   "Asistent AI \u0026 Proiecții":  "Yapay zekâ asistanı ve tahminler",
+                   "Toate Tranzacțiile":  "Tüm işlemler",
+                   "Cardurile Mele":  "Kartlarım",
+                   "Investiții \u0026 Bugetare":  "Yatırımlar ve bütçe",
+                   "Plăți":  "Ödemeler",
+                   "Conversații recente":  "Son konuşmalar",
+                   "Notificări":  "Bildirimler",
+                   "Nicio notificare încă.":  "Henüz bildirim yok.",
+                   "Profilul meu":  "Profilim",
+                   "Log out":  "Çıkış yap",
+                   "Total Balance":  "Toplam bakiye",
+                   "Cont nou":  "Yeni hesap",
+                   "Transferă":  "Transfer",
+                   "Conturile mele":  "Hesaplarım",
+                   "Tranzacții Recente":  "Son işlemler",
+                   "Vezi toate":  "Tümünü gör",
+                   "Se încarcă...":  "Yükleniyor...",
+                   "Anulează":  "İptal",
+                   "Confirmă":  "Onayla",
+                   "Password":  "Parola",
+                   "Log in":  "Giriş yap",
+                   "Log in to your account":  "Hesabınıza giriş yapın",
+                   "Register":  "Kayıt ol",
+                   "Create your account":  "Hesabınızı oluşturun",
+                   "Resetare parolă":  "Parolayı sıfırla",
+                   "Alege limba":  "Dil seçin",
+                   "Choose language":  "Dil seçin",
+                   "Caută tranzacții, carduri, contacte":  {
+
+                                                           },
+                   "Nicio notificare încă":  {
+
+                                             },
+                   "Se încarcă":  {
+
+                                  },
+                   "Conversație nouă":  "New conversation",
+                   "Întreabă asistentul AI":  {
+
+                                              },
+                   "Generează Card Virtual":  "Create virtual card",
+                   "Comandă Card Fizic":  "Order physical card",
+                   "Deschide un cont nou":  "Open a new account",
+                   "Email":  "Email",
+                   "No account yet?":  "No account yet?",
+                   "First name":  "First name",
+                   "Last name":  "Last name",
+                   "At least 8 characters":  "At least 8 characters",
+                   "Trimite codul":  "Send code",
+                   "Verifică codul":  "Verify code",
+                   "Parolă nouă":  "New password",
+                   "Caută tranzacții, carduri, contacte...":  "Search transactions, cards, contacts...",
+                   "Întreabă asistentul AI...":  "Ask the AI assistant...",
+                   "search_placeholder":  "İşlem, kart ve kişi ara..."
+               },
+    "dashboard":  {
+                      "Fără activitate încă.":  "Henüz etkinlik yok.",
+                      "Conectat • poate citi soldurile conturilor tale":  "Bağlandı • hesap bakiyelerinizi okuyabilir",
+                      "Conversație nouă":  "Yeni konuşma",
+                      "Anulează cardul":  "Kartı iptal et",
+                      "Generează Card Virtual":  "Sanal kart oluştur",
+                      "Comandă Card Fizic":  "Fiziksel kart sipariş et",
+                      "Cheltuieli pe Categorii (Luna curentă)":  "Kategoriye göre harcamalar (bu ay)",
+                      "Supermarket (40%)":  "Market (40%)",
+                      "Facturi (35%)":  "Faturalar (35%)",
+                      "Divertisment (25%)":  "Eğlence (25%)",
+                      "Deschide un cont nou":  "Yeni hesap aç",
+                      "Cont de economii":  "Tasarruf hesabı",
+                      "Flexibil - retragi oricând":  "Esnek — istediğiniz zaman çekin",
+                      "Cont cu dobândă fixă":  "Sabit faizli hesap",
+                      "Alegi perioada - rată mai mare":  "Vade seçin — daha yüksek oran",
+                      "Conturile mele de economii":  "Tasarruf hesaplarım",
+                      "Fără activitate încă":  {
+
+                                               },
+                      "No activity":  "No activity yet.",
+                      "no_activity":  "Henüz etkinlik yok."
+                  },
+    "savings":  {
+                    "up_to_rate":  "yıllık {rate}% oranına kadar",
+                    "no_accounts":  "Henüz tasarruf hesabı yok."
+                },
+    "cards":  {
+                  "cancel":  "Kartı iptal et",
+                  "label":  "Kart",
+                  "expiry":  "Son kullanma",
+                  "cvv":  "CVV",
+                  "limit":  "Limit",
+                  "show_details":  "Son kullanma tarihini ve CVV'yi göster",
+                  "hide_details":  "Son kullanma tarihini ve CVV'yi gizle",
+                  "status_active":  "Aktif",
+                  "status_frozen":  "Kilitli",
+                  "status_cancelled":  "İptal edildi",
+                  "empty":  "Henüz kartınız yok. İlk sanal kartınızı oluşturun.",
+                  "cancel_confirm":  "Bu kartı iptal etmek istediğinizden emin misiniz? Yeniden etkinleştirilemez."
+              },
+    "brand":  { "tagline":  "FİNANSAL KONFORUNUZ" },
+    "registration":  {
+                    "drop_id_optional":  "Kimlik fotoğrafını buraya sürükleyin veya dosya seçin (isteğe bağlı)",
+                    "title":  "Hesabınızı oluşturun", "first_name":  "Ad", "last_name":  "Soyad", "email":  "E-posta", "password":  "Şifre", "password_hint":  "En az 8 karakter", "submit":  "Kayıt ol",
+                    "manual":  "Manuel giriş",
+                    "chat_mode":  "Comodul ile sohbet",
+                    "ocr_label":  "Kimlik kartından otomatik doldurma (isteğe bağlı)",
+                    "drop_id":  "Kimlik fotoğrafını buraya sürükleyin veya dosya seçin",
+                    "ocr_status":  "Yalnızca PNG. Ad, kimlik numarası ve adresi otomatik doldurur.",
+                    "national_id":  "Kimlik numarası",
+                    "national_id_hint":  "Cinsiyet ve doğum tarihi otomatik okunur",
+                    "phone":  "Telefon (isteğe bağlı)",
+                    "address":  "Adres (isteğe bağlı)",
+                    "referral":  "Referans kodu (isteğe bağlı)",
+                    "referral_hint":  "Referans kodunuz var mı? Yeni hesabınıza 500 RON hediye edilir.",
+                    "chat_status":  "Kendi hızınızda hesap açmanıza yardımcı olurum",
+                    "chat_welcome":  "Merhaba! Ben Comodul. BanK hesabı açmanıza yardımcı olacağım. Adınızı söyleyin veya kimlik fotoğrafı yükleyin.",
+                    "chat_placeholder":  "Mesaj yazın...",
+                    "already_account":  "Zaten hesabınız var mı?"
+                },
+    "auth":  {
+                    "face_login":  "Yüz ile giriş",
+                    "face_password":  "Şifre ile giriş",
+                    "forgot_password":  "Şifrenizi mi unuttunuz?"
+                },
+    "profile":  {
+                    "avatar":  "Avatar",
+                    "referral":  "Referans kodum",
+                    "change_password":  "Şifreyi değiştir",
+                    "face_login":  "Yüz ile giriş",
+                    "back":  "Geri",
+                    "choose_avatar":  "Avatarın için bir emoji seç",
+                    "referral_hint":  "Bu kodla kayıt olan herkes ilk hesabı için 500 RON alır.",
+                    "current_password":  "Mevcut şifre",
+                    "new_password":  "Yeni şifre",
+                    "confirm_password":  "Yeni şifreyi onayla",
+                    "start_camera":  "Kamerayı başlat",
+                    "capture_activate":  "Çek ve etkinleştir",
+                    "disable_face_login":  "Yüz ile girişi devre dışı bırak",
+                    "face_active":  "Yüz ile giriş hesabınızda etkinleştirildi.",
+                    "face_inactive":  "Yüz ile giriş henüz etkin değil. Kamerayı başlatın ve etkinleştirmek için fotoğraf çekin.",
+                    "face_success":  "Yüz ile giriş başarıyla etkinleştirildi!"
+                },
+    "payments":  {
+                     "Trimite bani printr-un IBAN":  "IBAN ile para gönder",
+                     "Din contul":  "Hesaptan",
+                     "Copiază IBAN-ul":  "IBAN\u0027ı kopyala",
+                     "IBAN destinatar":  "Alıcı IBAN",
+                     "Nume beneficiar":  "Alıcı adı",
+                     "Sumă":  "Tutar",
+                     "Descriere":  "Açıklama",
+                     "(opțional)":  "(isteğe bağlı)",
+                     "Salvează acest beneficiar în Contactele mele":  "Bu alıcıyı kişilerime kaydet",
+                     "Trimite plata":  "Ödeme gönder",
+                     "Contactele mele":  "Kişilerim",
+                     "Istoric plăți":  "Ödeme geçmişi",
+                     "contacts_load_error":  "Kişiler yüklenemedi",
+                     "no_contacts":  "Henüz kişi yok — ilk ödemenizden sonra otomatik olarak görünür.",
+                     "history_load_error":  "Ödeme geçmişi yüklenemedi",
+                     "no_payments":  "Henüz ödeme yok.",
+                     "account_holder":  "Hesap sahibi",
+                     "iban_not_found":  "Bu IBAN için hesap bulunamadı.",
+                     "sent_success":  "Ödeme başarıyla gönderildi!"
+                 },
+    "chat":  {
+                 "welcome":  "Merhaba! Ben bankacılık asistanınızım. Hesap bakiyelerinizi kontrol edebilir ve bankacılık sorularınızı yanıtlayabilirim. Size nasıl yardımcı olabilirim?",
+                 "typing":  "The assistant is thinking...",
+                 "errors":  {
+                                "unavailable":  "The AI assistant is currently unavailable. Please try again.",
+                                "invalid":  "The message could not be sent. Check what you wrote."
+                            },
+                 "time":  {
+                              "seconds":  "a few seconds ago",
+                              "minute":  "a minute ago",
+                              "minutes":  "{count} minutes ago",
+                              "hour":  "an hour ago",
+                              "hours":  "{count} hours ago",
+                              "yesterday":  "yesterday",
+                              "days":  "{count} days ago"
+                          }
+             },
+    "errors":  {
+                   "generic":  "Something went wrong. Please try again."
+               }
+}

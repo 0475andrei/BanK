@@ -51,6 +51,89 @@ async def test_list_orders_includes_linked_card(authed_client):
     assert cards[0]["id"] == created["card_id"]
 
 
+async def test_create_order_with_card_id_reuses_the_existing_virtual_card(authed_client):
+    client, _user = authed_client
+    account = await _open_account(client)
+    card = (
+        await client.post("/api/v1/cards", json={"account_id": account["id"]})
+    ).json()
+
+    payload = _order_payload(account["id"])
+    payload["card_id"] = card["id"]
+    resp = await client.post("/api/v1/card-orders", json=payload)
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+
+    assert body["card_id"] == card["id"]
+    assert body["card"]["card_number"] == card["card_number"]
+
+    # No second card was minted - still just the one.
+    cards = (await client.get("/api/v1/cards")).json()
+    assert len(cards) == 1
+
+
+async def test_create_order_with_card_id_rejects_a_card_from_another_account(authed_client):
+    client, _user = authed_client
+    account = await _open_account(client)
+    other_account = await _open_account(client, name="Savings")
+    card = (
+        await client.post("/api/v1/cards", json={"account_id": other_account["id"]})
+    ).json()
+
+    payload = _order_payload(account["id"])
+    payload["card_id"] = card["id"]
+    resp = await client.post("/api/v1/card-orders", json=payload)
+    assert resp.status_code == 422
+
+
+async def test_create_order_with_card_id_rejects_a_cancelled_card(authed_client):
+    client, _user = authed_client
+    account = await _open_account(client)
+    card = (
+        await client.post("/api/v1/cards", json={"account_id": account["id"]})
+    ).json()
+    await client.delete(f"/api/v1/cards/{card['id']}")
+
+    payload = _order_payload(account["id"])
+    payload["card_id"] = card["id"]
+    resp = await client.post("/api/v1/card-orders", json=payload)
+    assert resp.status_code == 422
+
+
+async def test_create_order_with_card_id_rejects_a_card_already_ordered(authed_client):
+    client, _user = authed_client
+    account = await _open_account(client)
+    card = (
+        await client.post("/api/v1/cards", json={"account_id": account["id"]})
+    ).json()
+
+    payload = _order_payload(account["id"])
+    payload["card_id"] = card["id"]
+    first = await client.post("/api/v1/card-orders", json=payload)
+    assert first.status_code == 201, first.text
+
+    second = await client.post("/api/v1/card-orders", json=payload)
+    assert second.status_code == 422
+
+
+async def test_create_order_with_card_id_rejects_an_unowned_card(
+    authed_client, authed_client_factory
+):
+    owner_client, _owner = authed_client
+    account = await _open_account(owner_client)
+
+    other_client, _other = await authed_client_factory()
+    other_account = await _open_account(other_client)
+    other_card = (
+        await other_client.post("/api/v1/cards", json={"account_id": other_account["id"]})
+    ).json()
+
+    payload = _order_payload(account["id"])
+    payload["card_id"] = other_card["id"]
+    resp = await owner_client.post("/api/v1/card-orders", json=payload)
+    assert resp.status_code == 404
+
+
 async def test_create_order_rejects_unowned_account(authed_client, authed_client_factory):
     owner_client, _owner = authed_client
     account = await _open_account(owner_client)

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from app.ai.agents.banking_agent import BankingAgent
 from app.ai.agents.docs_agent import DocsAgent
+from app.ai.agents.document_agent import DocumentAgent
 from app.ai.agents.insights_agent import InsightsAgent
 from app.ai.agents.planning_agent import PlanningAgent
 from app.ai.context import Context
@@ -33,6 +34,7 @@ from app.ai.tools.banking import (
     SetCardSpendingLimitTool,
     UnfreezeCardTool,
 )
+from app.ai.tools.document_tools import ReadDocumentTool
 from app.ai.tools.insights import (
     CategorizeTransactionsTool,
     ComputeSpendingStatsTool,
@@ -52,9 +54,8 @@ from app.ai.tools.propose_tools import (
 from app.ai.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
-    from supabase import AsyncClient
-
     from app.ai.providers.embedding_base import EmbeddingProvider
+    from supabase import AsyncClient
 
 
 def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
@@ -143,6 +144,20 @@ def build_docs_tools(
     return ToolRegistry([SearchKnowledgeBaseTool(supabase, embedding_provider)])
 
 
+def build_document_tools(supabase: AsyncClient) -> ToolRegistry:
+    """DocumentAgent's ENTIRE toolset: read_document, and nothing else.
+
+    This is the structural half of Step 12's prompt-injection defense (the
+    other half is the <untrusted_document> wrapping + system prompt in
+    document_agent.py). No propose_* tool, no banking read tool, nothing
+    that could hand control to another agent is ever in this registry - a
+    document's content reaching the model can therefore never result in a
+    write, a proposal, or a read of anything outside that one document,
+    regardless of what the document's text says. Do not add tools here.
+    """
+    return ToolRegistry([ReadDocumentTool(supabase)])
+
+
 class AIService:
     """Holds the orchestrator and hands conversations to the routed agent."""
 
@@ -196,9 +211,19 @@ class AIService:
 
         Banking is still the DEFAULT — what an unmatched or unclassifiable
         message falls back to — which is a separate thing from rule order.
+
+        DocumentAgent's registration position among these barely matters:
+        `Orchestrator.route()` checks `context.active_document_id` before
+        ANY keyword rule (see orchestrator.py), so whenever a document is
+        active, DocumentAgent wins regardless of where it sits here. Its
+        keyword rules (`document`, `pdf`, `contract`, ...) are only a
+        fallback for "no document attached yet" messages, and don't overlap
+        any other agent's stems, so registering it here — after Insights,
+        before Docs/Banking — costs nothing.
         """
         orchestrator = Orchestrator(provider=provider)
         orchestrator.register(InsightsAgent(provider, build_insights_tools(supabase)))
+        orchestrator.register(DocumentAgent(provider, build_document_tools(supabase)))
         orchestrator.register(DocsAgent(provider, build_docs_tools(supabase, embedding_provider)))
         orchestrator.register(
             BankingAgent(provider, build_banking_tools(supabase)), default=True

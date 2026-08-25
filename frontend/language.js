@@ -2,12 +2,48 @@
 (function () {
     'use strict';
     const STORAGE_KEY = 'bank_preferred_language';
-    const CACHE_PREFIX = 'bank_i18n_v2:';
+    const CACHE_PREFIX = 'bank_i18n_v12:';
     const DEFAULT_LANGUAGE = 'ro';
     const LANGUAGES = { ro: 'Română', en: 'English', uk: 'Українська', hu: 'Magyar', tr: 'Türkçe', it: 'Italiano', es: 'Español', fr: 'Français', de: 'Deutsch' };
     const bundles = new Map();
     const sourceText = new WeakMap();
     let activeBundle = {};
+
+    function setPath(target, path, value) {
+        const parts = path.split('.');
+        let cursor = target;
+        parts.forEach((part, index) => {
+            if (index === parts.length - 1) {
+                cursor[part] = value;
+                return;
+            }
+            if (!cursor[part] || typeof cursor[part] !== 'object') cursor[part] = {};
+            cursor = cursor[part];
+        });
+    }
+
+    function normalizeBundle(bundle) {
+        const normalized = {};
+        Object.entries(bundle || {}).forEach(([key, value]) => {
+            setPath(normalized, key, value);
+        });
+        return normalized;
+    }
+
+    function mergeBundles(...parts) {
+        const merged = {};
+        parts.forEach((part) => {
+            const normalized = normalizeBundle(part);
+            Object.entries(normalized).forEach(([section, values]) => {
+                if (values && typeof values === 'object' && !Array.isArray(values)) {
+                    merged[section] = { ...(merged[section] || {}), ...values };
+                } else {
+                    merged[section] = values;
+                }
+            });
+        });
+        return merged;
+    }
 
     function preferredLanguage() {
         const saved = localStorage.getItem(STORAGE_KEY);
@@ -18,22 +54,26 @@
         const cacheKey = `${CACHE_PREFIX}${language}`;
         try {
             const cached = localStorage.getItem(cacheKey);
-            if (cached) { const bundle = JSON.parse(cached); bundles.set(language, bundle); return bundle; }
+            if (cached) { const bundle = normalizeBundle(JSON.parse(cached)); bundles.set(language, bundle); return bundle; }
         } catch { /* Replace an invalid cache with the shipped bundle. */ }
         const response = await fetch(`i18n/${language}.json`, { cache: 'force-cache' });
         if (!response.ok) throw new Error(`Could not load language: ${language}`);
         const bundle = await response.json();
-        // Feature bundles keep larger sections (such as Payments) maintainable
-        // without delaying the shared authentication/dashboard bundle.
-        for (const feature of ['payments', 'dashboard']) {
-            const featureResponse = await fetch(`i18n/${language}.${feature}.json`, { cache: 'force-cache' });
-            if (featureResponse.ok) Object.assign(bundle, await featureResponse.json());
-        }
-        bundles.set(language, bundle);
-        try { localStorage.setItem(cacheKey, JSON.stringify(bundle)); } catch { /* Storage is optional. */ }
-        return bundle;
+        const normalizedBundle = mergeBundles(bundle);
+        bundles.set(language, normalizedBundle);
+        try { localStorage.setItem(cacheKey, JSON.stringify(normalizedBundle)); } catch { /* Storage is optional. */ }
+        return normalizedBundle;
     }
-    function translate(value) { return activeBundle[value] || value; }
+    function translate(value) {
+        if (!value) return value;
+        const result = value.split('.').reduce((current, part) => current?.[part], activeBundle);
+        if (typeof result === 'string') return result;
+        if (typeof activeBundle.common?.[value] === 'string') return activeBundle.common[value];
+        for (const section of Object.values(activeBundle)) {
+            if (section && typeof section === 'object' && typeof section[value] === 'string') return section[value];
+        }
+        return value;
+    }
     function translateTextNode(node) {
         if (!node.nodeValue.trim()) return;
         const parent = node.parentElement;
@@ -45,12 +85,18 @@
     }
     function translateElement(element) {
         if (element.matches?.('.notranslate, [data-i18n-ignore]') || element.closest?.('.notranslate, [data-i18n-ignore]')) return;
+        if (element.hasAttribute?.('data-i18n')) {
+            const key = element.getAttribute('data-i18n');
+            element.textContent = translate(key);
+        }
         ['placeholder', 'title', 'aria-label'].forEach((attribute) => {
             if (!element.hasAttribute?.(attribute)) return;
             const source = `data-i18n-source-${attribute}`;
+            const keyAttribute = `data-i18n-${attribute}`;
+            const key = element.getAttribute(keyAttribute);
             const original = element.getAttribute(source) || element.getAttribute(attribute);
             element.setAttribute(source, original);
-            element.setAttribute(attribute, translate(original));
+            element.setAttribute(attribute, key ? translate(key) : translate(original));
         });
         element.childNodes.forEach((node) => { if (node.nodeType === Node.TEXT_NODE) translateTextNode(node); });
     }
@@ -67,6 +113,7 @@
         document.documentElement.lang = language;
         translatePage();
         document.documentElement.classList.remove('i18n-pending');
+        window.dispatchEvent(new CustomEvent('languagechange', { detail: { language } }));
     }
     function addSelector() {
         const selector = document.createElement('div');
@@ -91,7 +138,7 @@
         const logout = actions?.querySelector('.logout-btn');
         if (logout) actions.insertBefore(selector, logout); else document.body.appendChild(selector);
     }
-    window.t = (key, fallback = key, params = {}) => (translate(key) || fallback)
+    window.t = (key, fallback = key, params = {}) => (translate(key) === key ? fallback : translate(key))
         .replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? `{${name}}`));
     window.refreshTranslations = () => translatePage();
     document.addEventListener('DOMContentLoaded', async () => {

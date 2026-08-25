@@ -25,6 +25,7 @@ from app.modules.accounts import service as accounts_service
 from app.modules.auth.validation import validate_iban
 from app.modules.beneficiaries import service as beneficiaries_service
 from app.modules.face_auth import service as face_auth_service
+from app.modules.payments.known_subscriptions import match_known_subscription_business
 from app.modules.payments.schemas import PaymentCreate
 from app.modules.users.schemas import UserRead
 
@@ -65,24 +66,38 @@ async def _detect_subscription_price_increase(
     from_account_id: uuid.UUID | str,
     to_iban: str,
     new_amount_minor: int,
+    beneficiary_name: str,
 ) -> dict | None:
-    """A "this subscription raised its price" signal: the recipient IBAN is
-    saved as a contact explicitly marked is_subscription (see
-    beneficiaries/service.py - a friend paid a recurring amount twice is
-    NOT a subscription just because the pattern looks similar; only a
-    contact the user deliberately classified this way can ever trigger
-    this), this exact account has paid it at least twice before (a
-    recurring pattern - same 2-occurrence threshold
+    """A "this subscription raised its price" signal: the recipient counts
+    as a subscription, this exact account has paid it at least twice before
+    (a recurring pattern - same 2-occurrence threshold
     app/ai/tools/insights/detect_recurring_payments.py uses to call
     something "recurring"), and the new amount is higher than the most
     recent of those. Returns None when any of that isn't true.
+
+    "Counts as a subscription" is either/or:
+    - the recipient IBAN is saved as a contact explicitly marked
+      is_subscription (see beneficiaries/service.py) - a friend paid a
+      recurring amount twice is NOT a subscription just because the pattern
+      looks similar; only a contact the user deliberately classified this
+      way triggers on the flag alone; OR
+    - the beneficiary_name the sender typed on THIS payment matches a
+      hardcoded list of well-known subscription businesses (see
+      known_subscriptions.py) - added because in practice almost nothing
+      sets the flag above: it only exists on the standalone "add
+      beneficiary" form, so a payment made from the Payments form or by the
+      AI agent never qualified on the flag alone.
 
     Deliberately only checks THIS sender account, not every account the user
     owns - one account per subscription is the common real-world case, and
     checking all of them would need a cross-account join for a demo-grade
     heuristic. See design_decisions for the general "good enough" bar."""
     beneficiary = await beneficiaries_service.get_beneficiary_by_iban(supabase, user_id, to_iban)
-    if beneficiary is None or not beneficiary["is_subscription"]:
+    known_website = match_known_subscription_business(beneficiary_name)
+    is_subscription = (beneficiary is not None and beneficiary["is_subscription"]) or (
+        known_website is not None
+    )
+    if not is_subscription:
         return None
 
     resp = (
@@ -101,10 +116,12 @@ async def _detect_subscription_price_increase(
     previous_amount_minor = history[0]["amount_minor"]
     if new_amount_minor <= previous_amount_minor:
         return None
+    # A real saved website always wins over the hardcoded default.
+    website = (beneficiary["website"] if beneficiary else None) or known_website
     return {
         "previous_amount_minor": previous_amount_minor,
         "new_amount_minor": new_amount_minor,
-        "website": beneficiary["website"],
+        "website": website,
     }
 
 
@@ -173,7 +190,12 @@ async def create_payment(
 
     if not payload.confirm_price_increase:
         price_increase = await _detect_subscription_price_increase(
-            supabase, user.id, from_account["id"], to_iban, payload.amount_minor
+            supabase,
+            user.id,
+            from_account["id"],
+            to_iban,
+            payload.amount_minor,
+            payload.beneficiary_name,
         )
         if price_increase is not None:
             raise SubscriptionPriceIncreaseError(

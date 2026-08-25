@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from app.ai.routing import RoutingDecision
+from app.ai.schemas import Role, ToolCall
 
 #: Roughly a long paragraph. Bounds the prompt the model is asked to process.
 MAX_MESSAGE_CHARS = 4000
@@ -20,6 +21,11 @@ class ChatRequest(BaseModel):
     #: Null starts a new conversation. Otherwise the caller is continuing one
     #: it was handed by an earlier response - ownership is checked server-side.
     conversation_id: uuid.UUID | None = None
+    #: Set by the frontend after a successful /documents/upload, to route this
+    #: turn to DocumentAgent (see app/ai/orchestrator.py's context-first
+    #: check). Ownership is verified server-side in router.py before this
+    #: ever reaches Context - never trusted as-is, same as conversation_id.
+    document_id: uuid.UUID | None = None
 
 
 class ProposalRead(BaseModel):
@@ -67,6 +73,26 @@ class ChatResponse(BaseModel):
     #: currently only reaches the user as prose in the reply, not as a
     #: confirm/reject card. Follow-up: migrate it onto proposals_service.
     proposal: ProposalRead | None = None
+
+
+class MessageRead(BaseModel):
+    """One stored turn, read back for the conversation-history endpoint.
+
+    Deliberately separate from app.ai.schemas.Message: that type is the
+    provider-agnostic transcript shape threaded through the agent loop, and
+    must NOT carry routing (see test_tool_result_and_message_types_are_
+    untouched_by_routing) - routing rides alongside the transcript, not
+    inside it. This is the HTTP read model, for the history GET only.
+    """
+
+    role: Role
+    content: str | None = None
+    tool_calls: list[ToolCall]
+    tool_call_id: str | None = None
+    name: str | None = None
+    #: Set only on the assistant turn a routed agent produced; None on every
+    #: other row (user turns, tool results) and on messages predating Step 7.
+    routing: RoutingDecision | None = None
 
 
 class ConversationRead(BaseModel):

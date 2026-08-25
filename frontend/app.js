@@ -63,7 +63,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     wireStepUpModal();
     wireChatAttach();
+    wireDocumentAttach();
     initDashboard();
+
+    window.addEventListener('languagechange', () => {
+        const messages = document.getElementById('chat-messages');
+        const hasOnlyWelcome = messages?.querySelectorAll('.message').length === 1;
+        if (hasOnlyWelcome) {
+            const welcome = messages.querySelector('.message.ai .bubble');
+            if (welcome) welcome.textContent = chatWelcomeText();
+        }
+        if (!document.getElementById('view-chat')?.classList.contains('hidden')) {
+            void loadConversationHistory();
+        }
+        if (document.getElementById('view-cards')?.classList.contains('active')) {
+            renderCardsList(loadedCards);
+        }
+        if (document.getElementById('view-dashboard')?.classList.contains('active')) {
+            renderSavingsAccountsList();
+        }
+        if (document.getElementById('view-face-login')?.classList.contains('active') && faceStatusEnrolled !== null) {
+            renderFaceStatus(faceStatusEnrolled);
+        }
+        window.refreshTranslations?.();
+    });
 });
 
 /** Lets the user attach a photo/PDF (e.g. "extras de cont") to the chat to
@@ -121,6 +144,111 @@ function wireChatAttach() {
     });
 }
 
+/** Lets the user attach a PDF to the chat so DocumentAgent can answer
+ * questions about it - separate from wireChatAttach above, which reads an
+ * IBAN out of a scanned statement and is unrelated to this feature. Posts to
+ * POST /documents/upload; the returned document_id is remembered in
+ * currentDocumentId and sent along with every chat message until detached
+ * or the conversation changes (see clearActiveDocument, sendMessage). */
+function wireDocumentAttach() {
+    const attachBtn = document.getElementById('document-attach-btn');
+    const attachInput = document.getElementById('document-attach-input');
+    const statusEl = document.getElementById('document-attach-status');
+    if (!attachBtn || !attachInput) return;
+
+    const MAX_DOCUMENT_SIZE_BYTES = 5 * 1024 * 1024;
+
+    attachBtn.addEventListener('click', () => attachInput.click());
+
+    attachInput.addEventListener('change', async () => {
+        const file = attachInput.files[0];
+        if (!file) return;
+
+        if (file.size > MAX_DOCUMENT_SIZE_BYTES) {
+            statusEl.hidden = false;
+            statusEl.className = 'field-hint ocr-warning';
+            statusEl.textContent = 'Fișierul depășește 5 MB.';
+            attachInput.value = '';
+            return;
+        }
+
+        statusEl.hidden = false;
+        statusEl.className = 'field-hint';
+        statusEl.textContent = 'Se încarcă documentul...';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        if (currentConversationId) {
+            formData.append('conversation_id', currentConversationId);
+        }
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/documents/upload`, {
+                method: 'POST',
+                credentials: 'include',
+                body: formData,
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.error?.message || `Request failed (${res.status})`);
+            }
+            const result = await res.json();
+
+            statusEl.hidden = true;
+            setCurrentConversationId(result.conversation_id);
+            renderDocumentChip(result.document);
+            showToast('Document atașat. Poți pune întrebări despre el.');
+        } catch (err) {
+            statusEl.hidden = false;
+            statusEl.className = 'field-hint ocr-warning';
+            statusEl.textContent = err.message;
+        } finally {
+            attachInput.value = '';
+        }
+    });
+}
+
+let currentDocumentId = null;
+
+/** Shows the small "N pag. · nume.pdf · ✕" pill above the chat input and
+ * remembers the document so sendMessage can include it on the next turn. */
+function renderDocumentChip(document_) {
+    currentDocumentId = document_.id;
+
+    const chip = document.getElementById('document-chip');
+    if (!chip) return;
+    chip.innerHTML = '';
+
+    const label = document.createElement('span');
+    label.textContent = `${document_.page_count} pag. · ${document_.filename}`;
+    chip.appendChild(label);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'document-chip-close';
+    closeBtn.setAttribute('aria-label', 'Detașează documentul');
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', () => {
+        clearActiveDocument();
+        showToast('Document detașat.');
+    });
+    chip.appendChild(closeBtn);
+
+    chip.hidden = false;
+}
+
+/** Detaches the active document from the chat, without touching the stored
+ * conversation - the document itself stays in the conversation's history in
+ * the database, this only clears what the client sends on future turns. */
+function clearActiveDocument() {
+    currentDocumentId = null;
+    const chip = document.getElementById('document-chip');
+    if (chip) {
+        chip.hidden = true;
+        chip.innerHTML = '';
+    }
+}
+
 /* -------------------------------------------------------------------------
  * AI chat - talks to POST /chat (see backend app/modules/chat/router.py).
  * History now lives server-side (conversations/messages tables) - the client
@@ -130,16 +258,74 @@ function wireChatAttach() {
 let currentConversationId = null;
 let conversationHistory = [];
 
-const CHAT_WELCOME_TEXT =
-    'Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?';
-
 const CHAT_ERRORS = {
-    unavailable: 'Asistentul AI nu este disponibil momentan. Încearcă din nou.',
-    invalid: 'Mesajul nu poate fi trimis. Verifică ce ai scris.',
-    generic: 'A apărut o problemă. Încearcă din nou.',
+    unavailable: ['chat.errors.unavailable', 'Asistentul AI nu este disponibil momentan. Încearcă din nou.'],
+    invalid: ['chat.errors.invalid', 'Mesajul nu poate fi trimis. Verifică ce ai scris.'],
+    generic: ['errors.generic', 'A apărut o problemă. Încearcă din nou.'],
 };
 
-/** Builds a chat bubble matching the existing markup and appends it. */
+function chatWelcomeText() {
+    return t('chat.welcome', 'Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?');
+}
+
+// Romanian labels for the routing tag - keys match RoutingDecision.agent_name
+// (see backend app/ai/orchestrator.py). Anything not listed falls back to a
+// capitalized version of the raw agent name.
+const AGENT_TAG_LABELS = {
+    banking: 'Bancar',
+    insights: 'Analiză',
+    planning: 'Planificare',
+    documents: 'Documente',
+    docs: 'Ajutor',
+};
+
+function agentTagLabel(agentName) {
+    if (AGENT_TAG_LABELS[agentName]) return AGENT_TAG_LABELS[agentName];
+    return agentName.charAt(0).toUpperCase() + agentName.slice(1);
+}
+
+/** One "Label: value" row in the agent tag's tooltip. Built with
+ * createElement/textContent, not innerHTML, so `value` (which may echo
+ * server-controlled text like routing.reason) is never parsed as markup. */
+function agentTagTooltipRow(label, value) {
+    const row = document.createElement('div');
+    const strong = document.createElement('strong');
+    strong.textContent = `${label}:`;
+    row.appendChild(strong);
+    row.appendChild(document.createTextNode(` ${value}`));
+    return row;
+}
+
+/** Small metadata pill naming which agent produced a reply (see
+ * ChatResponse.routing / RoutingDecision). Appended to `container` before
+ * the bubble is added, so it renders above it, not inside it. Hover/focus
+ * reveals a custom tooltip (see .agent-tag-tooltip) instead of the OS-styled
+ * `title` attribute tooltip. */
+function renderAgentTag(routing, container) {
+    const tag = document.createElement('div');
+    tag.className = 'agent-tag';
+    tag.tabIndex = 0;
+    tag.appendChild(document.createTextNode(`→ ${agentTagLabel(routing.agent_name)}`));
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'agent-tag-tooltip';
+    tooltip.appendChild(agentTagTooltipRow('Agent', routing.agent_name));
+    tooltip.appendChild(agentTagTooltipRow('Motiv', routing.reason));
+    tooltip.appendChild(agentTagTooltipRow('Regulă', routing.matched_rule ?? '—'));
+    // Keyword rules always match at confidence=1.0 - showing it there is just
+    // noise. Only LLM-fallback routing (confidence < 1.0) is worth surfacing.
+    if (routing.confidence !== undefined && routing.confidence < 1.0) {
+        const pct = Math.round(routing.confidence * 100);
+        tooltip.appendChild(agentTagTooltipRow('Încredere', `${pct}%`));
+    }
+    tag.appendChild(tooltip);
+
+    container.appendChild(tag);
+}
+
+/** Builds a chat bubble matching the existing markup and appends it.
+ * `options.routing`, when present on an 'ai' message, renders the agent tag
+ * (see renderAgentTag) above the bubble. */
 function appendChatBubble(role, text, options = {}) {
     const chatMessages = document.getElementById('chat-messages');
 
@@ -153,6 +339,15 @@ function appendChatBubble(role, text, options = {}) {
         wrapper.appendChild(avatar);
     }
 
+    // Column wrapper so the agent tag stacks above the bubble instead of
+    // sitting beside it in .message's horizontal flex row.
+    const content = document.createElement('div');
+    content.className = 'message-content';
+
+    if (role === 'ai' && options.routing) {
+        renderAgentTag(options.routing, content);
+    }
+
     const bubble = document.createElement('div');
     bubble.className = options.bubbleClass ? `bubble ${options.bubbleClass}` : 'bubble';
     if (options.html) {
@@ -162,7 +357,8 @@ function appendChatBubble(role, text, options = {}) {
         // never be interpreted as markup.
         bubble.textContent = text;
     }
-    wrapper.appendChild(bubble);
+    content.appendChild(bubble);
+    wrapper.appendChild(content);
 
     chatMessages.appendChild(wrapper);
     if (window.lucide) lucide.createIcons();
@@ -174,10 +370,10 @@ function chatErrorMessage(err) {
     // No status at all means the request never reached the API (backend down,
     // DNS, CORS) - to the user that is the same thing as "AI unavailable".
     if (!err.status || err.status === 502 || err.status === 503) {
-        return CHAT_ERRORS.unavailable;
+        return t(...CHAT_ERRORS.unavailable);
     }
-    if (err.status === 422) return CHAT_ERRORS.invalid;
-    return CHAT_ERRORS.generic;
+    if (err.status === 422) return t(...CHAT_ERRORS.invalid);
+    return t(...CHAT_ERRORS.generic);
 }
 
 // Function to send a message in the AI Chat view
@@ -197,7 +393,7 @@ async function sendMessage() {
     const typingBubble = appendChatBubble('ai', '', {
         bubbleClass: 'typing',
         html:
-            '<div class="typing-label">Asistentul gândește...</div>' +
+            `<div class="typing-label">${escapeHTML(t('chat.typing', 'Asistentul gândește...'))}</div>` +
             '<div class="typing-dots">' +
             '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>' +
             '</div>',
@@ -208,16 +404,29 @@ async function sendMessage() {
         // apiFetch already prefixes /api/v1 and sends the session cookie.
         const response = await apiFetch('/chat', {
             method: 'POST',
-            body: JSON.stringify({ message, conversation_id: currentConversationId }),
+            body: JSON.stringify({
+                message,
+                conversation_id: currentConversationId,
+                document_id: currentDocumentId,
+            }),
         });
 
         typingBubble.remove();
-        const aiBubble = appendChatBubble('ai', response.reply);
+        const aiBubble = appendChatBubble('ai', response.reply, {
+            routing: response.routing || undefined,
+        });
         if (response.proposal) {
             renderProposalCard(response.proposal, aiBubble);
         }
         setCurrentConversationId(response.conversation_id);
         void loadConversationHistory();
+        // The agent can freeze/unfreeze a card, change a limit, or touch
+        // beneficiaries/scheduled transfers directly - refresh those views so
+        // an already-open panel doesn't show stale state until a manual reload.
+        void loadCards();
+        void loadAccounts();
+        void loadBeneficiaries();
+        void loadScheduledTransfers();
     } catch (err) {
         typingBubble.remove();
 
@@ -238,9 +447,10 @@ async function sendMessage() {
  * from the current conversation - the next message starts a new one. */
 function startNewConversation() {
     setCurrentConversationId(null);
+    clearActiveDocument();
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = '';
-    appendChatBubble('ai', CHAT_WELCOME_TEXT);
+    appendChatBubble('ai', chatWelcomeText());
     renderConversationHistory();
 }
 
@@ -268,20 +478,19 @@ function formatRelativeConversationTime(value) {
     if (Number.isNaN(date.getTime())) return '';
 
     const elapsedMinutes = Math.floor((Date.now() - date.getTime()) / 60000);
-    if (elapsedMinutes < 1) return 'acum câteva secunde';
-    if (elapsedMinutes === 1) return 'acum un minut';
-    if (elapsedMinutes < 60) return `acum ${elapsedMinutes} minute`;
-    if (elapsedMinutes < 120) return 'acum o oră';
-    if (elapsedMinutes < 24 * 60) return `acum ${Math.floor(elapsedMinutes / 60)} ore`;
+    const locale = document.documentElement.lang || 'ro';
+    const relativeTime = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+    if (elapsedMinutes < 1) return relativeTime.format(0, 'second');
+    if (elapsedMinutes < 60) return relativeTime.format(-elapsedMinutes, 'minute');
+    if (elapsedMinutes < 24 * 60) return relativeTime.format(-Math.floor(elapsedMinutes / 60), 'hour');
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const conversationDay = new Date(date);
     conversationDay.setHours(0, 0, 0, 0);
     const dayDifference = Math.floor((today - conversationDay) / 86400000);
-    if (dayDifference === 1) return 'ieri';
-    if (dayDifference < 7) return `acum ${dayDifference} zile`;
-    return date.toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' });
+    if (dayDifference < 7) return relativeTime.format(-dayDifference, 'day');
+    return date.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 }
 
 function showConversationHistoryError(message = '') {
@@ -296,7 +505,7 @@ async function loadConversationHistory() {
     if (!list) return;
 
     showConversationHistoryError();
-    list.innerHTML = '<p class="conversation-history-empty">Se încarcă...</p>';
+    list.innerHTML = `<p class="conversation-history-empty">${escapeHTML(t('common.loading', 'Se încarcă...'))}</p>`;
 
     try {
         const conversations = await apiFetch('/chat/conversations');
@@ -334,7 +543,7 @@ function renderConversationHistory() {
     list.innerHTML = '';
 
     if (!conversationHistory.length) {
-        list.innerHTML = '<p class="conversation-history-empty">Nu ai conversații salvate.</p>';
+        list.innerHTML = `<p class="conversation-history-empty">${escapeHTML(t('chat.history.empty', 'Nu ai conversații salvate.'))}</p>`;
         return;
     }
 
@@ -386,6 +595,7 @@ function renderConversationHistory() {
 
 async function openConversation(conversationId) {
     setCurrentConversationId(conversationId);
+    clearActiveDocument();
     renderConversationHistory();
     showConversationHistoryError();
 
@@ -397,9 +607,13 @@ async function openConversation(conversationId) {
             (message.role === 'user' || message.role === 'assistant') && message.content
         );
         if (dialogue.length) {
-            dialogue.forEach(message => appendChatBubble(message.role === 'user' ? 'user' : 'ai', message.content));
+            dialogue.forEach(message => appendChatBubble(
+                message.role === 'user' ? 'user' : 'ai',
+                message.content,
+                { routing: message.routing || undefined }
+            ));
         } else {
-            appendChatBubble('ai', CHAT_WELCOME_TEXT);
+            appendChatBubble('ai', chatWelcomeText());
         }
     } catch (err) {
         showConversationHistoryError('Conversația nu a putut fi încărcată. Încearcă din nou.');
@@ -674,6 +888,7 @@ function wireStepUpModal() {
  * ========================================================================= */
 
 let currentAccounts = [];
+let currentCards = [];
 
 const CURRENCY_ICONS = { RON: 'coins', EUR: 'euro', USD: 'dollar-sign' };
 
@@ -746,22 +961,208 @@ async function refreshDashboard() {
     await loadScheduledTransfers();
 }
 
-//: Cycled through in order for however many categories come back - the
-//: backend doesn't assign colors (it's just names/amounts), so the mapping
-//: is purely a frontend rendering concern.
-const SPENDING_CATEGORY_COLORS = [
-    '#2DD4BF', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444',
-    '#ec4899', '#22c55e', '#06b6d4', '#a855f7', '#f97316',
-    '#84cc16', '#e11d48', '#64748b',
+//: Fixed hue order, validated (CVD-safe under protan/deuteranopia simulation,
+//: normal-vision floor, contrast on this app's --bg-surface #1A2235 - see
+//: dataviz skill's palette.md/color-formula.md) - never cycled, never
+//: generated. Assigned to real categories only, in order of first
+//: appearance; "Altele" always gets SPENDING_OTHER_COLOR instead, win or
+//: lose, so a residual/mixed bucket never impersonates a real category's hue.
+const SPENDING_CATEGORY_PALETTE = [
+    '#3987e5', // blue
+    '#d95926', // orange
+    '#199e70', // aqua
+    '#c98500', // yellow
+    '#d55181', // magenta
+    '#008300', // green
 ];
+const SPENDING_OTHER_CATEGORY_NAME = 'Altele';
+const SPENDING_OTHER_COLOR = '#898781';
+
+//: Donut/pie is only honest "at a glance" up to ~6 slices (see dataviz
+//: skill's anti-patterns.md) - past that, distinct hues run out and slivers
+//: blur together. Anything past the cap folds into one trailing "Altele",
+//: merged with the backend's own "Altele" if it sent one.
+const SPENDING_MAX_DIRECT_CATEGORIES = 6;
+
+/** Caps at SPENDING_MAX_DIRECT_CATEGORIES real (non-"Altele") categories,
+ * folding the backend's own "Altele" plus any overflow past the cap into one
+ * trailing bucket - always last, regardless of its size, so a residual/mixed
+ * category is never mistaken for a single coherent one that happens to rank
+ * high. Categories arrive pre-sorted descending by amount (see
+ * categorize_transactions.py), so `.slice` alone preserves rank order. */
+function foldSpendingCategories(categories) {
+    const real = categories.filter(c => c.name !== SPENDING_OTHER_CATEGORY_NAME);
+    const backendOther = categories.find(c => c.name === SPENDING_OTHER_CATEGORY_NAME);
+
+    const kept = real.slice(0, SPENDING_MAX_DIRECT_CATEGORIES);
+    const overflow = real.slice(SPENDING_MAX_DIRECT_CATEGORIES);
+
+    let otherTotalMinor = backendOther ? backendOther.total_minor : 0;
+    let otherPercentage = backendOther ? backendOther.percentage : 0;
+    overflow.forEach(c => {
+        otherTotalMinor += c.total_minor;
+        otherPercentage += c.percentage;
+    });
+
+    const result = kept.map(c => ({ ...c, color: null }));
+    result.forEach((c, i) => { c.color = SPENDING_CATEGORY_PALETTE[i % SPENDING_CATEGORY_PALETTE.length]; });
+
+    if (otherTotalMinor > 0) {
+        result.push({
+            name: SPENDING_OTHER_CATEGORY_NAME,
+            total_minor: otherTotalMinor,
+            percentage: otherPercentage,
+            color: SPENDING_OTHER_COLOR,
+        });
+    }
+    return result;
+}
+
+//: Geometry shared between the SVG markup and the hover math below -
+//: viewBox is square, ring sits centered, with enough margin past the
+//: stroke for the hover "pop out" translate and drop-shadow to never clip.
+const SPENDING_DONUT_SIZE = 200;
+const SPENDING_DONUT_CENTER = SPENDING_DONUT_SIZE / 2;
+const SPENDING_DONUT_RADIUS = 68;
+const SPENDING_DONUT_STROKE = 26;
+const SPENDING_DONUT_GAP_PX = 3;
+const SPENDING_DONUT_HOVER_OFFSET = 8;
+const SPENDING_DONUT_CIRCUMFERENCE = 2 * Math.PI * SPENDING_DONUT_RADIUS;
+
+/** Outward (dx, dy) for a slice whose visual midpoint sits at `midAngleDeg`
+ * (0 = 12 o'clock, clockwise) - the direction a hovered slice "explodes"
+ * toward, and the direction its drop-shadow leans. */
+function angleToOffset(midAngleDeg, distance) {
+    const rad = (midAngleDeg * Math.PI) / 180;
+    return { dx: Math.sin(rad) * distance, dy: -Math.cos(rad) * distance };
+}
+
+/** Builds the ring's SVG markup: one <circle> per category, each a full
+ * circle whose stroke-dasharray only paints its own arc (with a small gap
+ * on either side instead of a border - see dataviz skill's anti-patterns.md
+ * on borders between marks). Positioning, the mount animation, and the
+ * hover pop-out are ALL one CSS `transform` chain on the circle itself
+ * (`translate() rotate() scale()`, right-to-left composition) driven by
+ * --rot/--hx/--hy/--scale custom properties - deliberately NOT split across
+ * an SVG `rotate` attribute on a wrapping <g> plus a separate CSS transform
+ * on the child, which would nest the child's translate inside the parent's
+ * rotation and swing the hover offset off in the wrong direction. */
+function buildSpendingDonutSegments(categories) {
+    let cumulativePercent = 0;
+    return categories.map((cat, i) => {
+        const startPercent = cumulativePercent;
+        cumulativePercent += cat.percentage;
+        const segLen = (cat.percentage / 100) * SPENDING_DONUT_CIRCUMFERENCE;
+        const visibleLen = Math.max(segLen - SPENDING_DONUT_GAP_PX, 1);
+        const startAngleDeg = (startPercent / 100) * 360;
+        const midAngleDeg = startAngleDeg + ((cat.percentage / 100) * 360) / 2;
+        const { dx, dy } = angleToOffset(midAngleDeg, SPENDING_DONUT_HOVER_OFFSET);
+
+        return `
+            <g class="spending-segment" data-index="${i}" tabindex="0"
+               role="img" aria-label="${escapeHTML(cat.name)}"
+               style="--rot: ${(startAngleDeg - 90).toFixed(3)}deg; --hx-active: ${dx.toFixed(2)}px; --hy-active: ${dy.toFixed(2)}px; --seg-delay: ${i * 70}ms;">
+                <circle
+                    cx="${SPENDING_DONUT_CENTER}" cy="${SPENDING_DONUT_CENTER}" r="${SPENDING_DONUT_RADIUS}"
+                    fill="none" stroke="${cat.color}" stroke-width="${SPENDING_DONUT_STROKE}"
+                    stroke-linecap="round"
+                    stroke-dasharray="0 ${SPENDING_DONUT_GAP_PX / 2} ${visibleLen} ${SPENDING_DONUT_CIRCUMFERENCE}"
+                ></circle>
+            </g>
+        `;
+    }).join('');
+}
+
+/** Renders the SVG donut + center total into `#spending-category-donut`
+ * (a plain wrapper div, not itself an SVG - built fresh each load since the
+ * category set can change). */
+function renderSpendingDonut(donutWrap, categories, primaryCurrency) {
+    const totalMinor = categories.reduce((sum, c) => sum + c.total_minor, 0);
+    donutWrap.innerHTML = `
+        <svg class="spending-donut" viewBox="0 0 ${SPENDING_DONUT_SIZE} ${SPENDING_DONUT_SIZE}" role="group" aria-label="Cheltuieli pe categorii">
+            ${buildSpendingDonutSegments(categories)}
+        </svg>
+        <div class="spending-donut-center">
+            <span class="spending-donut-total-label">Total</span>
+            <span class="spending-donut-total-value">${formatMoney(totalMinor, primaryCurrency)}</span>
+        </div>
+        <div class="spending-donut-tooltip" id="spending-donut-tooltip" hidden></div>
+    `;
+    // Segments mount at scale 0 (see CSS) and grow in, staggered - the
+    // "animated" entrance. Two rAFs so the browser commits the 0-scale
+    // frame before the transition-triggering class lands (one is flaky).
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        donutWrap.classList.add('is-mounting');
+        // Swap to the fast, undelayed transition once every staggered
+        // entrance has finished, so a later slice's hover response doesn't
+        // inherit its mount stagger and feel laggy (see the CSS comment).
+        const mountDurationMs = categories.length * 70 + 550;
+        setTimeout(() => {
+            donutWrap.classList.remove('is-mounting');
+            donutWrap.classList.add('is-mounted');
+        }, mountDurationMs);
+    }));
+}
+
+/** Cross-highlights a category across the donut and the legend: hovering or
+ * focusing either one highlights that category's slice + row and dims every
+ * other one, so a colorblind user can confirm "this slice = this row" by
+ * position/highlight rather than by matching hues. */
+function wireSpendingCategoryHover(container, categories, primaryCurrency) {
+    const donutWrap = container.querySelector('.spending-donut-wrap');
+    const svg = donutWrap.querySelector('.spending-donut');
+    const tooltip = donutWrap.querySelector('#spending-donut-tooltip');
+    const legend = container.querySelector('.legend');
+    if (!svg || !legend) return;
+
+    function setActive(index) {
+        svg.classList.toggle('has-active', index !== null);
+        legend.classList.toggle('has-active', index !== null);
+        svg.querySelectorAll('.spending-segment').forEach(seg => {
+            seg.classList.toggle('is-active', Number(seg.dataset.index) === index);
+        });
+        legend.querySelectorAll('.legend-item').forEach(row => {
+            row.classList.toggle('is-active', Number(row.dataset.index) === index);
+        });
+
+        if (index === null) {
+            tooltip.hidden = true;
+            return;
+        }
+        const cat = categories[index];
+        tooltip.innerHTML = `
+            <span class="spending-donut-tooltip-value">${formatMoney(cat.total_minor, primaryCurrency)}</span>
+            <span class="spending-donut-tooltip-label">${escapeHTML(cat.name)} &middot; ${cat.percentage.toFixed(0)}%</span>
+        `;
+        tooltip.hidden = false;
+    }
+
+    svg.querySelectorAll('.spending-segment').forEach(seg => {
+        const index = Number(seg.dataset.index);
+        seg.addEventListener('pointerenter', () => setActive(index));
+        seg.addEventListener('pointerleave', () => setActive(null));
+        seg.addEventListener('focus', () => setActive(index));
+        seg.addEventListener('blur', () => setActive(null));
+    });
+
+    legend.querySelectorAll('.legend-item').forEach(row => {
+        const index = Number(row.dataset.index);
+        row.addEventListener('pointerenter', () => setActive(index));
+        row.addEventListener('pointerleave', () => setActive(null));
+        row.addEventListener('focus', () => setActive(index));
+        row.addEventListener('blur', () => setActive(null));
+    });
+}
 
 async function loadSpendingByCategory() {
-    const donut = document.getElementById('spending-category-donut');
+    const donutWrap = document.getElementById('spending-category-donut');
     const legend = document.getElementById('spending-category-legend');
+    const container = document.getElementById('spending-category-container');
 
     const active = currentAccounts.filter(a => a.status === 'active');
     if (active.length === 0) {
-        donut.style.background = 'var(--bg-dark)';
+        donutWrap.innerHTML = '';
+        donutWrap.style.display = 'none';
         legend.innerHTML = '<div class="empty-state">Niciun cont activ încă.</div>';
         return;
     }
@@ -776,13 +1177,16 @@ async function loadSpendingByCategory() {
             `/insights/spending-by-category?start_date=${startDate}&end_date=${endDate}`
         );
     } catch (err) {
+        donutWrap.innerHTML = '';
+        donutWrap.style.display = 'none';
         legend.innerHTML = `<div class="empty-state">Nu s-au putut încărca categoriile: ${escapeHTML(err.message)}</div>`;
         return;
     }
 
-    const categories = data.categories.filter(c => c.total_minor > 0);
-    if (categories.length === 0) {
-        donut.style.background = 'var(--bg-dark)';
+    const rawCategories = data.categories.filter(c => c.total_minor > 0);
+    if (rawCategories.length === 0) {
+        donutWrap.innerHTML = '';
+        donutWrap.style.display = 'none';
         legend.innerHTML = '<div class="empty-state">Nicio cheltuială luna aceasta încă.</div>';
         return;
     }
@@ -791,25 +1195,19 @@ async function loadSpendingByCategory() {
     // renderHeadlineBalance - amounts are shown in the first active
     // account's currency, since the backend has no "home currency" concept.
     const primaryCurrency = active[0].currency;
+    const categories = foldSpendingCategories(rawCategories);
 
-    let cumulativePercent = 0;
-    const gradientStops = categories.map((cat, i) => {
-        const color = SPENDING_CATEGORY_COLORS[i % SPENDING_CATEGORY_COLORS.length];
-        const start = cumulativePercent;
-        cumulativePercent += cat.percentage;
-        return `${color} ${start}% ${cumulativePercent}%`;
-    });
-    donut.style.background = `conic-gradient(${gradientStops.join(', ')})`;
+    donutWrap.style.display = '';
+    renderSpendingDonut(donutWrap, categories, primaryCurrency);
 
-    legend.innerHTML = categories.map((cat, i) => {
-        const color = SPENDING_CATEGORY_COLORS[i % SPENDING_CATEGORY_COLORS.length];
-        return `
-            <div class="legend-item">
-                <span class="dot" style="background-color: ${color};"></span>
-                ${escapeHTML(cat.name)} (${cat.percentage.toFixed(0)}%) &middot; ${formatMoney(cat.total_minor, primaryCurrency)}
-            </div>
-        `;
-    }).join('');
+    legend.innerHTML = categories.map((cat, i) => `
+        <div class="legend-item" data-index="${i}" tabindex="0">
+            <span class="dot" style="background-color: ${cat.color};"></span>
+            ${escapeHTML(cat.name)} (${cat.percentage.toFixed(0)}%) &middot; ${formatMoney(cat.total_minor, primaryCurrency)}
+        </div>
+    `).join('');
+
+    wireSpendingCategoryHover(container, categories, primaryCurrency);
 }
 
 async function loadAccounts() {
@@ -870,9 +1268,10 @@ async function loadTransactions() {
     const list = document.getElementById('transactions-list');
     const active = currentAccounts.filter(a => a.status === 'active');
     if (active.length === 0) {
-        list.innerHTML = `<div class="empty-state">${t('dashboard.no_activity')}</div>`;
+        list.innerHTML = `<div class="empty-state" data-i18n="dashboard.no_activity">${t('dashboard.no_activity')}</div>`;
         return;
     }
+
 
     try {
         // Fetch the 5 most recent per account, then re-sort/trim across
@@ -884,7 +1283,7 @@ async function loadTransactions() {
         const entries = perAccount.flat().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
 
         if (entries.length === 0) {
-            list.innerHTML = `<div class="empty-state">${t('dashboard.no_activity')}</div>`;
+            list.innerHTML = `<div class="empty-state" data-i18n="dashboard.no_activity">${t('dashboard.no_activity')}</div>`;
             return;
         }
 
@@ -916,7 +1315,7 @@ async function loadAllTransactions() {
 
     const active = currentAccounts.filter(a => a.status === 'active');
     if (active.length === 0) {
-        container.innerHTML = `<div class="empty-state">${t('dashboard.no_activity')}</div>`;
+        container.innerHTML = `<div class="empty-state" data-i18n="dashboard.no_activity">${t('dashboard.no_activity')}</div>`;
         return;
     }
 
@@ -935,7 +1334,7 @@ async function loadAllTransactions() {
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
         if (entries.length === 0) {
-            container.innerHTML = `<div class="empty-state">${t('dashboard.no_activity')}</div>`;
+            container.innerHTML = `<div class="empty-state" data-i18n="dashboard.no_activity">${t('dashboard.no_activity')}</div>`;
             return;
         }
 
@@ -1172,7 +1571,7 @@ function renderSavingsAccountsList() {
     if (!list) return;
     const savingsAccounts = currentAccounts.filter((a) => a.product_type !== 'checking');
     if (savingsAccounts.length === 0) {
-        list.innerHTML = '<div class="empty-state">Niciun cont de economii încă.</div>';
+        list.innerHTML = `<div class="empty-state" data-i18n="savings.no_accounts">${t('savings.no_accounts', 'Niciun cont de economii încă.')}</div>`;
         return;
     }
     list.innerHTML = savingsAccounts.map((acc) => {
@@ -1477,11 +1876,15 @@ function showPriceIncreaseModal(details) {
     });
 }
 
+const FACE_CONFIRM_DEFAULT_REASON = 'Suma depășește pragul de confirmare - verifică-ți identitatea prin cameră.';
+
 /** Opens the face-confirm modal, captures a photo, exchanges it for a
  * short-lived confirmation token via POST /auth/face/confirm. Resolves with
  * the token, or null if the user cancels. Never rejects - camera/API errors
- * show inline in the modal and let the user retry or cancel. */
-function requestFaceConfirmationToken() {
+ * show inline in the modal and let the user retry or cancel. `reason`
+ * overrides the modal's explanatory text for callers other than the
+ * large-transfer step-up this was originally built for. */
+function requestFaceConfirmationToken(reason = FACE_CONFIRM_DEFAULT_REASON) {
     return new Promise((resolve) => {
         const modal = document.getElementById('face-confirm-modal');
         const video = document.getElementById('face-confirm-video');
@@ -1493,6 +1896,7 @@ function requestFaceConfirmationToken() {
 
         let stream = null;
         errorEl.hidden = true;
+        document.getElementById('face-confirm-reason').textContent = reason;
         modal.hidden = false;
 
         function cleanup(result) {
@@ -1574,12 +1978,26 @@ function populateTransferToOptions() {
 /* --- Cards --- */
 
 const CARD_STATUS_LABELS = { active: 'Activ', frozen: 'Blocat', cancelled: 'Anulat' };
+let loadedCards = [];
+
+/** Shows or re-masks a card's expiry/CVV and flips the eye icon to match.
+ * Split out of the eye button's click handler so the Face ID gate above it
+ * can decide WHETHER to reveal before this actually does it. */
+function applyCardSecretsVisibility(card, btn, revealing) {
+    const secrets = card.querySelectorAll('.card-secret');
+    secrets.forEach(el => { el.textContent = revealing ? el.dataset.value : (el.dataset.reveal === 'cvv' ? '•••' : '••/••'); });
+    btn.innerHTML = `<i data-lucide="${revealing ? 'eye-off' : 'eye'}"></i>`;
+    btn.title = revealing ? 'Ascunde expirare și CVV' : 'Arată expirare și CVV';
+    if (window.lucide) lucide.createIcons();
+}
 
 async function loadCards() {
     const list = document.getElementById('cards-list');
     if (!list) return;
     try {
         const cards = await apiFetch('/cards');
+        currentCards = cards;
+        loadedCards = cards;
         renderCardsList(cards);
     } catch (err) {
         list.innerHTML = `<div class="empty-state">Nu s-au putut încărca cardurile: ${escapeHTML(err.message)}</div>`;
@@ -1589,7 +2007,7 @@ async function loadCards() {
 function renderCardsList(cards) {
     const list = document.getElementById('cards-list');
     if (cards.length === 0) {
-        list.innerHTML = '<div class="empty-state">Niciun card încă. Generează primul card virtual.</div>';
+        list.innerHTML = `<div class="empty-state">${t('cards.empty', 'Niciun card încă. Generează primul card virtual.')}</div>`;
         return;
     }
 
@@ -1603,36 +2021,38 @@ function renderCardsList(cards) {
         return `
         <div class="credit-card virtual ${isCancelled ? 'cancelled' : ''}">
             <div class="card-header">
-                <span class="card-type">Card${account ? ' &middot; ' + escapeHTML(account.name) : ''}</span>
+                <span class="card-type">${t('cards.label', 'Card')}${account ? ' &middot; ' + escapeHTML(account.name) : ''}</span>
                 <span class="card-logo">VISA</span>
             </div>
             <div class="card-number">${escapeHTML(formattedNumber)}</div>
             <div class="card-footer">
                 <div class="card-details">
                     <div class="detail">
-                        <span class="label">Expiră</span>
+                        <span class="label">${t('cards.expiry', 'Expiră')}</span>
                         <span class="card-secret" data-reveal="expiry" data-value="${escapeHTML(expiry)}">••/••</span>
                     </div>
                     <div class="detail">
-                        <span class="label">CVV</span>
+                        <span class="label">${t('cards.cvv', 'CVV')}</span>
                         <span class="card-secret" data-reveal="cvv" data-value="${escapeHTML(card.cvv)}">•••</span>
                     </div>
                     ${card.spending_limit_minor != null ? `
                         <div class="detail">
-                            <span class="label">Limită</span>
+                            <span class="label">${t('cards.limit', 'Limită')}</span>
                             <span>${formatMoney(card.spending_limit_minor, account ? account.currency : 'RON')}</span>
                         </div>
                     ` : ''}
-                    <button class="card-eye-btn" title="Arată expirare și CVV" aria-label="Arată expirare și CVV"><i data-lucide="eye"></i></button>
+                    <button class="card-eye-btn" title="${t('cards.show_details', 'Arată expirarea și CVV')}" aria-label="${t('cards.show_details', 'Arată expirarea și CVV')}"><i data-lucide="eye"></i></button>
                 </div>
-                <div class="status-indicator ${card.status}">${CARD_STATUS_LABELS[card.status] || card.status}</div>
+                ${isCancelled
+                    ? `<div class="status-indicator cancelled">${t('cards.status_cancelled', CARD_STATUS_LABELS.cancelled)}</div>`
+                    : `<button class="status-toggle-btn ${card.status}" data-card-id="${card.id}" data-action="${card.status === 'frozen' ? 'unfreeze' : 'freeze'}" title="${t(card.status === 'frozen' ? 'cards.unfreeze_hint' : 'cards.freeze_hint', card.status === 'frozen' ? 'Apasă pentru a debloca cardul' : 'Apasă pentru a bloca temporar cardul')}">
+                        <i data-lucide="${card.status === 'frozen' ? 'snowflake' : 'shield-check'}"></i>
+                        <span>${t(`cards.status_${card.status}`, CARD_STATUS_LABELS[card.status] || card.status)}</span>
+                    </button>`
+                }
             </div>
             ${!isCancelled ? `
                 <div class="card-actions-row">
-                    ${card.status === 'frozen'
-                        ? `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="unfreeze">${t('cards.unfreeze')}</button>`
-                        : `<button class="card-freeze-btn" data-card-id="${card.id}" data-action="freeze">${t('cards.freeze')}</button>`
-                    }
                     <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}">${t('cards.limit')}</button>
                     <button class="card-cancel-btn" data-card-id="${card.id}">${t('cards.cancel')}</button>
                 </div>
@@ -1644,20 +2064,39 @@ function renderCardsList(cards) {
     if (window.lucide) lucide.createIcons();
 
     list.querySelectorAll('.card-eye-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             const card = btn.closest('.credit-card');
             const secrets = card.querySelectorAll('.card-secret');
             const revealing = secrets[0].textContent !== secrets[0].dataset.value;
-            secrets.forEach(el => { el.textContent = revealing ? el.dataset.value : (el.dataset.reveal === 'cvv' ? '•••' : '••/••'); });
-            btn.innerHTML = `<i data-lucide="${revealing ? 'eye-off' : 'eye'}"></i>`;
-            btn.title = revealing ? 'Ascunde expirare și CVV' : 'Arată expirare și CVV';
-            if (window.lucide) lucide.createIcons();
+            // Hiding back to masked never needs a fresh proof of identity -
+            // only revealing the real expiry/CVV does, and only for users who
+            // actually opted into Face ID (same "optional extra" philosophy
+            // as the face-confirmation step-up on large transfers).
+            if (revealing) {
+                let faceEnrolled = false;
+                try {
+                    faceEnrolled = (await apiFetch('/auth/face/status')).enrolled;
+                } catch (err) {
+                    // Can't check - fail open to the pre-existing behaviour
+                    // rather than locking the user out of their own card.
+                }
+                if (faceEnrolled) {
+                    btn.disabled = true;
+                    const token = await requestFaceConfirmationToken(
+                        'Verifică-ți identitatea prin cameră ca să vezi numărul complet și CVV-ul cardului.'
+                    );
+                    btn.disabled = false;
+                    if (!token) return;
+                }
+            }
+
+            applyCardSecretsVisibility(card, btn, revealing);
         });
     });
 
     list.querySelectorAll('.card-cancel-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-            if (!confirm('Sigur anulezi acest card? Nu poate fi reactivat.')) return;
+            if (!confirm(t('cards.cancel_confirm', 'Sigur anulezi acest card? Nu poate fi reactivat.'))) return;
             try {
                 await apiFetch(`/cards/${btn.dataset.cardId}`, { method: 'DELETE' });
                 await loadCards();
@@ -1667,13 +2106,17 @@ function renderCardsList(cards) {
         });
     });
 
-    list.querySelectorAll('.card-freeze-btn').forEach(btn => {
+    list.querySelectorAll('.status-toggle-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const path = btn.dataset.action === 'freeze' ? 'freeze' : 'unfreeze';
+            btn.disabled = true;
+            btn.classList.add('is-toggling');
             try {
                 await apiFetch(`/cards/${btn.dataset.cardId}/${path}`, { method: 'POST' });
                 await loadCards();
             } catch (err) {
+                btn.disabled = false;
+                btn.classList.remove('is-toggling');
                 alert(err.message);
             }
         });
@@ -1757,8 +2200,41 @@ function wireCardOrderModal() {
     const form = document.getElementById('card-order-form');
     const errorEl = document.getElementById('card-order-error');
     const accountSelect = document.getElementById('card-order-account');
+    const cardChoiceSelect = document.getElementById('card-order-card-choice');
+    const cardHint = document.getElementById('card-order-card-hint');
 
-    document.getElementById('open-card-order-btn').addEventListener('click', () => {
+    // Cards that already have a physical order can't be offered again (see
+    // the backend's matching guard in card_orders/service.py) - fetched
+    // once when the modal opens, alongside the account list.
+    let orderedCardIds = new Set();
+
+    function updateCardChoices() {
+        const eligible = currentCards.filter(c =>
+            c.account_id === accountSelect.value &&
+            c.status !== 'cancelled' &&
+            !orderedCardIds.has(c.id)
+        );
+
+        cardChoiceSelect.innerHTML = [
+            '<option value="">Card nou (emite un card separat)</option>',
+            ...eligible.map(c =>
+                `<option value="${c.id}">Fă fizic cardul virtual care se termină în ${c.last4}</option>`
+            ),
+        ].join('');
+
+        // Exactly one eligible virtual card on this account - that's almost
+        // certainly what "order a physical card" means here, so default to
+        // reusing it instead of silently minting an unrelated second card.
+        if (eligible.length === 1) {
+            cardChoiceSelect.value = eligible[0].id;
+        }
+
+        cardHint.hidden = eligible.length === 0;
+        cardHint.textContent = eligible.length === 0 ? '' :
+            'Poți transforma un card virtual existent în fizic (păstrează același număr) sau comanda unul nou.';
+    }
+
+    document.getElementById('open-card-order-btn').addEventListener('click', async () => {
         errorEl.hidden = true;
         form.reset();
         document.getElementById('card-order-country').value = 'România';
@@ -1766,8 +2242,19 @@ function wireCardOrderModal() {
         accountSelect.innerHTML = active.length
             ? active.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
             : '<option value="" disabled selected>Creează mai întâi un cont</option>';
+
+        try {
+            const orders = await apiFetch('/card-orders');
+            orderedCardIds = new Set(orders.map(o => o.card_id).filter(Boolean));
+        } catch (err) {
+            orderedCardIds = new Set();
+        }
+
+        updateCardChoices();
         modal.hidden = false;
     });
+    accountSelect.addEventListener('change', updateCardChoices);
+
     document.getElementById('close-card-order-modal').addEventListener('click', () => { modal.hidden = true; });
     document.getElementById('cancel-card-order').addEventListener('click', () => { modal.hidden = true; });
 
@@ -1780,6 +2267,7 @@ function wireCardOrderModal() {
                 method: 'POST',
                 body: JSON.stringify({
                     account_id: accountSelect.value,
+                    card_id: cardChoiceSelect.value || null,
                     full_name: document.getElementById('card-order-name').value,
                     phone: document.getElementById('card-order-phone').value,
                     address: document.getElementById('card-order-address').value,
@@ -1835,7 +2323,7 @@ async function loadBeneficiaries() {
 function renderBeneficiariesList(contacts) {
     const list = document.getElementById('beneficiaries-list');
     if (contacts.length === 0) {
-        list.innerHTML = `<div class="empty-state">${t('payments.no_contacts')}</div>`;
+        list.innerHTML = `<div class="empty-state" data-i18n="payments.no_contacts">${t('payments.no_contacts')}</div>`;
         return;
     }
     list.innerHTML = contacts.map(c => `
@@ -1922,7 +2410,7 @@ async function loadPayments() {
 function renderPaymentsList(payments) {
     const list = document.getElementById('payments-list');
     if (payments.length === 0) {
-        list.innerHTML = `<div class="empty-state">${t('payments.no_payments')}</div>`;
+        list.innerHTML = `<div class="empty-state" data-i18n="payments.no_payments">${t('payments.no_payments')}</div>`;
         return;
     }
     list.innerHTML = payments.map(p => `
@@ -2184,17 +2672,24 @@ function stopFaceCamera() {
     document.getElementById('face-capture-btn').hidden = true;
 }
 
-async function loadFaceStatus() {
+let faceStatusEnrolled = null;
+
+function renderFaceStatus(enrolled) {
     const statusText = document.getElementById('face-status-text');
     const removeBtn = document.getElementById('face-remove-btn');
+    statusText.textContent = enrolled
+        ? t('profile.face_active', 'Face Login e activat pe contul tău.')
+        : t('profile.face_inactive', 'Face Login nu e activat încă. Pornește camera și fă o poză ca să-l activezi.');
+    removeBtn.hidden = !enrolled;
+}
+
+async function loadFaceStatus() {
     try {
         const { enrolled } = await apiFetch('/auth/face/status');
-        statusText.textContent = enrolled
-            ? 'Face Login e activat pe contul tău.'
-            : 'Face Login nu e activat încă. Pornește camera și fă o poză ca să-l activezi.';
-        removeBtn.hidden = !enrolled;
+        faceStatusEnrolled = enrolled;
+        renderFaceStatus(enrolled);
     } catch (err) {
-        statusText.textContent = `Nu s-a putut verifica starea: ${err.message}`;
+        document.getElementById('face-status-text').textContent = `${t('profile.face_status_error', 'Nu s-a putut verifica starea')}: ${err.message}`;
     }
 }
 
@@ -2243,7 +2738,7 @@ function wireFaceLoginPanel() {
                         throw new Error(body?.error?.message || `Request failed (${res.status})`);
                     }
                 });
-                successEl.textContent = 'Face Login activat cu succes!';
+                successEl.textContent = t('profile.face_success', 'Face Login activat cu succes!');
                 successEl.hidden = false;
                 stopFaceCamera();
                 await loadFaceStatus();

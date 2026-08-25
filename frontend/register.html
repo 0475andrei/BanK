@@ -16,14 +16,14 @@
                 <span class="logo-text">
                     <span class="logo-name">BanK</span>
                     <span class="logo-bank">BANCA</span>
-                    <span class="logo-tagline">CONFORTUL TAU FINANCIAR</span>
+                    <span class="logo-tagline" data-i18n="brand.tagline">CONFORTUL TAU FINANCIAR</span>
                 </span>
             </div>
-            <p class="auth-subtitle">Create your account</p>
+            <p class="auth-subtitle" data-i18n="registration.title">Create your account</p>
 
             <div class="onboarding-mode-switch">
-                <button type="button" class="mode-tab active" id="mode-tab-manual">Completare manuală</button>
-                <button type="button" class="mode-tab" id="mode-tab-comodul"><i data-lucide="sparkles" class="icon"></i> Chat cu Comodul</button>
+                <button type="button" class="mode-tab active" id="mode-tab-manual" data-i18n="registration.manual">Completare manuală</button>
+                <button type="button" class="mode-tab" id="mode-tab-comodul"><i data-lucide="sparkles" class="icon"></i> <span data-i18n="registration.chat_mode">Chat cu Comodul</span></button>
             </div>
 
             <div class="auth-error" id="auth-error" hidden></div>
@@ -32,56 +32,56 @@
             <div id="manual-panel">
                 <form id="register-form">
                     <div class="ocr-upload-box">
-                        <label class="field-label">Completare automată din buletin <span class="field-optional">(opțional)</span></label>
+                        <label class="field-label" data-i18n="registration.ocr_label">Completare automată din buletin <span class="field-optional">(opțional)</span></label>
                         <div class="file-dropzone" id="id-photo-dropzone" tabindex="0" role="button" aria-label="Încarcă poza buletinului">
                             <span class="file-dropzone-icon"><i data-lucide="paperclip"></i></span>
-                            <span class="file-dropzone-text" id="id-photo-filename">Trage poza aici sau <span class="file-dropzone-link">alege un fișier</span></span>
+                            <span class="file-dropzone-text" id="id-photo-filename" data-i18n="registration.drop_id">Trage poza aici sau alege un fișier</span>
                             <input type="file" id="id_photo" accept="image/png" hidden>
                         </div>
-                        <p class="field-hint" id="ocr-status">Doar PNG. Completează automat numele, CNP-ul și adresa mai jos.</p>
+                        <p class="field-hint" id="ocr-status" data-i18n="registration.ocr_status">Doar PNG. Completează automat numele, CNP-ul și adresa mai jos.</p>
                     </div>
 
                     <div class="field-row">
                         <div>
-                            <label class="field-label" for="first_name">First name</label>
+                            <label class="field-label" for="first_name" data-i18n="registration.first_name">First name</label>
                             <input class="field-input" type="text" id="first_name" name="first_name" required>
                         </div>
                         <div>
-                            <label class="field-label" for="last_name">Last name</label>
+                            <label class="field-label" for="last_name" data-i18n="registration.last_name">Last name</label>
                             <input class="field-input" type="text" id="last_name" name="last_name" required>
                         </div>
                     </div>
 
-                    <label class="field-label" for="email">Email</label>
+                    <label class="field-label" for="email" data-i18n="registration.email">Email</label>
                     <input class="field-input" type="email" id="email" name="email" required autocomplete="email">
 
-                    <label class="field-label" for="password">Password</label>
+                    <label class="field-label" for="password" data-i18n="registration.password">Password</label>
                     <div class="password-field-wrapper">
                         <input class="field-input" type="password" id="password" name="password" minlength="8" required autocomplete="new-password">
                         <button type="button" class="password-toggle-btn" data-target="password" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
                     </div>
-                    <p class="field-hint">At least 8 characters</p>
+                    <p class="field-hint" data-i18n="registration.password_hint">At least 8 characters</p>
 
-                    <label class="field-label" for="national_id">National ID (CNP)</label>
+                    <label class="field-label" for="national_id" data-i18n="registration.national_id">National ID (CNP)</label>
                     <input class="field-input" type="text" id="national_id" name="national_id" pattern="\d{13}" required>
-                    <p class="field-hint">Gender and date of birth are read from this automatically</p>
+                    <p class="field-hint" data-i18n="registration.national_id_hint">Gender and date of birth are read from this automatically</p>
 
                     <div class="field-row">
                         <div>
-                            <label class="field-label" for="phone">Phone <span class="field-optional">(optional)</span></label>
+                            <label class="field-label" for="phone" data-i18n="registration.phone">Phone (optional)</label>
                             <input class="field-input" type="tel" id="phone" name="phone">
                         </div>
                         <div>
-                            <label class="field-label" for="address">Address <span class="field-optional">(optional)</span></label>
+                            <label class="field-label" for="address" data-i18n="registration.address">Address (optional)</label>
                             <input class="field-input" type="text" id="address" name="address">
                         </div>
                     </div>
 
-                    <label class="field-label" for="referral_code">Cod referral <span class="field-optional">(opțional)</span></label>
+                    <label class="field-label" for="referral_code" data-i18n="registration.referral">Cod referral (opțional)</label>
                     <input class="field-input" type="text" id="referral_code" name="referral_code">
-                    <p class="field-hint">Ai un cod de referral? Contul tău nou primește 500 RON cadou.</p>
+                    <p class="field-hint" data-i18n="registration.referral_hint">Ai un cod de referral? Contul tău nou primește 500 RON cadou.</p>
 
-                    <button class="btn btn-primary auth-submit" type="submit">Register</button>
+                    <button class="btn btn-primary auth-submit" type="submit" data-i18n="registration.submit">Register</button>
                 </form>
             </div>
 
@@ -92,33 +92,33 @@
                         <div class="ai-avatar"><i data-lucide="sparkles"></i></div>
                         <div class="ai-info">
                             <h2>Comodul</h2>
-                            <span class="status">Te ajut să deschizi un cont, în ritmul tău</span>
+                            <span class="status" data-i18n="registration.chat_status">Te ajut să deschizi un cont, în ritmul tău</span>
                         </div>
                     </div>
 
                     <div class="chat-messages" id="comodul-messages">
                         <div class="message ai">
                             <div class="avatar"><i data-lucide="sparkles"></i></div>
-                            <div class="bubble">Salut! Sunt Comodul și te ajut să deschizi un cont la BanK, fără grabă. Poți să-mi spui numele tău, sau, dacă e mai simplu, poți încărca o poză a buletinului mai jos și citesc eu datele automat.</div>
+                            <div class="bubble" data-i18n="registration.chat_welcome">Salut! Sunt Comodul și te ajut să deschizi un cont la BanK, fără grabă. Poți să-mi spui numele tău, sau, dacă e mai simplu, poți încărca o poză a buletinului mai jos și citesc eu datele automat.</div>
                         </div>
                     </div>
 
                     <div class="ocr-upload-box comodul-upload-box">
                         <div class="file-dropzone" id="comodul-photo-dropzone" tabindex="0" role="button" aria-label="Încarcă poza buletinului">
                             <span class="file-dropzone-icon"><i data-lucide="paperclip"></i></span>
-                            <span class="file-dropzone-text" id="comodul-photo-filename">Trage poza buletinului aici sau <span class="file-dropzone-link">alege un fișier</span> (opțional)</span>
+                            <span class="file-dropzone-text" id="comodul-photo-filename" data-i18n="registration.drop_id_optional">Trage poza buletinului aici sau alege un fișier (opțional)</span>
                             <input type="file" id="comodul_photo" accept="image/png" hidden>
                         </div>
                     </div>
 
                     <div class="chat-input-area">
-                        <input type="text" class="chat-input" id="comodul-input" placeholder="Scrie un mesaj...">
+                        <input type="text" class="chat-input" id="comodul-input" data-i18n-placeholder="registration.chat_placeholder" placeholder="Scrie un mesaj...">
                         <button class="btn-send" id="comodul-send-btn" type="button">➤</button>
                     </div>
                 </div>
             </div>
 
-            <p class="auth-switch">Already have an account? <a href="login.html">Log in</a></p>
+            <p class="auth-switch"><span data-i18n="registration.already_account">Already have an account?</span> <a href="login.html" data-i18n="common.Log in">Log in</a></p>
         </div>
     </div>
 
