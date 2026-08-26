@@ -1583,6 +1583,7 @@ async function initDashboard() {
     wireNotificationsPanel();
     wireAddBeneficiaryForm();
     wireScheduledTransfersModal();
+    wireHeaderSearch();
 
     await loadAccountProducts();
     await refreshDashboard();
@@ -3237,15 +3238,62 @@ function updateMyIbanDisplay() {
     iban.textContent = account ? account.iban : '—';
 }
 
+//: The last-fetched recipient list, kept around so the header search bar
+//: (see wireHeaderSearch) can filter it locally without a round-trip on
+//: every keystroke - re-set on every loadBeneficiaries() call, so a search
+//: always filters current data, never a stale snapshot.
+let cachedBeneficiaries = [];
+
 async function loadBeneficiaries() {
     const list = document.getElementById('beneficiaries-list');
     if (!list) return;
     try {
-        const contacts = await apiFetch('/beneficiaries');
-        renderBeneficiariesList(contacts);
+        cachedBeneficiaries = await apiFetch('/beneficiaries');
+        applyBeneficiarySearch();
     } catch (err) {
         list.innerHTML = `<div class="empty-state">${t('payments.contacts_load_error')}: ${escapeHTML(err.message)}</div>`;
     }
+}
+
+/** Renders cachedBeneficiaries through whatever's currently in the header
+ * search box - the ONE render path both loadBeneficiaries() and the search
+ * input use, so a beneficiary refetch that resolves while a search is
+ * active (e.g. dashboard navigation's own refreshDashboard() still in
+ * flight from a moment ago) re-applies the filter to the fresh data instead
+ * of silently clobbering it with the unfiltered list once that older
+ * fetch finally lands. */
+function applyBeneficiarySearch() {
+    const input = document.getElementById('header-search-input');
+    const query = input ? input.value.trim().toLowerCase() : '';
+    if (!query) {
+        renderBeneficiariesList(cachedBeneficiaries);
+        return;
+    }
+    const filtered = cachedBeneficiaries.filter(c =>
+        c.display_name.toLowerCase().includes(query) || c.iban.toLowerCase().includes(query)
+    );
+    renderBeneficiariesList(filtered);
+}
+
+/** The header search bar (see index.html's .search-bar) filters the saved
+ * recipients by name or IBAN, live as the user types. Switches to the
+ * Payments view automatically when another one is active, so typing a
+ * search actually surfaces a visible result instead of silently filtering
+ * a list that isn't on screen - same "jump to the view that shows this"
+ * pattern as #view-all-transactions-btn above. */
+function wireHeaderSearch() {
+    const input = document.getElementById('header-search-input');
+    if (!input) return;
+
+    input.addEventListener('input', () => {
+        if (input.value.trim()) {
+            const paymentsView = document.getElementById('view-payments');
+            if (paymentsView && !paymentsView.classList.contains('active')) {
+                document.querySelector('.nav-item[data-view="payments"]')?.click();
+            }
+        }
+        applyBeneficiarySearch();
+    });
 }
 
 function renderBeneficiariesList(contacts) {
