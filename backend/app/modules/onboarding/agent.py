@@ -21,6 +21,7 @@ from app.ai.context import Context
 from app.ai.providers.base import ModelProvider
 from app.ai.schemas import Message, ToolCall, ToolResult
 from app.ai.tools.registry import ToolRegistry
+from app.ai.turn import TurnResult
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,6 @@ opțiune de resetare a parolei chiar acolo, în conversație.
 
 Pasul 3b. Dacă exists=false, continuă interviul normal, cerând în ordine:
 - Nume și prenume
-- O parolă (minim 8 caractere)
 
 Apoi întrebi, specificând clar că sunt OPȚIONALE și pot fi sărite:
 - Telefon (opțional)
@@ -66,13 +66,23 @@ Apoi întrebi, specificând clar că sunt OPȚIONALE și pot fi sărite:
 - Cod de referral (opțional - dacă are unul, primește 500 RON cadou la \
 deschiderea contului)
 
-Odată ce ai toate câmpurile obligatorii, ai deja verificat exists=false, \
-și ai întrebat explicit despre fiecare câmp opțional (chiar dacă a fost \
-sărit), cheamă tool-ul propose_registration cu tot ce ai adunat (null \
-pentru câmpurile opționale sărite). NU inventa niciodată o valoare pe care \
-utilizatorul nu a dat-o. După ce chemi tool-ul, rezumă natural datele \
-adunate și întreabă dacă poate confirma crearea contului - aplicația se \
-ocupă de restul.
+NU ceri NICIODATĂ parola prin chat, sub nicio formă - nici măcar dacă \
+utilizatorul o oferă spontan. Parola nu are ce căuta într-o conversație cu \
+un model de limbaj: ecranul de confirmare pe care aplicația îl arată la \
+final are un câmp de parolă real, separat, prin care utilizatorul o \
+introduce direct, fără să treacă vreodată prin chat. Dacă utilizatorul \
+scrie o parolă în chat oricum, nu o repeta înapoi și nu o incluzi în \
+tool-ul de mai jos - spune-i calm că o va introduce chiar pe ecranul de \
+confirmare, din motive de siguranță.
+
+Odată ce ai toate câmpurile obligatorii (fără parolă - vezi mai sus), ai \
+deja verificat exists=false, și ai întrebat explicit despre fiecare câmp \
+opțional (chiar dacă a fost sărit), cheamă tool-ul propose_registration cu \
+tot ce ai adunat (null pentru câmpurile opționale sărite). NU inventa \
+niciodată o valoare pe care utilizatorul nu a dat-o. După ce chemi tool-ul, \
+rezumă natural datele adunate, menționează că mai are un singur pas - să \
+își aleagă parola direct pe ecranul de confirmare - și întreabă dacă poate \
+confirma crearea contului - aplicația se ocupă de restul.
 
 Nu creezi tu contul - tool-ul propose_registration doar pregătește datele \
 pentru ca aplicația să le arate clientului spre confirmare finală."""
@@ -106,7 +116,10 @@ class OnboardingAgent(Agent):
         self._system_prompt = system_prompt
         self._max_iterations = max_iterations
 
-    async def run(self, messages: Sequence[Message], context: Context) -> tuple[str, list[Message]]:
+    async def run(self, messages: Sequence[Message], context: Context) -> TurnResult:
+        """Same loop as ToolLoopAgent, minus handoff: onboarding runs outside
+        the orchestrator entirely (no session, no Context identity yet), so
+        there is no chain for it to be part of and `handoff` is always None."""
         working: list[Message] = [
             Message(role="system", content=self._system_prompt),
             *messages,
@@ -118,7 +131,7 @@ class OnboardingAgent(Agent):
             response = self._provider.complete(working, specs)
 
             if not response.wants_tools:
-                return response.text or "", working[trace_start:]
+                return TurnResult(reply=response.text or "", trace=working[trace_start:])
 
             working.append(response.to_assistant_message())
             for call in response.tool_calls:
@@ -136,7 +149,7 @@ class OnboardingAgent(Agent):
             self.name,
             self._max_iterations,
         )
-        return FALLBACK_REPLY, working[trace_start:]
+        return TurnResult(reply=FALLBACK_REPLY, trace=working[trace_start:])
 
     async def _execute(self, call: ToolCall, context: Context) -> ToolResult:
         tool = self._tools.get(call.name)

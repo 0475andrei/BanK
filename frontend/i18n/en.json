@@ -57,6 +57,7 @@
                    "search_placeholder":  "Search transactions, cards, contacts..."
                },
     "dashboard":  {
+                      "Demo": "Demo", "scheduled_title": "Scheduled transfers",
                       "Fără activitate încă.":  "No activity yet.",
                       "Conectat • poate citi soldurile conturilor tale":  "Connected • can read your account balances",
                       "Conversație nouă":  "New conversation",
@@ -122,7 +123,10 @@
                     "face_password":  "Login with password",
                     "forgot_password":  "Forgot password?"
                 },
+    "recovery": { "title": "Reset password - BanK", "heading": "Reset password", "request_hint": "Enter your account email. If it exists, you will receive a 6-digit code through Teams.", "code_sent": "If the address exists, a code was sent through Teams.", "code_label": "Code (6 digits)", "resend_prompt": "Didn't receive the code?", "resend": "Send again", "code_confirmed": "Code confirmed. Choose a new password.", "confirm_password": "Confirm new password", "submit": "Reset password", "remembered": "Remembered your password?", "password_mismatch": "Passwords do not match." },
+    "enrollment": { "title": "Verify device - BanK", "heading": "Recognize this device", "description": "We sent you a 6-digit code through Teams. Enter it so next time you can sign in from this computer with only your password, without retyping your email.", "confirm": "Confirm device", "later": "Later" },
     "profile":  {
+                    "show_password": "Show password",
                     "avatar":  "Avatar",
                     "referral":  "My referral code",
                     "change_password":  "Change password",
@@ -141,7 +145,7 @@
                     "face_inactive":  "Face Login is not enabled yet. Start the camera and take a photo to enable it.",
                     "face_success":  "Face Login enabled successfully!"
                 },
-    "payments":  {
+    "payments":  { "add_contact": "Add contact", "name": "Name", "iban": "IBAN", "website": "Website (optional, e.g. for subscriptions)", "subscription": "This is a subscription (Netflix, Spotify, etc.)", "save": "Save", "subscription_badge": "Subscription",
                      "Trimite bani printr-un IBAN":  "Send money by IBAN",
                      "Din contul":  "From account",
                      "Copiază IBAN-ul":  "Copy IBAN",

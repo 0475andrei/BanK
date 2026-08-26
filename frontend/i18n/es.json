@@ -57,6 +57,7 @@
                    "search_placeholder":  "Buscar transacciones, tarjetas y contactos..."
                },
     "dashboard":  {
+                      "Demo": "Demo", "scheduled_title": "Transferencias programadas",
                       "Fără activitate încă.":  "Aún no hay actividad.",
                       "Conectat • poate citi soldurile conturilor tale":  "Conectado • puede leer los saldos de tus cuentas",
                       "Conversație nouă":  "Nueva conversación",
@@ -108,7 +109,10 @@
                     "face_password":  "Iniciar sesión con contraseña",
                     "forgot_password":  "¿Has olvidado la contraseña?"
                 },
+    "recovery": { "title": "Restablecer contraseña - BanK", "heading": "Restablecer contraseña", "request_hint": "Introduce el correo de tu cuenta. Si existe, recibirás un código de 6 dígitos por Teams.", "code_sent": "Si la dirección existe, se envió un código por Teams.", "code_label": "Código (6 dígitos)", "resend_prompt": "¿No recibiste el código?", "resend": "Enviar de nuevo", "code_confirmed": "Código confirmado. Elige una contraseña nueva.", "confirm_password": "Confirmar contraseña nueva", "submit": "Restablecer contraseña", "remembered": "¿Recordaste tu contraseña?", "password_mismatch": "Las contraseñas no coinciden." },
+    "enrollment": { "title": "Verificar dispositivo - BanK", "heading": "Reconocer este dispositivo", "description": "Te enviamos un código de 6 dígitos por Teams. Introdúcelo para iniciar sesión la próxima vez solo con tu contraseña.", "confirm": "Confirmar dispositivo", "later": "Más tarde" },
     "profile":  {
+                    "show_password": "Mostrar contraseña",
                     "avatar":  "Avatar",
                     "referral":  "Mi código de referido",
                     "change_password":  "Cambiar contraseña",
@@ -127,7 +131,7 @@
                     "face_inactive":  "El inicio con Face aún no está activado. Inicia la cámara y toma una foto.",
                     "face_success":  "¡Inicio con Face activado correctamente!"
                 },
-    "payments":  {
+    "payments":  { "add_contact": "Añadir contacto", "name": "Nombre", "iban": "IBAN", "website": "Sitio web (opcional, p. ej. para suscripciones)", "subscription": "Es una suscripción (Netflix, Spotify, etc.)", "save": "Guardar", "subscription_badge": "Suscripción",
                      "Trimite bani printr-un IBAN":  "Enviar dinero por IBAN",
                      "Din contul":  "Desde la cuenta",
                      "Copiază IBAN-ul":  "Copiar IBAN",

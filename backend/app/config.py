@@ -219,7 +219,13 @@ class Settings(BaseSettings):
         )
 
     def require_document_intelligence(self) -> "DocumentIntelligenceConfig":
-        """Validated Document Intelligence config for the ingestion script only."""
+        """Validated Document Intelligence config.
+
+        Used by the knowledge-base ingestion script and, since Step 13, by
+        the statements upload router (app/modules/statements/router.py) -
+        both need the same validated endpoint/key pair before calling
+        Azure Document Intelligence.
+        """
         missing = [
             name
             for name, value in (

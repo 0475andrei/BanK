@@ -3,7 +3,7 @@
 -- app/modules/admin/service.py::generate_and_send_document and
 -- app/modules/esign/service.py's request_signing_code/confirm_admin_document).
 --
--- Se ruleaza dupa 0001-0018, in Supabase SQL Editor.
+-- Se ruleaza dupa 0001-0020, in Supabase SQL Editor.
 
 -- NULL means "the user uploaded this themselves" (the existing flow from
 -- 0014_documents.sql, unchanged). Non-NULL marks a document an admin

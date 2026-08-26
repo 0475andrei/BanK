@@ -56,3 +56,20 @@ def test_no_active_document_routes_normally():
 
     assert decision.agent_name == "banking"
     assert decision.matched_rule == "banking_keywords"
+
+
+def test_active_statement_overrides_strong_banking_keywords():
+    """Step 13's equivalent of test_active_document_overrides_strong_banking_
+    keywords above - context.statement_id triggers the same override."""
+    orchestrator = _orchestrator()
+    context = Context(
+        user_id=TEST_USER_ID,
+        account_ids=OWNED_ACCOUNT_IDS,
+        statement_id="stmt-1111",
+    )
+
+    decision = orchestrator.route("care este soldul meu si ce card am?", context)
+
+    assert decision.agent_name == "documents"
+    assert decision.matched_rule == "context_override"
+    assert decision.reason == "active_statement_in_context"

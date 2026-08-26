@@ -57,6 +57,7 @@
                    "search_placeholder":  "Пошук транзакцій, карток і контактів..."
                },
     "dashboard":  {
+                      "Demo": "Демо", "scheduled_title": "Заплановані перекази",
                       "Fără activitate încă.":  "Ще немає активності.",
                       "Conectat • poate citi soldurile conturilor tale":  "Підключено • може читати баланси ваших рахунків",
                       "Conversație nouă":  "Нова розмова",
@@ -108,7 +109,10 @@
                     "face_password":  "Вхід за паролем",
                     "forgot_password":  "Забули пароль?"
                 },
+    "recovery": { "title": "Скинути пароль - BanK", "heading": "Скинути пароль", "request_hint": "Введіть електронну адресу облікового запису. Якщо вона існує, ви отримаєте 6-значний код у Teams.", "code_sent": "Якщо адресу знайдено, код надіслано через Teams.", "code_label": "Код (6 цифр)", "resend_prompt": "Не отримали код?", "resend": "Надіслати ще раз", "code_confirmed": "Код підтверджено. Виберіть новий пароль.", "confirm_password": "Підтвердіть новий пароль", "submit": "Скинути пароль", "remembered": "Згадали пароль?", "password_mismatch": "Паролі не збігаються." },
+    "enrollment": { "title": "Перевірити пристрій - BanK", "heading": "Розпізнати цей пристрій", "description": "Ми надіслали 6-значний код у Teams. Введіть його, щоб наступного разу входити з цього комп’ютера лише за паролем.", "confirm": "Підтвердити пристрій", "later": "Пізніше" },
     "profile":  {
+                    "show_password": "Показати пароль",
                     "avatar":  "Аватар",
                     "referral":  "Мій реферальний код",
                     "change_password":  "Змінити пароль",
@@ -127,7 +131,7 @@
                     "face_inactive":  "Вхід за обличчям ще не активовано. Увімкніть камеру та зробіть фото.",
                     "face_success":  "Вхід за обличчям успішно активовано!"
                 },
-    "payments":  {
+    "payments":  { "add_contact": "Додати контакт", "name": "Ім’я", "iban": "IBAN", "website": "Вебсайт (необов’язково, наприклад для підписок)", "subscription": "Це підписка (Netflix, Spotify тощо)", "save": "Зберегти", "subscription_badge": "Підписка",
                      "Trimite bani printr-un IBAN":  "Надіслати гроші за IBAN",
                      "Din contul":  "З рахунку",
                      "Copiază IBAN-ul":  "Копіювати IBAN",

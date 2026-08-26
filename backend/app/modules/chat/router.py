@@ -22,6 +22,7 @@ from app.ai.providers.mock_provider import MockProvider
 from app.ai.schemas import Message, ModelResponse
 from app.ai.service import AIService
 from app.ai.tools.propose_tools import PROPOSE_TOOL_NAMES
+from app.ai.turn import TurnDispatchResult
 from app.config import ConfigurationError, Settings, get_settings
 from app.core.dependencies import get_current_user
 from app.core.exceptions import (
@@ -41,6 +42,7 @@ from app.modules.chat.schemas import (
     ProposalRead,
 )
 from app.modules.documents import service as documents_service
+from app.modules.statements import service as statements_service
 from app.modules.users.schemas import UserRead
 from supabase import AsyncClient
 
@@ -138,6 +140,22 @@ async def chat(
         await documents_service.get_document(supabase, str(user.id), str(payload.document_id))
         active_document_id = str(payload.document_id)
 
+    # Explicit path first (ownership-checked exactly like document_id
+    # above); if the turn named none, fall back to whatever statement was
+    # most recently uploaded in this conversation - see
+    # app/ai/context.py's Context.statement_id docstring for why this one
+    # field is implicit where active_document_id is not.
+    active_statement_id = None
+    if payload.statement_id is not None:
+        await statements_service.get_statement(supabase, str(user.id), str(payload.statement_id))
+        active_statement_id = str(payload.statement_id)
+    else:
+        latest_statement = await statements_service.get_latest_statement_for_conversation(
+            supabase, str(user.id), str(conversation_id)
+        )
+        if latest_statement is not None:
+            active_statement_id = latest_statement["id"]
+
     # THE EDGE. Built from the authenticated session, never from the payload.
     # conversation_id is resolved above so propose_* tools can attach a
     # proposal to this turn's conversation (proposals.conversation_id is
@@ -147,38 +165,77 @@ async def chat(
         supabase,
         conversation_id=str(conversation_id),
         active_document_id=active_document_id,
+        statement_id=active_statement_id,
     )
 
     history = await conversations_service.load_messages(supabase, conversation_id)
 
     service = AIService(supabase, provider=provider, embedding_provider=embedding_provider)
     try:
-        reply, updated_history, routing = await service.handle_message(
-            history, payload.message, context
-        )
+        turn = await service.handle_message(history, payload.message, context)
     except ProviderError as exc:
         raise AIProviderError() from exc
 
-    # handle_message returns `history` unchanged plus every new turn (the user
-    # message, any tool-call/tool-result trace, the final reply) appended in
-    # order - everything already in `history` is already stored.
-    new_messages = updated_history[len(history) :]
-    for message in new_messages:
-        # The routing decision describes the turn the agent produced, so it is
-        # attached to that final assistant message and to nothing else.
-        is_final_reply = message is new_messages[-1]
-        await conversations_service.append_message(
-            supabase,
-            conversation_id,
-            message,
-            routing=routing if is_final_reply else None,
-        )
-
+    new_messages = await _persist_turn(supabase, conversation_id, payload.message, turn)
     proposal = await _extract_proposal(supabase, user, new_messages)
 
+    routing_chain = turn.routing_chain
     return ChatResponse(
-        reply=reply, conversation_id=conversation_id, routing=routing, proposal=proposal
+        reply=turn.final_reply,
+        conversation_id=conversation_id,
+        routing_chain=routing_chain,
+        # Backward-compatible duplicate of the last hop - see ChatResponse.
+        routing=routing_chain[-1] if routing_chain else None,
+        proposal=proposal,
     )
+
+
+async def _persist_turn(
+    supabase: AsyncClient,
+    conversation_id: uuid.UUID,
+    user_message: str,
+    turn: TurnDispatchResult,
+) -> list[Message]:
+    """Store one turn: the user's message, then EACH agent hop separately.
+
+    Per-hop, not per-turn (Step 15). Every hop writes its own trace followed by
+    its own assistant row, and the routing decision goes on that hop's final
+    assistant row and nowhere else - the same `is_final_reply` convention as
+    before, now applied once per hop instead of once per turn. Ordering is what
+    reconstructs the chain on replay: consecutive assistant rows where each
+    one's `handoff_from` names the previous one's `agent_name` are one chain
+    (see renderAgentChain in frontend/app.js).
+
+    A hop's assistant row is written even when its `content` is empty, which is
+    the normal case for a hop that handed off before saying anything: that row
+    is where its routing_metadata lives, and dropping it would erase the first
+    half of every chain from the stored history. The frontend already skips
+    empty-content rows when drawing bubbles, so no blank bubble appears.
+
+    The synthetic user message a handoff hands the target agent is deliberately
+    NOT persisted. It is model-authored text, and storing it as a `user` row
+    would put words in the user's mouth in their own transcript - and feed them
+    back as real user input on the next turn. The handoff is already recorded,
+    in the target hop's routing row (`reason` + `handoff_from`).
+
+    Returns every message written, flat, for `_extract_proposal` to scan.
+    """
+    written: list[Message] = [Message(role="user", content=user_message)]
+    await conversations_service.append_message(supabase, conversation_id, written[0])
+
+    for hop in turn.hops:
+        hop_messages = [*hop.trace, Message(role="assistant", content=hop.reply)]
+        for message in hop_messages:
+            is_final_reply = message is hop_messages[-1]
+            await conversations_service.append_message(
+                supabase,
+                conversation_id,
+                message,
+                routing=hop.routing if is_final_reply else None,
+            )
+        written.extend(hop_messages)
+
+    return written
 
 
 async def _extract_proposal(

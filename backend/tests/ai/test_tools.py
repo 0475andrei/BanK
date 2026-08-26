@@ -11,7 +11,8 @@ import pytest
 from pydantic import BaseModel
 
 from app.ai.context import Context
-from app.ai.schemas import ToolCall, ToolResult
+from app.ai.providers.mock_provider import MockProvider
+from app.ai.schemas import ModelResponse, ToolCall, ToolResult
 from app.ai.tools.banking import (
     AddBeneficiaryTool,
     CreateScheduledTransferTool,
@@ -30,6 +31,7 @@ from app.ai.tools.banking import (
 from app.ai.tools.base import Tool
 from app.ai.tools.insights import (
     CategorizeTransactionsTool,
+    CompareStatementToLedgerTool,
     ComputeSpendingStatsTool,
     DetectAnomaliesTool,
     DetectRecurringPaymentsTool,
@@ -76,13 +78,15 @@ ALL_PROPOSE_TOOL_CLASSES = (
 )
 
 #: Every tool the insights agent exposes, in the order build_insights_tools
-#: registers them (Step 8's get_transactions_in_range, then Step 9's four).
+#: registers them (Step 8's get_transactions_in_range, then Step 9's four,
+#: then Step 13's compare_statement_to_ledger).
 ALL_INSIGHTS_TOOL_CLASSES = (
     GetTransactionsInRangeTool,
     CategorizeTransactionsTool,
     DetectRecurringPaymentsTool,
     ComputeSpendingStatsTool,
     DetectAnomaliesTool,
+    CompareStatementToLedgerTool,
 )
 
 
@@ -318,19 +322,29 @@ def test_only_the_reviewed_write_tools_are_registered(supabase):
 def test_all_insights_tools_are_registered(supabase):
     from app.ai.service import build_insights_tools
 
-    assert build_insights_tools(supabase).names() == [
+    provider = MockProvider([ModelResponse(text="ok")])
+    assert build_insights_tools(supabase, provider).names() == [
         "get_transactions_in_range",
         "categorize_transactions",
         "detect_recurring_payments",
         "compute_spending_stats",
         "detect_anomalies",
+        "compare_statement_to_ledger",
+        # Step 15: not an analytical tool, but this agent's one way out.
+        "handoff_to_agent",
     ]
 
 
 def test_every_insights_tool_advertises_a_usable_spec(supabase):
     """Same structural guard as the banking tools: a named function with a
     described JSON-Schema parameter object, for every insights tool."""
-    registry = ToolRegistry([cls(supabase) for cls in ALL_INSIGHTS_TOOL_CLASSES])
+    provider = MockProvider([ModelResponse(text="ok")])
+    registry = ToolRegistry(
+        [
+            cls(supabase, provider) if cls is CategorizeTransactionsTool else cls(supabase)
+            for cls in ALL_INSIGHTS_TOOL_CLASSES
+        ]
+    )
 
     for spec in registry.list_specs():
         assert spec["type"] == "function"
@@ -343,7 +357,8 @@ def test_no_write_tools_are_registered_for_insights(supabase):
     """Guardrail: the analytical agent is read-only, same as banking."""
     from app.ai.service import build_insights_tools
 
-    assert all(tool.read_only for tool in build_insights_tools(supabase))
+    provider = MockProvider([ModelResponse(text="ok")])
+    assert all(tool.read_only for tool in build_insights_tools(supabase, provider))
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +382,7 @@ def test_all_planning_tools_are_registered(supabase):
         "project_balance",
         "simulate_scenario",
         "savings_goal",
+        "handoff_to_agent",  # Step 15
     ]
 
 

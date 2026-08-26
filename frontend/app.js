@@ -337,36 +337,113 @@ function agentTagTooltipRow(label, value) {
     return row;
 }
 
-/** Small metadata pill naming which agent produced a reply (see
- * ChatResponse.routing / RoutingDecision). Appended to `container` before
- * the bubble is added, so it renders above it, not inside it. Hover/focus
- * reveals a custom tooltip (see .agent-tag-tooltip) instead of the OS-styled
- * `title` attribute tooltip. */
+/** Small metadata pill naming which agent produced a reply. LEGACY, kept as
+ * the fallback for anything with no chain semantics: rows stored before Step
+ * 15, and any caller still passing a single RoutingDecision. New code goes
+ * through renderAgentChain, which renders a one-element chain identically. */
 function renderAgentTag(routing, container) {
+    renderAgentChain([routing], container);
+}
+
+/** The agent chain that produced a reply (see ChatResponse.routing_chain).
+ * One hop renders "→ Bancar"; a mid-turn handoff renders
+ * "→ Analiză → Bancar". Appended to `container` before the bubble is added,
+ * so it renders above it, not inside it. Hover/focus reveals a custom tooltip
+ * (see .agent-tag-tooltip) listing every hop, instead of the OS-styled `title`
+ * attribute tooltip.
+ *
+ * XSS: built with createElement/textContent throughout, never innerHTML - the
+ * tooltip echoes server-side text (routing.reason, matched_rule) and must
+ * never be parsed as markup. */
+function renderAgentChain(routingChain, container) {
+    const chain = (routingChain || []).filter(Boolean);
+    if (!chain.length) return;
+
     const tag = document.createElement('div');
-    tag.className = 'agent-tag';
+    tag.className = chain.length > 1 ? 'agent-tag agent-tag-chain' : 'agent-tag';
     tag.tabIndex = 0;
-    tag.appendChild(document.createTextNode(`→ ${agentTagLabel(routing.agent_name)}`));
+    tag.appendChild(document.createTextNode(
+        chain.map(hop => `→ ${agentTagLabel(hop.agent_name)}`).join(' ')
+    ));
 
     const tooltip = document.createElement('div');
     tooltip.className = 'agent-tag-tooltip';
-    tooltip.appendChild(agentTagTooltipRow('Agent', routing.agent_name));
-    tooltip.appendChild(agentTagTooltipRow('Motiv', routing.reason));
-    tooltip.appendChild(agentTagTooltipRow('Regulă', routing.matched_rule ?? '—'));
-    // Keyword rules always match at confidence=1.0 - showing it there is just
-    // noise. Only LLM-fallback routing (confidence < 1.0) is worth surfacing.
-    if (routing.confidence !== undefined && routing.confidence < 1.0) {
-        const pct = Math.round(routing.confidence * 100);
-        tooltip.appendChild(agentTagTooltipRow('Încredere', `${pct}%`));
-    }
+    chain.forEach((hop, index) => {
+        // A multi-hop chain needs its rows grouped per agent, otherwise three
+        // "Motiv:" lines in a row say nothing about which agent each belongs to.
+        if (chain.length > 1) {
+            const heading = document.createElement('div');
+            heading.className = 'agent-tag-tooltip-hop';
+            heading.textContent = `${index + 1}. ${agentTagLabel(hop.agent_name)}`;
+            tooltip.appendChild(heading);
+        }
+        tooltip.appendChild(agentTagTooltipRow('Agent', hop.agent_name));
+        tooltip.appendChild(agentTagTooltipRow('Motiv', hop.reason));
+        tooltip.appendChild(agentTagTooltipRow('Regulă', hop.matched_rule ?? '—'));
+        // Keyword rules always match at confidence=1.0 - showing it there is
+        // just noise. Only LLM-fallback routing (confidence < 1.0) is worth
+        // surfacing. A handoff hop is always 1.0, so it never shows either.
+        if (hop.confidence !== undefined && hop.confidence < 1.0) {
+            const pct = Math.round(hop.confidence * 100);
+            tooltip.appendChild(agentTagTooltipRow('Încredere', `${pct}%`));
+        }
+    });
     tag.appendChild(tooltip);
 
     container.appendChild(tag);
 }
 
+/** Rebuild each turn's agent chain from stored history rows.
+ *
+ * Live replies carry `routing_chain` on the response; replayed ones don't -
+ * the server stores one row per hop, each with its own routing_metadata, and
+ * the chain is implied by ORDER (see _persist_turn in chat/router.py). This
+ * walks the assistant rows in order and groups a row onto the run in progress
+ * when its `handoff_from` names the previous row's agent - which is exactly
+ * what a handoff wrote there.
+ *
+ * Returns a Map keyed by the message object, holding the chain to draw on it.
+ * Only the LAST row of each run gets an entry: it is the hop that produced the
+ * visible reply, and the earlier hops of a chain usually have empty content
+ * (the source agent handed off before saying anything) and draw no bubble at
+ * all. Rows predating Step 15 have no handoff_from anywhere, so every one of
+ * them is its own single-element chain - the old behaviour, unchanged. */
+function agentChainsByMessage(messages) {
+    const chains = new Map();
+    let run = [];
+
+    const flush = () => {
+        if (!run.length) return;
+        chains.set(run[run.length - 1].message, run.map(entry => entry.routing));
+        run = [];
+    };
+
+    messages.forEach(message => {
+        // A user turn is the only thing that definitely ends a chain - one
+        // turn is one user message, however many agents answered it.
+        if (message.role === 'user') {
+            flush();
+            return;
+        }
+        const routing = message.role === 'assistant' ? message.routing : null;
+        // Trace rows (tool calls and their results) carry no decision. They sit
+        // BETWEEN a chain's hops, so skipping them is not the same as ending
+        // the chain - treating them as a break would split every two-hop turn
+        // back into two unrelated single-agent tags.
+        if (!routing) return;
+        const previous = run.length ? run[run.length - 1].routing : null;
+        if (previous && routing.handoff_from !== previous.agent_name) flush();
+        run.push({ message, routing });
+    });
+    flush();
+
+    return chains;
+}
+
 /** Builds a chat bubble matching the existing markup and appends it.
- * `options.routing`, when present on an 'ai' message, renders the agent tag
- * (see renderAgentTag) above the bubble. */
+ * `options.routingChain`, when present on an 'ai' message, renders the agent
+ * chain (see renderAgentChain) above the bubble. `options.routing` is the
+ * single-decision legacy form of the same thing. */
 function appendChatBubble(role, text, options = {}) {
     const chatMessages = document.getElementById('chat-messages');
 
@@ -385,7 +462,9 @@ function appendChatBubble(role, text, options = {}) {
     const content = document.createElement('div');
     content.className = 'message-content';
 
-    if (role === 'ai' && options.routing) {
+    if (role === 'ai' && options.routingChain) {
+        renderAgentChain(options.routingChain, content);
+    } else if (role === 'ai' && options.routing) {
         renderAgentTag(options.routing, content);
     }
 
@@ -454,6 +533,10 @@ async function sendMessage() {
 
         typingBubble.remove();
         const aiBubble = appendChatBubble('ai', response.reply, {
+            // routing_chain since Step 15: several agents can answer one turn.
+            // `routing` is the server's backward-compatible last-hop duplicate,
+            // used only if an older backend omits the chain entirely.
+            routingChain: response.routing_chain?.length ? response.routing_chain : undefined,
             routing: response.routing || undefined,
         });
         if (response.proposal) {
@@ -644,6 +727,10 @@ async function openConversation(conversationId) {
         const messages = await apiFetch(`/chat/conversations/${conversationId}/messages`);
         const chatMessages = document.getElementById('chat-messages');
         chatMessages.innerHTML = '';
+        // Chains are reconstructed from ALL rows, before the empty-content
+        // filter below: a hop that handed off has no text of its own, but it
+        // is still the first half of the chain drawn on the reply that follows.
+        const chains = agentChainsByMessage(messages);
         const dialogue = messages.filter(message =>
             (message.role === 'user' || message.role === 'assistant') && message.content
         );
@@ -651,7 +738,10 @@ async function openConversation(conversationId) {
             dialogue.forEach(message => appendChatBubble(
                 message.role === 'user' ? 'user' : 'ai',
                 message.content,
-                { routing: message.routing || undefined }
+                {
+                    routingChain: chains.get(message),
+                    routing: message.routing || undefined,
+                }
             ));
         } else {
             appendChatBubble('ai', chatWelcomeText());
@@ -1146,20 +1236,37 @@ function isSpendable(acc) {
     return true;
 }
 
-/** Shows the admin-panel link if this user is an admin.
+/** Shows or hides the admin-panel link to match whoever is CURRENTLY
+ * signed in.
  *
  * Asks the server (GET /admin/me) rather than reading a role off the user
  * object: the role is not part of UserRead, and a client-side flag would be
- * cosmetic anyway - the real gate is require_admin on every /admin route.
- * Any failure (403 for a normal user, or anything else) just leaves the link
- * hidden, so this can never break the dashboard for a non-admin. */
+ * cosmetic anyway - the real gate is require_admin on every /admin route,
+ * so this link is only ever a convenience, never the actual security
+ * boundary. Explicitly sets `hidden` BOTH ways (not just true->false) and
+ * gets re-run on tab focus (see wireAdminLinkRefresh) - the session cookie
+ * is shared per-browser, not per-tab, so logging into a different account
+ * in another tab silently changes who this tab is authenticated as too;
+ * without re-checking on focus, an admin's link would stay visible (and a
+ * newly-promoted admin's would stay hidden) until the next full reload. */
 async function revealAdminLinkIfAdmin() {
+    const link = document.getElementById('admin-panel-link');
+    if (!link) return;
     try {
         await apiFetch('/admin/me');
-        document.getElementById('admin-panel-link').hidden = false;
+        link.hidden = false;
     } catch {
-        /* not an admin, or the admin module is unavailable - leave it hidden */
+        link.hidden = true;
     }
+}
+
+/** Re-checks admin status whenever this tab regains focus/visibility - see
+ * revealAdminLinkIfAdmin's doc comment for why that's necessary. */
+function wireAdminLinkRefresh() {
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') void revealAdminLinkIfAdmin();
+    });
+    window.addEventListener('focus', () => void revealAdminLinkIfAdmin());
 }
 
 async function initDashboard() {
@@ -1169,6 +1276,7 @@ async function initDashboard() {
     document.getElementById('user-name').textContent = `${user.first_name} ${user.last_name}`;
     applyAvatar(user);
     void revealAdminLinkIfAdmin();
+    wireAdminLinkRefresh();
 
     document.getElementById('logout-btn').addEventListener('click', async () => {
         try {
@@ -1279,16 +1387,31 @@ function angleToOffset(midAngleDeg, distance) {
     return { dx: Math.sin(rad) * distance, dy: -Math.cos(rad) * distance };
 }
 
-/** Builds the ring's SVG markup: one <circle> per category, each a full
- * circle whose stroke-dasharray only paints its own arc (with a small gap
+/** Builds the ring's SVG markup: two <circle>s per category, sharing the
+ * same arc (stroke-dasharray only paints that one slice, with a small gap
  * on either side instead of a border - see dataviz skill's anti-patterns.md
- * on borders between marks). Positioning, the mount animation, and the
- * hover pop-out are ALL one CSS `transform` chain on the circle itself
- * (`translate() rotate() scale()`, right-to-left composition) driven by
- * --rot/--hx/--hy/--scale custom properties - deliberately NOT split across
- * an SVG `rotate` attribute on a wrapping <g> plus a separate CSS transform
- * on the child, which would nest the child's translate inside the parent's
- * rotation and swing the hover offset off in the wrong direction. */
+ * on borders between marks).
+ *
+ * They're split in two because pointer-events hit-test an SVG shape's
+ * CURRENT painted geometry, transform included: a single circle that both
+ * received hover events AND translated outward on hover would move out from
+ * under a cursor sitting near its outer edge, fire pointerleave, snap back
+ * under the cursor, fire pointerenter, and repeat - a self-triggering flicker
+ * users see as the slice "flying" right where they're pointing. So
+ * `.spending-segment-hit` (transparent, never transformed by hover state)
+ * is the only thing hit-tested, and `.spending-segment-fill` (the visible
+ * color, `pointer-events: none`) is free to pop outward on hover without
+ * ever being able to move itself out from under the pointer that triggered
+ * it.
+ *
+ * Positioning, the mount animation, and the hover pop-out on the fill circle
+ * are ALL one CSS `transform` chain (`translate() rotate() scale()`,
+ * right-to-left composition) driven by --rot/--hx/--hy/--scale custom
+ * properties - deliberately NOT split across an SVG `rotate` attribute on a
+ * wrapping <g> plus a separate CSS transform on the child, which would nest
+ * the child's translate inside the parent's rotation and swing the hover
+ * offset off in the wrong direction. The hit circle shares --rot (so its
+ * hit area still tracks the slice's position) but never --hx/--hy/--scale. */
 function buildSpendingDonutSegments(categories) {
     let cumulativePercent = 0;
     return categories.map((cat, i) => {
@@ -1304,7 +1427,13 @@ function buildSpendingDonutSegments(categories) {
             <g class="spending-segment" data-index="${i}" tabindex="0"
                role="img" aria-label="${escapeHTML(cat.name)}"
                style="--rot: ${(startAngleDeg - 90).toFixed(3)}deg; --hx-active: ${dx.toFixed(2)}px; --hy-active: ${dy.toFixed(2)}px; --seg-delay: ${i * 70}ms;">
-                <circle
+                <circle class="spending-segment-hit"
+                    cx="${SPENDING_DONUT_CENTER}" cy="${SPENDING_DONUT_CENTER}" r="${SPENDING_DONUT_RADIUS}"
+                    fill="none" stroke="transparent" stroke-width="${SPENDING_DONUT_STROKE}"
+                    stroke-linecap="round"
+                    stroke-dasharray="0 ${SPENDING_DONUT_GAP_PX / 2} ${visibleLen} ${SPENDING_DONUT_CIRCUMFERENCE}"
+                ></circle>
+                <circle class="spending-segment-fill"
                     cx="${SPENDING_DONUT_CENTER}" cy="${SPENDING_DONUT_CENTER}" r="${SPENDING_DONUT_RADIUS}"
                     fill="none" stroke="${cat.color}" stroke-width="${SPENDING_DONUT_STROKE}"
                     stroke-linecap="round"
@@ -2046,6 +2175,18 @@ async function submitWithFaceConfirmation(path, idempotencyKey, body) {
             body,
         });
     } catch (err) {
+        // Distinct from a plain 428: there is no token this user could
+        // possibly supply (Face ID was never enrolled at all), so the fix
+        // is "go enroll it", not "retry the camera".
+        if (err.code === 'face_enrollment_required') {
+            // The backend's own message is an English default (same as
+            // FaceConfirmationRequiredError) - use the Romanian one here
+            // instead, matching the rest of this flow.
+            promptFaceEnrollmentRequired(
+                'Această plată necesită Face ID activat, pentru că e prima ta plată către această persoană sau depășește pragul de siguranță.'
+            );
+            return CONFIRMATION_CANCELLED;
+        }
         if (err.status !== 428) throw err;
 
         const token = await requestFaceConfirmationToken();
@@ -2057,6 +2198,16 @@ async function submitWithFaceConfirmation(path, idempotencyKey, body) {
             body,
         });
     }
+}
+
+/** Shown when a mandatory Face ID action (see face_auth/service.py::
+ * enforce_face_confirmation - a large transfer, a first payment to someone
+ * new) hits a user with no Face ID enrolled at all: there is no token they
+ * could supply, so the fix is "go enroll it", not "retry". Navigates
+ * straight to the Face Login settings view once acknowledged. */
+function promptFaceEnrollmentRequired(message) {
+    alert(message || 'Această acțiune necesită Face ID activat. Te redirecționăm către activare.');
+    goToProfileView('face-login');
 }
 
 /** Payment-only wrapper around submitWithFaceConfirmation: if the backend
@@ -2146,6 +2297,7 @@ function requestFaceConfirmationToken(reason = FACE_CONFIRM_DEFAULT_REASON) {
             stream = null;
             video.srcObject = null;
             modal.hidden = true;
+            setFaceFlashlight(false, modal);
             captureBtn.onclick = null;
             cancelBtn.onclick = null;
             closeBtn.onclick = null;
@@ -2153,7 +2305,7 @@ function requestFaceConfirmationToken(reason = FACE_CONFIRM_DEFAULT_REASON) {
         }
 
         navigator.mediaDevices.getUserMedia({ video: true })
-            .then((s) => { stream = s; video.srcObject = s; })
+            .then((s) => { stream = s; video.srcObject = s; setFaceFlashlight(true, modal); })
             .catch(() => {
                 errorEl.textContent = 'Nu s-a putut accesa camera. Verifică permisiunile browserului.';
                 errorEl.hidden = false;
@@ -2253,15 +2405,26 @@ function renderCardsList(cards) {
         return;
     }
 
+    // A cancelled card never comes back to life (see the confirm() prompt
+    // below) - showing it grayed out forever is just clutter, so once it's
+    // cancelled it drops out of view entirely, same as if it were deleted.
+    // The backend still soft-cancels (status='cancelled', row + audit trail
+    // kept) rather than actually dropping the row - this filter is purely
+    // what the user sees.
+    const visibleCards = cards.filter(c => c.status !== 'cancelled');
+    if (visibleCards.length === 0) {
+        list.innerHTML = `<div class="empty-state">${t('cards.empty', 'Niciun card încă. Generează primul card virtual.')}</div>`;
+        return;
+    }
+
     const accountById = Object.fromEntries(currentAccounts.map(a => [a.id, a]));
 
-    list.innerHTML = cards.map(card => {
+    list.innerHTML = visibleCards.map(card => {
         const account = accountById[card.account_id];
-        const isCancelled = card.status === 'cancelled';
         const formattedNumber = card.card_number.replace(/(.{4})/g, '$1 ').trim();
         const expiry = `${String(card.expiry_month).padStart(2, '0')}/${String(card.expiry_year).slice(-2)}`;
         return `
-        <div class="credit-card virtual ${isCancelled ? 'cancelled' : ''}">
+        <div class="credit-card virtual">
             <div class="card-header">
                 <span class="card-type">${t('cards.label', 'Card')}${account ? ' &middot; ' + escapeHTML(account.name) : ''}</span>
                 <span class="card-logo">VISA</span>
@@ -2285,20 +2448,21 @@ function renderCardsList(cards) {
                     ` : ''}
                     <button class="card-eye-btn" title="${t('cards.show_details', 'Arată expirarea și CVV')}" aria-label="${t('cards.show_details', 'Arată expirarea și CVV')}"><i data-lucide="eye"></i></button>
                 </div>
-                ${isCancelled
-                    ? `<div class="status-indicator cancelled">${t('cards.status_cancelled', CARD_STATUS_LABELS.cancelled)}</div>`
-                    : `<button class="status-toggle-btn ${card.status}" data-card-id="${card.id}" data-action="${card.status === 'frozen' ? 'unfreeze' : 'freeze'}" title="${t(card.status === 'frozen' ? 'cards.unfreeze_hint' : 'cards.freeze_hint', card.status === 'frozen' ? 'Apasă pentru a debloca cardul' : 'Apasă pentru a bloca temporar cardul')}">
-                        <i data-lucide="${card.status === 'frozen' ? 'snowflake' : 'shield-check'}"></i>
-                        <span>${t(`cards.status_${card.status}`, CARD_STATUS_LABELS[card.status] || card.status)}</span>
-                    </button>`
-                }
+                <button class="status-toggle-btn ${card.status}" data-card-id="${card.id}" data-action="${card.status === 'frozen' ? 'unfreeze' : 'freeze'}" title="${t(card.status === 'frozen' ? 'cards.unfreeze_hint' : 'cards.freeze_hint', card.status === 'frozen' ? 'Apasă pentru a debloca cardul' : 'Apasă pentru a bloca temporar cardul')}">
+                    <i data-lucide="${card.status === 'frozen' ? 'snowflake' : 'shield-check'}"></i>
+                    <span>${t(`cards.status_${card.status}`, CARD_STATUS_LABELS[card.status] || card.status)}</span>
+                </button>
             </div>
-            ${!isCancelled ? `
-                <div class="card-actions-row">
-                    <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}">${t('cards.limit')}</button>
-                    <button class="card-cancel-btn" data-card-id="${card.id}">${t('cards.cancel')}</button>
-                </div>
-            ` : ''}
+            <div class="card-actions-row">
+                <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}" title="${t('cards.limit_hint', 'Setează limita de cheltuieli')}">
+                    <i data-lucide="sliders-horizontal"></i>
+                    <span>${t('cards.limit', 'Limită')}</span>
+                </button>
+                <button class="card-cancel-btn" data-card-id="${card.id}" title="${t('cards.cancel_hint', 'Anulează definitiv cardul')}">
+                    <i data-lucide="trash-2"></i>
+                    <span>${t('cards.cancel', 'Anulează')}</span>
+                </button>
+            </div>
         </div>
         `;
     }).join('');
@@ -2311,25 +2475,29 @@ function renderCardsList(cards) {
             const secrets = card.querySelectorAll('.card-secret');
             const revealing = secrets[0].textContent !== secrets[0].dataset.value;
             // Hiding back to masked never needs a fresh proof of identity -
-            // only revealing the real expiry/CVV does, and only for users who
-            // actually opted into Face ID (same "optional extra" philosophy
-            // as the face-confirmation step-up on large transfers).
+            // only revealing the real expiry/CVV does. Face ID is mandatory
+            // for this, not an optional extra: a user who hasn't enrolled it
+            // gets sent to set it up instead of seeing the card.
             if (revealing) {
                 let faceEnrolled = false;
                 try {
                     faceEnrolled = (await apiFetch('/auth/face/status')).enrolled;
                 } catch (err) {
-                    // Can't check - fail open to the pre-existing behaviour
-                    // rather than locking the user out of their own card.
+                    alert('Nu am putut verifica starea Face ID. Încearcă din nou.');
+                    return;
                 }
-                if (faceEnrolled) {
-                    btn.disabled = true;
-                    const token = await requestFaceConfirmationToken(
-                        'Verifică-ți identitatea prin cameră ca să vezi numărul complet și CVV-ul cardului.'
+                if (!faceEnrolled) {
+                    promptFaceEnrollmentRequired(
+                        'Activează Face ID ca să poți vedea numărul complet și CVV-ul cardului.'
                     );
-                    btn.disabled = false;
-                    if (!token) return;
+                    return;
                 }
+                btn.disabled = true;
+                const token = await requestFaceConfirmationToken(
+                    'Verifică-ți identitatea prin cameră ca să vezi numărul complet și CVV-ul cardului.'
+                );
+                btn.disabled = false;
+                if (!token) return;
             }
 
             applyCardSecretsVisibility(card, btn, revealing);
@@ -2571,7 +2739,7 @@ function renderBeneficiariesList(contacts) {
     list.innerHTML = contacts.map(c => `
         <div class="contact-item" data-id="${c.id}" data-iban="${escapeHTML(c.iban)}" data-name="${escapeHTML(c.display_name)}">
             <div class="contact-item-fill">
-                <div class="name">${escapeHTML(c.display_name)}${c.is_subscription ? ' <span class="contact-subscription-badge">Abonament</span>' : ''}</div>
+                <div class="name">${escapeHTML(c.display_name)}${c.is_subscription ? ` <span class="contact-subscription-badge" data-i18n="payments.subscription_badge">${t('payments.subscription_badge', 'Abonament')}</span>` : ''}</div>
                 <div class="iban">${escapeHTML(c.iban)}</div>
                 ${c.website ? `<a class="contact-website" href="${escapeHTML(c.website)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHTML(c.website)}</a>` : ''}
             </div>
@@ -2913,6 +3081,7 @@ function stopFaceCamera() {
     if (video) video.srcObject = null;
     document.getElementById('face-start-camera-btn').hidden = false;
     document.getElementById('face-capture-btn').hidden = true;
+    setFaceFlashlight(false);
 }
 
 let faceStatusEnrolled = null;
@@ -2953,6 +3122,7 @@ function wireFaceLoginPanel() {
             video.srcObject = faceCameraStream;
             startBtn.hidden = true;
             captureBtn.hidden = false;
+            setFaceFlashlight(true);
         } catch {
             errorEl.textContent = 'Nu s-a putut accesa camera. Verifică permisiunile browserului.';
             errorEl.hidden = false;

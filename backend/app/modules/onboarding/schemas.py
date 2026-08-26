@@ -22,9 +22,11 @@ class OnboardingChatRequest(BaseModel):
 class OnboardingChatResponse(BaseModel):
     reply: str
     history: list[Message]
-    #: Set once the agent has called propose_registration - the exact
-    #: payload the frontend should POST to /auth/register once the user
-    #: confirms. None until then.
+    #: Set once the agent has called propose_registration - every
+    #: /auth/register field EXCEPT password (deliberately never collected
+    #: here - see onboarding/tool.py). The frontend adds the password,
+    #: gathered from its own real password field, right before POSTing.
+    #: None until propose_registration has been called.
     collected_fields: dict | None = None
     #: Set once check_existing_account found a match ({exists, matched_field,
     #: email}) - lets the frontend short-circuit straight to the

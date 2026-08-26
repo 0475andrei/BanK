@@ -57,6 +57,7 @@
                    "search_placeholder":  "Caută tranzacții, carduri, contacte..."
                },
     "dashboard":  {
+                      "Demo": "Demo", "scheduled_title": "Transferuri programate",
                       "Fără activitate încă.":  "Fără activitate încă.",
                       "Conectat • poate citi soldurile conturilor tale":  "Conectat • poate citi soldurile conturilor tale",
                       "Conversație nouă":  "Conversație nouă",
@@ -122,7 +123,10 @@
                     "face_password":  "Login cu parolă",
                     "forgot_password":  "Ai uitat parola?"
                 },
+    "recovery": { "title": "Resetare parolă - BanK", "heading": "Resetare parolă", "request_hint": "Introdu adresa de email a contului. Dacă există, primești un cod de 6 cifre prin Teams.", "code_sent": "Dacă adresa există, un cod a fost trimis prin Teams.", "code_label": "Cod (6 cifre)", "resend_prompt": "Nu a venit codul?", "resend": "Trimite din nou", "code_confirmed": "Cod confirmat. Alege o parolă nouă.", "confirm_password": "Confirmă parola nouă", "submit": "Resetează parola", "remembered": "Ți-ai amintit parola?", "password_mismatch": "Parolele nu coincid." },
+    "enrollment": { "title": "Verifică dispozitivul - BanK", "heading": "Recunoaște acest dispozitiv", "description": "Ți-am trimis un cod de 6 cifre prin Teams. Introdu-l ca data viitoare să poți intra de pe acest calculator doar cu parola, fără să retastezi emailul.", "confirm": "Confirmă dispozitivul", "later": "Mai târziu" },
     "profile":  {
+                    "show_password": "Arată parola",
                     "avatar":  "Avatar",
                     "referral":  "Codul meu de referral",
                     "change_password":  "Schimbă parola",
@@ -141,7 +145,7 @@
                     "face_inactive":  "Face Login nu este activat încă. Pornește camera și fă o poză ca să-l activezi.",
                     "face_success":  "Face Login activat cu succes!"
                 },
-    "payments":  {
+    "payments":  { "add_contact": "Adaugă contact", "name": "Nume", "iban": "IBAN", "website": "Website (opțional, ex. pentru abonamente)", "subscription": "Este un abonament (Netflix, Spotify etc.)", "save": "Salvează", "subscription_badge": "Abonament",
                      "Trimite bani printr-un IBAN":  "Trimite bani printr-un IBAN",
                      "Din contul":  "Din contul",
                      "Copiază IBAN-ul":  "Copiază IBAN-ul",

@@ -454,6 +454,10 @@ body {
     border-radius: var(--border-radius);
     padding: 40px;
     max-width: 480px;
+    /* Stays visible above #face-flashlight-overlay (z-index 90) while its
+       camera is active - see the flashlight comment near .modal-overlay. */
+    position: relative;
+    z-index: 91;
 }
 
 .standalone-card.centered { text-align: center; }
@@ -972,8 +976,27 @@ body {
     transition: opacity 120ms ease, transform 120ms ease;
 }
 
+/* A multi-agent turn (Step 15 cross-agent handoff): "-> Analiza -> Bancar".
+   Slightly less faded than a single-agent tag - a turn that changed hands is
+   worth noticing, where the ordinary one-agent tag is background metadata. */
+.agent-tag-chain {
+    opacity: 0.85;
+}
+
 .agent-tag-tooltip div + div {
     margin-top: 2px;
+}
+
+/* Per-hop heading inside a chain tooltip, so three "Motiv:" rows in a row
+   still say which agent each belongs to. */
+.agent-tag-tooltip-hop {
+    margin-top: 8px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.agent-tag-tooltip-hop:first-child {
+    margin-top: 0;
 }
 
 .agent-tag-tooltip::before {
@@ -1315,15 +1338,6 @@ body {
     height: 16px;
 }
 
-.status-indicator {
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    background-color: rgba(16, 185, 129, 0.1);
-    color: var(--income-green);
-}
-
 .cards-actions {
     display: flex;
     gap: 16px;
@@ -1405,12 +1419,26 @@ body {
     overflow: visible;
 }
 
+/* The invisible hit target: stays at rest (--rot only, no hover translate/
+   scale) so hovering it can never move it out from under the pointer - see
+   buildSpendingDonutSegments's docstring for why this has to be a separate
+   element from the animated, visible fill circle below. */
+.spending-segment-hit {
+    transform-box: fill-box;
+    transform-origin: center;
+    transform: rotate(var(--rot));
+    pointer-events: stroke;
+    cursor: pointer;
+}
+
 /* Positioning + the mount animation + the hover pop-out are ALL one
    `transform` chain, driven purely by custom properties so every state
    change (mount, hover) is just a var() override the browser can transition
    smoothly - see buildSpendingDonutSegments for why translate/rotate/scale
-   live together here instead of split across a parent <g>'s SVG attribute. */
-.spending-segment circle {
+   live together here instead of split across a parent <g>'s SVG attribute.
+   pointer-events: none because this is the element that moves on hover -
+   the sibling .spending-segment-hit above is what's actually hit-tested. */
+.spending-segment-fill {
     transform-box: fill-box;
     transform-origin: center;
     --hx: 0px;
@@ -1420,14 +1448,14 @@ body {
     opacity: 0;
     filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
     transition: filter 0.2s ease;
-    cursor: pointer;
+    pointer-events: none;
 }
 
 /* Mount phase only: the staggered (--seg-delay) grow-in. Swapped for
    .is-mounted's fast, undelayed transition once the entrance finishes (see
    renderSpendingDonut) so hovering a later slice never inherits its mount
    delay and feels laggy to respond. */
-.spending-donut-wrap.is-mounting .spending-segment circle {
+.spending-donut-wrap.is-mounting .spending-segment-fill {
     --scale: 1;
     opacity: 1;
     transition:
@@ -1436,7 +1464,7 @@ body {
         filter 0.2s ease;
 }
 
-.spending-donut-wrap.is-mounted .spending-segment circle {
+.spending-donut-wrap.is-mounted .spending-segment-fill {
     --scale: 1;
     opacity: 1;
     transition:
@@ -1450,18 +1478,18 @@ body {
    slice dims so a colorblind user can confirm "this slice = this category"
    by highlight and position, never by matching hues alone (see
    wireSpendingCategoryHover). */
-.spending-donut.has-active .spending-segment:not(.is-active) circle {
+.spending-donut.has-active .spending-segment:not(.is-active) .spending-segment-fill {
     opacity: 0.28;
 }
 
-.spending-segment.is-active circle {
+.spending-segment.is-active .spending-segment-fill {
     --hx: var(--hx-active);
     --hy: var(--hy-active);
     --scale: 1.05;
     filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45)) brightness(1.12);
 }
 
-.spending-segment:focus-visible circle {
+.spending-segment:focus-visible .spending-segment-fill {
     outline: 2px solid var(--text-main);
     outline-offset: 2px;
 }
@@ -1745,6 +1773,10 @@ html.i18n-pending body { visibility: hidden; }
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     padding: 36px;
+    /* Stays visible above #face-flashlight-overlay (z-index 90) while its
+       camera is active - see the flashlight comment near .modal-overlay. */
+    position: relative;
+    z-index: 91;
 }
 
 .auth-card-wide { max-width: 480px; }
@@ -2192,6 +2224,30 @@ html.i18n-pending body { visibility: hidden; }
 
 .modal-overlay[hidden] { display: none; }
 
+/* "Flashlight": while a face camera is active, most of the screen flashes
+   solid white at max device brightness, to act as a passive light source
+   for whoever's face the camera needs to see - the same trick real
+   ID-scanning apps use (see setFaceFlashlight in api.js). Sits below the
+   actual camera UI, which stays "positioned" with a higher z-index (see
+   .auth-card/.standalone-card below) so the video/controls remain visible
+   on top of the flash. */
+#face-flashlight-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: #ffffff;
+    z-index: 90;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+#face-flashlight-overlay.is-active { opacity: 1; }
+
+/* Modal-based camera flow (the step-up face-confirm modal): the backdrop
+   itself goes white - the .modal card is its own DOM child, so it always
+   paints on top of its own parent's background with no z-index changes
+   needed. */
+.modal-overlay.face-flashlight { background-color: #ffffff; }
+
 .modal {
     width: 100%;
     max-width: 420px;
@@ -2461,31 +2517,6 @@ html.i18n-pending body { visibility: hidden; }
 
 .logout-btn:hover { color: var(--text-main); background-color: rgba(255,255,255,0.05); }
 
-/* --- Real card statuses (issued via POST /cards) --- */
-.status-indicator.cancelled {
-    background-color: rgba(148, 163, 184, 0.12);
-    color: var(--text-muted);
-}
-
-.status-indicator.frozen {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(129, 140, 248, 0.16));
-    color: #7dd3fc;
-}
-
-.status-indicator.frozen i {
-    width: 12px;
-    height: 12px;
-    stroke-width: 2.5;
-    filter: drop-shadow(0 0 3px rgba(125, 211, 252, 0.65));
-}
-
-.credit-card.cancelled {
-    opacity: 0.5;
-}
-
 /* Card status + freeze/unfreeze action merged into one self-updating toggle:
    it shows the current state and, on click, becomes the other state. */
 .status-toggle-btn {
@@ -2542,26 +2573,57 @@ html.i18n-pending body { visibility: hidden; }
 
 .card-actions-row {
     display: flex;
-    gap: 16px;
+    gap: 10px;
     align-self: flex-start;
     margin-top: 10px;
     position: relative;
     z-index: 1;
 }
 
+/* Same icon-pill language as .status-toggle-btn - a semantic color wash at
+   rest (neutral for a reversible setting, red for the irreversible delete),
+   intensifying on hover. */
 .card-cancel-btn,
 .card-limit-btn {
-    background: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 12px;
     border: none;
-    color: var(--text-muted);
     font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
     cursor: pointer;
-    padding: 0;
-    text-decoration: underline;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
 }
 
-.card-cancel-btn:hover { color: var(--expense-red); }
-.card-limit-btn:hover { color: var(--primary-teal); }
+.card-cancel-btn:active,
+.card-limit-btn:active { transform: scale(0.96); }
+
+.card-limit-btn {
+    background-color: rgba(148, 163, 184, 0.12);
+    color: var(--text-muted);
+}
+.card-limit-btn:hover {
+    background-color: rgba(45, 212, 191, 0.16);
+    color: var(--primary-teal);
+}
+
+.card-cancel-btn {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: var(--expense-red);
+}
+.card-cancel-btn:hover {
+    background-color: rgba(239, 68, 68, 0.22);
+}
+
+.card-cancel-btn i,
+.card-limit-btn i {
+    width: 13px;
+    height: 13px;
+    stroke-width: 2.5;
+}
 
 .card-reveal-number {
     font-family: monospace;

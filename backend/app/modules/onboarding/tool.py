@@ -8,6 +8,16 @@ through POST /auth/register, fired by an explicit human confirmation
 click - this tool never creates anything, and never bypasses that
 endpoint's validation.
 
+DELIBERATELY NO `password` FIELD HERE. A password typed into the chat
+would reach the model as conversation text, come back as this tool's own
+call arguments, get echoed into ToolResult.data (client-held history AND
+the response's collected_fields - see onboarding/router.py), and round-
+trip to the LLM provider again on every later turn - a credential
+transiting through components that should never see it. The confirmation
+screen (register.html's renderConfirmationCard) asks for the password
+directly, in a real password field, right before POSTing to
+/auth/register - it never passes through the chat/LLM pipeline at all.
+
 check_existing_account is the one read-only exception to "no DB access":
 it lets the agent short-circuit as soon as it has an email + CNP, instead
 of only discovering a duplicate at the very end of a full interview.
@@ -28,7 +38,6 @@ if TYPE_CHECKING:
 
 class ProposeRegistrationInput(BaseModel):
     email: str
-    password: str
     first_name: str
     last_name: str
     national_id: str
@@ -41,12 +50,14 @@ class ProposeRegistrationTool(Tool):
     name = "propose_registration"
     description = (
         "Call this once you have collected all required fields (email, "
-        "password, first_name, last_name, national_id) and have explicitly "
-        "asked the user about each optional one (phone, address, "
-        "referral_code) - even if they chose to skip it, pass null for it. "
-        "This does NOT create the account; it only reports what you've "
-        "gathered so the app can show the user a confirmation screen before "
-        "anything is submitted."
+        "first_name, last_name, national_id) and have explicitly asked the "
+        "user about each optional one (phone, address, referral_code) - "
+        "even if they chose to skip it, pass null for it. NEVER ask for or "
+        "include a password here - the confirmation screen the app shows "
+        "next asks for it directly, in a real password field, never "
+        "through this chat. This does NOT create the account; it only "
+        "reports what you've gathered so the app can show the user a "
+        "confirmation screen before anything is submitted."
     )
     input_schema = ProposeRegistrationInput
     read_only = True

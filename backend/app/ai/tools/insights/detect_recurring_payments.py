@@ -17,12 +17,11 @@ from pydantic import BaseModel, Field
 from app.ai.context import Context
 from app.ai.schemas import ToolResult
 from app.ai.tools.base import Tool
-from app.ai.tools.insights._shared import fetch_entries, months_ago
+from app.ai.tools.insights._shared import load_rows, months_ago
 
 if TYPE_CHECKING:
-    from supabase import AsyncClient
-
     from app.modules.transactions.schemas import TransactionEntryRead
+    from supabase import AsyncClient
 
 MIN_MONTHS_BACK = 1
 MAX_MONTHS_BACK = 12
@@ -78,7 +77,7 @@ class DetectRecurringPaymentsTool(Tool):
 
         now = datetime.now(UTC)
         date_from = months_ago(now, validated_input.months_back)
-        entries = await fetch_entries(self._supabase, context, date_from=date_from, date_to=now)
+        entries = await load_rows(self._supabase, context, date_from=date_from, date_to=now)
         spending = [entry for entry in entries if entry.direction.value == "debit"]
 
         groups: dict[str, list[TransactionEntryRead]] = {}

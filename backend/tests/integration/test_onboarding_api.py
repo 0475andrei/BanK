@@ -56,7 +56,6 @@ async def test_onboarding_chat_surfaces_collected_fields_after_propose_registrat
 ):
     fields = {
         "email": "andrei@example.com",
-        "password": "correct horse",
         "first_name": "Andrei",
         "last_name": "Popescu",
         "national_id": "1900712345678",
@@ -77,6 +76,41 @@ async def test_onboarding_chat_surfaces_collected_fields_after_propose_registrat
     body = resp.json()
     assert body["reply"] == "Poți confirma crearea contului cu aceste date?"
     assert body["collected_fields"] == fields
+
+
+async def test_onboarding_never_surfaces_a_password_even_if_the_model_sends_one(
+    client, scripted_provider
+):
+    """propose_registration's schema has no password field at all - see the
+    security note at the top of onboarding/tool.py. Simulates a model that
+    (incorrectly) still tries to pass one in its tool call, and asserts it
+    never reaches the response: a credential must never transit through
+    the LLM/chat pipeline, regardless of what the model does."""
+    fields_with_password = {
+        "email": "andrei@example.com",
+        "password": "should-never-appear",
+        "first_name": "Andrei",
+        "last_name": "Popescu",
+        "national_id": "1900712345678",
+        "phone": None,
+        "address": None,
+        "referral_code": None,
+    }
+    scripted_provider(
+        ModelResponse(
+            tool_calls=[
+                ToolCall(id="c1", name="propose_registration", arguments=fields_with_password)
+            ]
+        ),
+        ModelResponse(text="Poți confirma crearea contului cu aceste date?"),
+    )
+
+    resp = await client.post("/api/v1/onboarding/chat", json={"message": "Atât e tot."})
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "password" not in body["collected_fields"]
+    assert "should-never-appear" not in resp.text
 
 
 async def test_onboarding_chat_rejects_empty_message(client):

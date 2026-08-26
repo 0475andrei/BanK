@@ -357,6 +357,11 @@
                 .map(([label, value]) => `<div><strong>${escapeHTML(label)}:</strong> ${escapeHTML(String(value || "—"))}</div>`)
                 .join("");
 
+            // The password is asked for HERE, directly in a real password
+            // field, never through the chat - see the security note at the
+            // top of backend/app/modules/onboarding/tool.py. It never
+            // becomes part of `fields` (which came back from the AI) until
+            // right here, client-side, immediately before submission.
             const wrapper = appendComodulBubble("ai", "", {
                 html: `
                     <div class="human-in-the-loop-card">
@@ -364,6 +369,9 @@
                             <strong>Confirmare date cont nou</strong>
                             <p style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px;">${summaryHTML}</p>
                         </div>
+                        <label class="field-label" for="comodul-password-input">Parolă (minim 8 caractere)</label>
+                        <input class="field-input" type="password" id="comodul-password-input" minlength="8" autocomplete="new-password" style="margin-bottom: 8px;">
+                        <div class="auth-error comodul-password-error" hidden></div>
                         <div class="hitl-actions">
                             <button class="btn btn-primary" id="comodul-confirm-btn">Confirmă și creează contul</button>
                         </div>
@@ -373,8 +381,19 @@
 
             wrapper.querySelector("#comodul-confirm-btn").addEventListener("click", async () => {
                 const card = wrapper.querySelector(".human-in-the-loop-card");
+                const passwordInput = wrapper.querySelector("#comodul-password-input");
+                const passwordError = wrapper.querySelector(".comodul-password-error");
+                const password = passwordInput.value;
+
+                if (password.length < 8) {
+                    passwordError.textContent = "Parola trebuie să aibă cel puțin 8 caractere.";
+                    passwordError.hidden = false;
+                    return;
+                }
+                passwordError.hidden = true;
+
                 try {
-                    await submitRegistration(fields);
+                    await submitRegistration({ ...fields, password });
                     window.location.href = "enroll-device.html";
                 } catch (err) {
                     if (err.code === "email_already_registered" || err.code === "national_id_already_registered") {

@@ -35,6 +35,30 @@ async function apiFetch(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+/** Toggles the "flashlight" effect shared by every face-camera UI in the
+ * app (step-up confirmation, Face Login enrollment, both login-page face
+ * flows): while the camera is running, most of the screen flashes solid
+ * white at the device's max display brightness, acting as a passive light
+ * source for whoever's face the camera needs to see - the same trick real
+ * ID-scanning apps use. Lives here (not app.js) because login.html doesn't
+ * load app.js but does load this file.
+ *
+ * Pass the specific .modal-overlay element when the camera lives inside a
+ * modal (e.g. the step-up face-confirm modal) - its own backdrop goes
+ * white instead of the shared full-page overlay, so the modal card (its
+ * own DOM child) naturally keeps painting on top with no z-index changes
+ * needed. Omit it for a camera embedded directly in the page (both
+ * login-page flows, the Face Login settings view) - the shared
+ * #face-flashlight-overlay element handles those instead. */
+function setFaceFlashlight(active, modalOverlayEl) {
+  if (modalOverlayEl) {
+    modalOverlayEl.classList.toggle("face-flashlight", active);
+    return;
+  }
+  const overlay = document.getElementById("face-flashlight-overlay");
+  if (overlay) overlay.classList.toggle("is-active", active);
+}
+
 function formatMoney(amountMinor, currency) {
   const major = amountMinor / 100;
   const amount = major.toLocaleString("ro-RO", {

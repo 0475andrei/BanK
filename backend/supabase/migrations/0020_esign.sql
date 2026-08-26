@@ -10,7 +10,11 @@
 -- verifiable for as long as the signature itself is kept, even after the
 -- active key is rotated (revoked_at marks that, it doesn't remove the row).
 --
--- Se ruleaza dupa 0001-0017, in Supabase SQL Editor.
+-- Filed as 0020 rather than 0018: by the time this landed, 0018 and 0019
+-- were already taken by the statements/merchant-category-cache migrations
+-- from Dev2.1 (merged in separately) - same renumbering situation
+-- 0018_statements.sql documents for its own original number.
+-- Se ruleaza dupa 0001-0019, in Supabase SQL Editor.
 
 CREATE TABLE IF NOT EXISTS signing_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

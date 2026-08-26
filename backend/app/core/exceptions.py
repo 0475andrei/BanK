@@ -181,6 +181,18 @@ class FaceConfirmationRequiredError(AppError):
     default_message = "This amount requires face confirmation before it can proceed."
 
 
+class FaceEnrollmentRequiredError(AppError):
+    """This action requires step-up face auth, but the user has never
+    enrolled Face ID at all - so there is no token they could possibly
+    supply. Distinct from FaceConfirmationRequiredError (enrolled, just
+    needs a fresh token this request): the fix here is "go enroll Face ID
+    first", not "retry with a token". See enforce_face_confirmation."""
+
+    status_code = 428
+    error_code = "face_enrollment_required"
+    default_message = "This action requires Face ID to be enrolled first."
+
+
 class InvalidFaceConfirmationError(AppError):
     status_code = 400
     error_code = "invalid_face_confirmation"
