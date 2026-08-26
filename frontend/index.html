@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-i18n-title="dashboard.title">
 <head>
     <script>try { if (localStorage.getItem('bank_preferred_language') && localStorage.getItem('bank_preferred_language') !== 'ro') document.documentElement.classList.add('i18n-pending'); } catch (_) {}</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BanK Dashboard</title>
+    <title data-i18n="dashboard.title">BanK Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
@@ -77,15 +77,15 @@
                             <div class="profile-panel-name" data-i18n="common.Notificări">Notificări</div>
                         </div>
                         <div id="notifications-list">
-                            <div class="empty-state" data-i18n="common.Nicio notificare încă.">Nicio notificare încă.</div>
+                            <div class="empty-state" data-i18n="common.no_notifications">Nicio notificare încă.</div>
                         </div>
                     </div>
 
-                    <div class="user-profile" id="user-profile-btn" title="Profilul meu">
+                    <div class="user-profile" id="user-profile-btn" title="Profilul meu" data-i18n-title="common.Profilul meu">
                         <div id="user-avatar" class="avatar"></div>
                         <span id="user-name"></span>
                     </div>
-                    <button class="logout-btn" id="logout-btn" title="Log out"><i data-lucide="log-out" class="icon"></i></button>
+                    <button class="logout-btn" id="logout-btn" title="Log out" data-i18n-title="common.Log out" data-i18n-aria-label="common.Log out"><i data-lucide="log-out" class="icon"></i></button>
 
                     <!-- Auto-hide profile menu: opens on click of the name/avatar
                          above, closes on outside click or Escape. Each item
@@ -143,7 +143,7 @@
                         <div class="accounts-section">
                             <h2 class="section-title" data-i18n="common.Conturile mele">Conturile mele</h2>
                             <div class="accounts-grid" id="accounts-grid">
-                                <div class="loading-state">Se încarcă...</div>
+                                <div class="loading-state" data-i18n="common.loading">Se încarcă...</div>
                             </div>
                         </div>
 
@@ -153,7 +153,7 @@
                                 <button class="link-btn" id="view-all-transactions-btn" data-i18n="common.Vezi toate">Vezi toate</button>
                             </div>
                             <div class="transactions-list" id="transactions-list">
-                                <div class="loading-state">Se încarcă...</div>
+                                <div class="loading-state" data-i18n="common.loading">Se încarcă...</div>
                             </div>
                         </div>
                     </div>
@@ -163,7 +163,7 @@
                 <section id="view-transactions" class="view hidden">
                     <h2 class="view-title" data-i18n="common.Toate Tranzacțiile">Toate Tranzacțiile</h2>
                     <div id="all-transactions-list">
-                        <div class="loading-state">Se încarcă...</div>
+                        <div class="loading-state" data-i18n="common.loading">Se încarcă...</div>
                     </div>
                 </section>
 
@@ -173,8 +173,8 @@
                         <div class="chat-header">
                             <div class="ai-avatar"><i data-lucide="sparkles"></i></div>
                             <div class="ai-info">
-                                <h2>BanK AI Assistant</h2>
-                                <span class="status">Conectat • poate citi conturile și efectua acțiuni simple</span>
+                                <h2><span data-i18n="chat.panel_heading">BanK AI Assistant</span> <span class="demo-badge" data-i18n="dashboard.Demo">Demo</span></h2>
+                                <span class="status" data-i18n="dynamic.connected_status">Conectat • poate citi conturile și efectua acțiuni simple</span>
                             </div>
                             <button class="btn btn-secondary" id="new-conversation-btn" style="margin-left: auto;">
                                 <i data-lucide="plus" class="icon"></i> <span data-i18n="dashboard.Conversație nouă">Conversație nouă</span>
@@ -192,11 +192,12 @@
                         <div class="document-chip" id="document-chip" hidden></div>
                         <div id="document-sign-card-container"></div>
                         <div class="chat-input-area">
-                            <button class="card-eye-btn" id="chat-attach-btn" type="button" title="Atașează o poză sau PDF cu extrasul de cont (pt. citit un IBAN)" aria-label="Atașează un fișier"><i data-lucide="paperclip"></i></button>
+                            <button class="card-eye-btn" id="chat-attach-btn" type="button" title="Atașează o poză sau PDF cu extrasul de cont (pt. citit un IBAN)" aria-label="Atașează un fișier" data-i18n-title="chat.attach_file_hint" data-i18n-aria-label="chat.attach_file_label"><i data-lucide="paperclip"></i></button>
                             <input type="file" id="chat-attach-input" accept="image/png,image/jpeg,application/pdf" hidden>
-                            <button class="card-eye-btn" id="document-attach-btn" type="button" title="Atașează un document PDF pentru a pune întrebări despre el" aria-label="Atașează un document"><i data-lucide="file-text"></i></button>
+                            <button class="card-eye-btn" id="document-attach-btn" type="button" title="Atașează un document PDF pentru a pune întrebări despre el" aria-label="Atașează un document" data-i18n-title="chat.attach_document_hint" data-i18n-aria-label="chat.attach_document_label"><i data-lucide="file-text"></i></button>
                             <input type="file" id="document-attach-input" accept="application/pdf" hidden>
-                            <input type="text" placeholder="Întreabă asistentul AI..." class="chat-input" id="chat-input">
+                            <input type="text" data-i18n-placeholder="common.chat_placeholder" placeholder="Întreabă asistentul AI..." class="chat-input" id="chat-input">
+                            <button class="card-eye-btn chat-mic-btn" id="chat-mic-btn" type="button" title="Dictează mesajul" aria-label="Dictează mesajul" aria-pressed="false" data-i18n-title="chat.voice_input_label" data-i18n-aria-label="chat.voice_input_label"><i data-lucide="mic"></i></button>
                             <button class="btn-send" onclick="sendMessage()">➤</button>
                         </div>
                         <p class="field-hint" id="chat-attach-status" hidden></p>
@@ -254,7 +255,7 @@
 
                             <div class="pots-card-header" style="margin-top: 30px;">
                                 <h3 data-i18n="dashboard.scheduled_title">Transferuri programate</h3>
-                                <button type="button" class="btn-icon-add" id="open-scheduled-transfer-btn" title="Programează un transfer" aria-label="Programează un transfer"><i data-lucide="plus"></i></button>
+                                <button type="button" class="btn-icon-add" id="open-scheduled-transfer-btn" title="Programează un transfer" aria-label="Programează un transfer" data-i18n-title="scheduled.title" data-i18n-aria-label="scheduled.title"><i data-lucide="plus"></i></button>
                             </div>
                             <div id="scheduled-transfers-list" class="pots-list">
                                 <div class="loading-state">Se încarcă...</div>
@@ -275,7 +276,7 @@
 
                             <div class="my-iban-box">
                                 <span class="iban-value" id="payments-my-iban">—</span>
-                                <button type="button" class="card-eye-btn" id="copy-my-iban-btn" title="Copiază IBAN-ul"><i data-lucide="copy"></i></button>
+                                <button type="button" class="card-eye-btn" id="copy-my-iban-btn" title="Copiază IBAN-ul" data-i18n-title="payments.copy_iban_title"><i data-lucide="copy"></i></button>
                             </div>
 
                             <div class="auth-error" id="payments-error" hidden></div>
@@ -285,7 +286,7 @@
                                 <label class="field-label" for="payments-iban">IBAN destinatar</label>
                                 <div class="iban-input-row">
                                     <input class="field-input" type="text" id="payments-iban" required placeholder="RO49 BANK ...">
-                                    <button type="button" class="card-eye-btn" id="iban-scan-btn" title="Scanează IBAN dintr-o poză sau PDF" aria-label="Scanează IBAN dintr-o poză sau PDF"><i data-lucide="scan-line"></i></button>
+                                    <button type="button" class="card-eye-btn" id="iban-scan-btn" title="Scanează IBAN dintr-o poză sau PDF" aria-label="Scanează IBAN dintr-o poză sau PDF" data-i18n-title="payments.scan_iban_hint" data-i18n-aria-label="payments.scan_iban_hint"><i data-lucide="scan-line"></i></button>
                                 </div>
                                 <input type="file" id="iban-scan-input" accept="image/png,image/jpeg,application/pdf" hidden>
                                 <p class="field-hint" id="iban-scan-status" hidden></p>
@@ -361,7 +362,7 @@
                     <div class="standalone-card">
                         <div class="my-iban-box">
                             <span class="iban-value" id="referral-code-value">&hellip;</span>
-                            <button type="button" class="card-eye-btn" id="copy-referral-code-btn" title="Copiază codul"><i data-lucide="copy"></i></button>
+                            <button type="button" class="card-eye-btn" id="copy-referral-code-btn" title="Copiază codul" data-i18n-title="payments.copy_referral_title"><i data-lucide="copy"></i></button>
                         </div>
                         <p class="field-hint" data-i18n="profile.referral_hint">Cine se înregistrează cu acest cod primește 500 RON la primul cont.</p>
                     </div>
@@ -379,19 +380,19 @@
                             <label class="field-label" for="current-password" data-i18n="profile.current_password">Parola curentă</label>
                             <div class="password-field-wrapper">
                                 <input class="field-input" type="password" id="current-password" required autocomplete="current-password">
-                                <button type="button" class="password-toggle-btn" data-target="current-password" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
+                                <button type="button" class="password-toggle-btn" data-target="current-password" tabindex="-1" aria-label="Arată parola" data-i18n-aria-label="profile.show_password"><i data-lucide="eye"></i></button>
                             </div>
 
                             <label class="field-label" for="new-password-profile" data-i18n="profile.new_password">Parolă nouă</label>
                             <div class="password-field-wrapper">
                                 <input class="field-input" type="password" id="new-password-profile" minlength="8" required autocomplete="new-password">
-                                <button type="button" class="password-toggle-btn" data-target="new-password-profile" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
+                                <button type="button" class="password-toggle-btn" data-target="new-password-profile" tabindex="-1" aria-label="Arată parola" data-i18n-aria-label="profile.show_password"><i data-lucide="eye"></i></button>
                             </div>
 
                             <label class="field-label" for="new-password-profile-confirm" data-i18n="profile.confirm_password">Confirmă parola nouă</label>
                             <div class="password-field-wrapper">
                                 <input class="field-input" type="password" id="new-password-profile-confirm" minlength="8" required autocomplete="new-password">
-                                <button type="button" class="password-toggle-btn" data-target="new-password-profile-confirm" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
+                                <button type="button" class="password-toggle-btn" data-target="new-password-profile-confirm" tabindex="-1" aria-label="Arată parola" data-i18n-aria-label="profile.show_password"><i data-lucide="eye"></i></button>
                             </div>
 
                             <button class="btn btn-primary" type="submit" style="margin-top: 16px;" data-i18n="profile.change_password">Schimbă parola</button>
@@ -405,7 +406,7 @@
                     </button>
                     <h2 class="view-title" data-i18n="profile.face_login">Face Login</h2>
                     <div class="standalone-card centered">
-                        <p class="field-hint" id="face-status-text" style="margin-bottom: 20px;">Se verifică...</p>
+                        <p class="field-hint" id="face-status-text" style="margin-bottom: 20px;" data-i18n="profile.checking_status">Se verifică...</p>
 
                         <div class="face-camera-wrap">
                             <video id="face-video" autoplay playsinline muted></video>
@@ -444,10 +445,10 @@
             </div>
             <div class="auth-error" id="new-account-error" hidden></div>
             <form id="new-account-form">
-                <label class="field-label" for="new-account-name">Nume cont</label>
-                <input class="field-input" type="text" id="new-account-name" required placeholder="ex. Cont Curent">
+                <label class="field-label" for="new-account-name" data-i18n="common.account_name_label">Nume cont</label>
+                <input class="field-input" type="text" id="new-account-name" required data-i18n-placeholder="new_account.name_placeholder" placeholder="ex. Cont Curent">
 
-                <label class="field-label" for="new-account-currency">Monedă</label>
+                <label class="field-label" for="new-account-currency" data-i18n="common.currency_label">Monedă</label>
                 <select class="field-input" id="new-account-currency">
                     <option value="RON">RON</option>
                     <option value="EUR">EUR</option>
@@ -455,8 +456,8 @@
                 </select>
 
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" id="cancel-new-account">Anulează</button>
-                    <button type="submit" class="btn btn-primary">Creează</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-new-account" data-i18n="common.Anulează">Anulează</button>
+                    <button type="submit" class="btn btn-primary" data-i18n="common.create">Creează</button>
                 </div>
             </form>
         </div>
@@ -466,15 +467,15 @@
     <div class="modal-overlay" id="new-savings-modal" hidden>
         <div class="modal">
             <div class="modal-header">
-                <h3 id="new-savings-modal-title">Cont de economii nou</h3>
+                <h3 id="new-savings-modal-title" data-i18n="savings.new_savings_title">Cont de economii nou</h3>
                 <button class="modal-close" id="close-new-savings-modal"><i data-lucide="x"></i></button>
             </div>
             <div class="auth-error" id="new-savings-error" hidden></div>
             <form id="new-savings-form">
-                <label class="field-label" for="new-savings-name">Nume cont</label>
-                <input class="field-input" type="text" id="new-savings-name" required placeholder="ex. Economii vacanță">
+                <label class="field-label" for="new-savings-name" data-i18n="common.account_name_label">Nume cont</label>
+                <input class="field-input" type="text" id="new-savings-name" required data-i18n-placeholder="savings.account_name_placeholder" placeholder="ex. Economii vacanță">
 
-                <label class="field-label" for="new-savings-currency">Monedă</label>
+                <label class="field-label" for="new-savings-currency" data-i18n="common.currency_label">Monedă</label>
                 <select class="field-input" id="new-savings-currency">
                     <option value="RON">RON</option>
                     <option value="EUR">EUR</option>
@@ -482,21 +483,21 @@
                 </select>
 
                 <div id="new-savings-term-row" hidden>
-                    <label class="field-label" for="new-savings-term">Perioadă</label>
+                    <label class="field-label" for="new-savings-term" data-i18n="savings.period_label">Perioadă</label>
                     <select class="field-input" id="new-savings-term"></select>
                 </div>
 
                 <div id="new-savings-projection-row" hidden>
-                    <label class="field-label" for="new-savings-projection-amount">Sumă estimativă de depus <span class="field-optional">(doar pentru estimare)</span></label>
-                    <input class="field-input" type="number" id="new-savings-projection-amount" min="0" step="0.01" placeholder="ex. 5000">
+                    <label class="field-label" for="new-savings-projection-amount"><span data-i18n="savings.projection_amount_label">Sumă estimativă de depus</span> <span class="field-optional" data-i18n="savings.projection_amount_note">(doar pentru estimare)</span></label>
+                    <input class="field-input" type="number" id="new-savings-projection-amount" min="0" step="0.01" data-i18n-placeholder="savings.projection_amount_placeholder" placeholder="ex. 5000">
                 </div>
 
                 <p class="field-hint" id="new-savings-rate-hint"></p>
                 <div class="savings-projection-box" id="new-savings-projection-box" hidden></div>
 
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" id="cancel-new-savings">Anulează</button>
-                    <button type="submit" class="btn btn-primary">Deschide contul</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-new-savings" data-i18n="common.Anulează">Anulează</button>
+                    <button type="submit" class="btn btn-primary" data-i18n="savings.open_account_button">Deschide contul</button>
                 </div>
             </form>
         </div>
@@ -506,26 +507,26 @@
     <div class="modal-overlay" id="transfer-modal" hidden>
         <div class="modal">
             <div class="modal-header">
-                <h3>Transferă între conturile tale</h3>
+                <h3 data-i18n="transfer.title">Transferă între conturile tale</h3>
                 <button class="modal-close" id="close-transfer-modal"><i data-lucide="x"></i></button>
             </div>
             <div class="auth-error" id="transfer-error" hidden></div>
             <form id="transfer-form">
-                <label class="field-label" for="transfer-from">Din contul</label>
+                <label class="field-label" for="transfer-from" data-i18n="scheduled.from_account_label">Din contul</label>
                 <select class="field-input" id="transfer-from" required></select>
 
-                <label class="field-label" for="transfer-to">În contul</label>
+                <label class="field-label" for="transfer-to" data-i18n="transfer.to_account_label">În contul</label>
                 <select class="field-input" id="transfer-to" required></select>
 
-                <label class="field-label" for="transfer-amount">Sumă</label>
+                <label class="field-label" for="transfer-amount" data-i18n="common.amount_label">Sumă</label>
                 <input class="field-input" type="number" id="transfer-amount" min="0.01" step="0.01" required>
 
-                <label class="field-label" for="transfer-description">Descriere <span class="field-optional">(opțional)</span></label>
+                <label class="field-label" for="transfer-description"><span data-i18n="common.description_label">Descriere</span> <span class="field-optional" data-i18n="card_modal.optional">(opțional)</span></label>
                 <input class="field-input" type="text" id="transfer-description">
 
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" id="cancel-transfer">Anulează</button>
-                    <button type="submit" class="btn btn-primary">Confirmă</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-transfer" data-i18n="common.Anulează">Anulează</button>
+                    <button type="submit" class="btn btn-primary" data-i18n="common.Confirmă">Confirmă</button>
                 </div>
             </form>
         </div>
@@ -535,36 +536,36 @@
     <div class="modal-overlay" id="scheduled-transfer-modal" hidden>
         <div class="modal">
             <div class="modal-header">
-                <h3>Programează un transfer</h3>
+                <h3 data-i18n="scheduled.title">Programează un transfer</h3>
                 <button class="modal-close" id="close-scheduled-transfer-modal"><i data-lucide="x"></i></button>
             </div>
             <div class="auth-error" id="scheduled-transfer-error" hidden></div>
             <form id="scheduled-transfer-form">
-                <label class="field-label" for="scheduled-transfer-from">Din contul</label>
+                <label class="field-label" for="scheduled-transfer-from" data-i18n="scheduled.from_account_label">Din contul</label>
                 <select class="field-input" id="scheduled-transfer-from" required></select>
 
-                <label class="field-label" for="scheduled-transfer-to">În contul</label>
+                <label class="field-label" for="scheduled-transfer-to" data-i18n="transfer.to_account_label">În contul</label>
                 <select class="field-input" id="scheduled-transfer-to" required></select>
 
-                <label class="field-label" for="scheduled-transfer-amount">Sumă</label>
+                <label class="field-label" for="scheduled-transfer-amount" data-i18n="common.amount_label">Sumă</label>
                 <input class="field-input" type="number" id="scheduled-transfer-amount" min="0.01" step="0.01" required>
 
-                <label class="field-label" for="scheduled-transfer-start-days">Peste câte zile începe</label>
+                <label class="field-label" for="scheduled-transfer-start-days" data-i18n="scheduled.start_in_days_label">Peste câte zile începe</label>
                 <input class="field-input" type="number" id="scheduled-transfer-start-days" min="0" step="1" value="0" required>
 
-                <label class="field-label" for="scheduled-transfer-frequency">Frecvență</label>
+                <label class="field-label" for="scheduled-transfer-frequency" data-i18n="scheduled.frequency_label">Frecvență</label>
                 <select class="field-input" id="scheduled-transfer-frequency">
-                    <option value="">O singură dată</option>
-                    <option value="weekly">Săptămânal</option>
-                    <option value="monthly">Lunar</option>
+                    <option value="" data-i18n="dynamic.scheduled_once">O singură dată</option>
+                    <option value="weekly" data-i18n="dynamic.scheduled_weekly">Săptămânal</option>
+                    <option value="monthly" data-i18n="dynamic.scheduled_monthly">Lunar</option>
                 </select>
 
-                <label class="field-label" for="scheduled-transfer-description">Descriere <span class="field-optional">(opțional)</span></label>
+                <label class="field-label" for="scheduled-transfer-description"><span data-i18n="common.description_label">Descriere</span> <span class="field-optional" data-i18n="card_modal.optional">(opțional)</span></label>
                 <input class="field-input" type="text" id="scheduled-transfer-description">
 
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" id="cancel-scheduled-transfer">Anulează</button>
-                    <button type="submit" class="btn btn-primary">Programează</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-scheduled-transfer" data-i18n="common.Anulează">Anulează</button>
+                    <button type="submit" class="btn btn-primary" data-i18n="scheduled.submit_button">Programează</button>
                 </div>
             </form>
         </div>
@@ -574,20 +575,20 @@
     <div class="modal-overlay" id="new-card-modal" hidden>
         <div class="modal">
             <div class="modal-header">
-                <h3>Card virtual nou</h3>
-                <button class="modal-close" id="close-new-card-modal"><i data-lucide="x"></i></button>
+                <h3 data-i18n="card_modal.new_virtual_title">Card virtual nou</h3>
+                <button class="modal-close" id="close-new-card-modal" data-i18n-aria-label="card_modal.close"><i data-lucide="x"></i></button>
             </div>
             <div class="auth-error" id="new-card-error" hidden></div>
             <form id="new-card-form">
-                <label class="field-label" for="new-card-account">Cont asociat</label>
+                <label class="field-label" for="new-card-account" data-i18n="card_modal.linked_account">Cont asociat</label>
                 <select class="field-input" id="new-card-account" required></select>
 
-                <label class="field-label" for="new-card-limit">Limită de cheltuieli <span class="field-optional">(opțional)</span></label>
-                <input class="field-input" type="number" id="new-card-limit" min="0.01" step="0.01">
+                <label class="field-label" for="new-card-limit"><span data-i18n="card_modal.spending_limit">Limită de cheltuieli</span> <span class="field-optional" data-i18n="card_modal.optional">(opțional)</span></label>
+                <input class="field-input" type="number" id="new-card-limit" min="0.01" step="0.01" data-i18n-placeholder="card_modal.limit_placeholder">
 
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" id="cancel-new-card">Anulează</button>
-                    <button type="submit" class="btn btn-primary">Generează</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-new-card" data-i18n="common.Anulează">Anulează</button>
+                    <button type="submit" class="btn btn-primary" data-i18n="card_modal.create">Generează</button>
                 </div>
             </form>
         </div>
@@ -597,39 +598,39 @@
     <div class="modal-overlay" id="card-order-modal" hidden>
         <div class="modal">
             <div class="modal-header">
-                <h3>Comandă Card Fizic</h3>
-                <button class="modal-close" id="close-card-order-modal"><i data-lucide="x"></i></button>
+                <h3 data-i18n="card_modal.physical_title">Comandă Card Fizic</h3>
+                <button class="modal-close" id="close-card-order-modal" data-i18n-aria-label="card_modal.close"><i data-lucide="x"></i></button>
             </div>
             <div class="auth-error" id="card-order-error" hidden></div>
             <form id="card-order-form">
-                <label class="field-label" for="card-order-account">Cont asociat</label>
+                <label class="field-label" for="card-order-account" data-i18n="card_modal.linked_account">Cont asociat</label>
                 <select class="field-input" id="card-order-account" required></select>
 
                 <label class="field-label" for="card-order-card-choice">Card</label>
                 <select class="field-input" id="card-order-card-choice"></select>
                 <p class="field-hint" id="card-order-card-hint" hidden></p>
 
-                <label class="field-label" for="card-order-name">Nume complet</label>
-                <input class="field-input" type="text" id="card-order-name" required placeholder="ex. Popescu Andrei">
+                <label class="field-label" for="card-order-name" data-i18n="card_modal.full_name">Nume complet</label>
+                <input class="field-input" type="text" id="card-order-name" required data-i18n-placeholder="card_modal.full_name_placeholder" placeholder="ex. Popescu Andrei">
 
-                <label class="field-label" for="card-order-phone">Telefon</label>
-                <input class="field-input" type="tel" id="card-order-phone" required placeholder="ex. 07xxxxxxxx">
+                <label class="field-label" for="card-order-phone" data-i18n="card_modal.phone">Telefon</label>
+                <input class="field-input" type="tel" id="card-order-phone" required data-i18n-placeholder="card_modal.phone_placeholder" placeholder="ex. 07xxxxxxxx">
 
-                <label class="field-label" for="card-order-address">Adresă</label>
-                <input class="field-input" type="text" id="card-order-address" required placeholder="Stradă, număr, bloc, apartament">
+                <label class="field-label" for="card-order-address" data-i18n="card_modal.address">Adresă</label>
+                <input class="field-input" type="text" id="card-order-address" required data-i18n-placeholder="card_modal.address_placeholder" placeholder="Stradă, număr, bloc, apartament">
 
-                <label class="field-label" for="card-order-city">Oraș</label>
+                <label class="field-label" for="card-order-city" data-i18n="card_modal.city">Oraș</label>
                 <input class="field-input" type="text" id="card-order-city" required>
 
-                <label class="field-label" for="card-order-postal">Cod poștal</label>
+                <label class="field-label" for="card-order-postal" data-i18n="card_modal.postal_code">Cod poștal</label>
                 <input class="field-input" type="text" id="card-order-postal" required>
 
-                <label class="field-label" for="card-order-country">Țară</label>
-                <input class="field-input" type="text" id="card-order-country" required value="România">
+                <label class="field-label" for="card-order-country" data-i18n="card_modal.country">Țară</label>
+                <input class="field-input" type="text" id="card-order-country" required value="România" data-default-country="true">
 
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" id="cancel-card-order">Anulează</button>
-                    <button type="submit" class="btn btn-primary">Trimite comanda</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-card-order" data-i18n="common.Anulează">Anulează</button>
+                    <button type="submit" class="btn btn-primary" data-i18n="card_modal.submit_order">Trimite comanda</button>
                 </div>
             </form>
         </div>
@@ -642,10 +643,10 @@
     <div class="modal-overlay" id="face-confirm-modal" hidden>
         <div class="modal">
             <div class="modal-header">
-                <h3>Confirmă cu Face ID</h3>
+                <h3 data-i18n="face_confirm.title">Confirmă cu Face ID</h3>
                 <button class="modal-close" id="close-face-confirm-modal"><i data-lucide="x"></i></button>
             </div>
-            <p class="field-hint" id="face-confirm-reason" style="margin-bottom: 16px;">
+            <p class="field-hint" id="face-confirm-reason" style="margin-bottom: 16px;" data-i18n="face_confirm.default_reason">
                 Suma depășește pragul de confirmare - verifică-ți identitatea prin cameră.
             </p>
             <div class="auth-error" id="face-confirm-error" hidden></div>
@@ -654,8 +655,8 @@
                 <canvas id="face-confirm-canvas" hidden></canvas>
             </div>
             <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" id="cancel-face-confirm">Anulează</button>
-                <button type="button" class="btn btn-primary" id="capture-face-confirm">Confirmă</button>
+                <button type="button" class="btn btn-secondary" id="cancel-face-confirm" data-i18n="common.Anulează">Anulează</button>
+                <button type="button" class="btn btn-primary" id="capture-face-confirm" data-i18n="common.Confirmă">Confirmă</button>
             </div>
         </div>
     </div>
@@ -667,22 +668,22 @@
     <div class="modal-overlay" id="price-increase-modal" hidden>
         <div class="modal price-increase-modal">
             <div class="price-increase-icon"><i data-lucide="trending-up"></i></div>
-            <h3 class="price-increase-title">Prețul abonamentului a crescut</h3>
+            <h3 class="price-increase-title" data-i18n="price_increase.title">Prețul abonamentului a crescut</h3>
             <p class="price-increase-message">
-                <span id="price-increase-merchant">Acest abonament</span> și-a mărit prețul
+                <span id="price-increase-merchant" data-i18n-ignore>Acest abonament</span> <span data-i18n="price_increase.price_raised_suffix">și-a mărit prețul</span>
             </p>
             <div class="price-increase-amounts">
                 <span class="price-increase-old" id="price-increase-old"></span>
                 <i data-lucide="arrow-right" class="icon"></i>
                 <span class="price-increase-new" id="price-increase-new"></span>
             </div>
-            <p class="price-increase-blocked-note">Am blocat această plată.</p>
+            <p class="price-increase-blocked-note" data-i18n="price_increase.blocked_note">Am blocat această plată.</p>
             <a class="price-increase-website-link" id="price-increase-website-link" href="#" target="_blank" rel="noopener noreferrer" hidden>
-                <i data-lucide="external-link" class="icon"></i> Mergi să anulezi abonamentul
+                <i data-lucide="external-link" class="icon"></i> <span data-i18n="price_increase.cancel_subscription_link">Mergi să anulezi abonamentul</span>
             </a>
             <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" id="price-increase-cancel">Anulează plata</button>
-                <button type="button" class="btn btn-primary" id="price-increase-confirm">Continuă oricum</button>
+                <button type="button" class="btn btn-secondary" id="price-increase-cancel" data-i18n="price_increase.cancel_payment_button">Anulează plata</button>
+                <button type="button" class="btn btn-primary" id="price-increase-confirm" data-i18n="price_increase.continue_anyway_button">Continuă oricum</button>
             </div>
         </div>
     </div>
@@ -694,25 +695,25 @@
     <div class="modal-overlay" id="step-up-auth-modal" hidden>
         <div class="modal">
             <div class="modal-header">
-                <h3>Confirmă identitatea</h3>
+                <h3 data-i18n="step_up.title">Confirmă identitatea</h3>
                 <button class="modal-close" id="close-step-up-modal"><i data-lucide="x"></i></button>
             </div>
             <div class="auth-error" id="step-up-error" hidden></div>
 
             <div class="step-up-option">
                 <button type="button" class="btn btn-primary" id="step-up-face-btn" style="width:100%;">
-                    <i data-lucide="scan-face"></i> Confirmare cu Face ID
+                    <i data-lucide="scan-face"></i> <span data-i18n="step_up.face_button">Confirmare cu Face ID</span>
                 </button>
             </div>
 
-            <div class="step-up-divider"><span>sau</span></div>
+            <div class="step-up-divider"><span data-i18n="common.or">sau</span></div>
 
             <form id="step-up-password-form" class="step-up-option">
-                <label class="field-label" for="step-up-password-input">Confirmare cu parolă</label>
+                <label class="field-label" for="step-up-password-input" data-i18n="step_up.password_label">Confirmare cu parolă</label>
                 <input class="field-input" type="password" id="step-up-password-input"
-                       placeholder="Introdu parola contului" required autocomplete="current-password">
+                       data-i18n-placeholder="step_up.password_placeholder" placeholder="Introdu parola contului" required autocomplete="current-password">
                 <div class="modal-actions">
-                    <button type="submit" class="btn btn-secondary" style="width:100%;">Confirmă</button>
+                    <button type="submit" class="btn btn-secondary" style="width:100%;" data-i18n="common.Confirmă">Confirmă</button>
                 </div>
             </form>
         </div>

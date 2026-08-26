@@ -61,7 +61,8 @@ function setFaceFlashlight(active, modalOverlayEl) {
 
 function formatMoney(amountMinor, currency) {
   const major = amountMinor / 100;
-  const amount = major.toLocaleString("ro-RO", {
+  const language = document.documentElement.lang || "ro";
+  const amount = major.toLocaleString(language, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
