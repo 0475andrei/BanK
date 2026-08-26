@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from app.ai.agents.scope_guardrail import OFF_TOPIC_GUARDRAIL
 from app.ai.agents.tool_loop import MAX_ITERATIONS as _MAX_ITERATIONS
 from app.ai.agents.tool_loop import ToolLoopAgent
 from app.ai.routing import RoutingRule
@@ -42,7 +43,9 @@ BANKING_ROUTING_RULES = (
     ),
 )
 
-SYSTEM_PROMPT = """Ești asistentul bancar al unei aplicații de banking personal.
+SYSTEM_PROMPT = f"""{OFF_TOPIC_GUARDRAIL}
+
+Ești asistentul bancar al unei aplicații de banking personal.
 Răspunzi mereu în limba română.
 
 Poți CITI datele utilizatorului și poți efectua câteva acțiuni simple și

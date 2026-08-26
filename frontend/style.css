@@ -733,6 +733,7 @@ body {
 }
 
 .account-card {
+    position: relative;
     background-color: var(--bg-surface);
     padding: 20px;
     border-radius: var(--border-radius);
@@ -740,6 +741,21 @@ body {
     transition: var(--transition);
     cursor: pointer;
 }
+
+.acc-statement-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+    border-radius: 6px;
+}
+.acc-statement-btn:hover { color: var(--primary-teal); background-color: rgba(255, 255, 255, 0.06); }
+.acc-statement-btn svg { width: 18px; height: 18px; }
 
 .account-card:hover {
     background-color: var(--bg-surface-hover);

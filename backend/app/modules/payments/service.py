@@ -30,7 +30,7 @@ from app.modules.payments.schemas import PaymentCreate
 from app.modules.users.schemas import UserRead
 
 
-async def _is_first_payment_to_person(
+async def is_first_payment_to_person(
     supabase: AsyncClient, from_user_id: uuid.UUID, to_user_id: str
 ) -> bool:
     """"Per person", not per IBAN: someone can own several accounts/IBANs, so
@@ -206,7 +206,7 @@ async def create_payment(
                 }
             )
 
-    is_new_person = await _is_first_payment_to_person(supabase, user.id, to_account["user_id"])
+    is_new_person = await is_first_payment_to_person(supabase, user.id, to_account["user_id"])
     # proposal_pre_authorized=True: identity already verified by the proposal
     # confirmation flow (face token or password). Only set by proposals_service.
     # Existing callers (payments/router.py) never set this flag.

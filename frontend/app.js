@@ -63,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     wireStepUpModal();
     wireAdminDocSignModal();
+    wireStatementModal();
     wireChatAttach();
     wireDocumentAttach();
     wireChatMic();
@@ -1749,8 +1750,18 @@ function renderAccountsGrid() {
             <div class="acc-balance">${formatMoney(acc.balance_minor, acc.currency)}</div>
             ${acc.status === 'closed' ? `<span class="acc-status">${escapeHTML(t('dynamic.account_closed', 'Închis'))}</span>` : ''}
             ${!isSpendable(acc) ? `<span class="acc-status locked">${escapeHTML(t('dynamic.account_locked', 'Blocat'))}</span>` : ''}
+            <button type="button" class="acc-statement-btn" data-account-id="${escapeHTML(acc.id)}"
+                    data-account-name="${escapeHTML(acc.name)}" title="Descarcă extras de cont">
+                <i data-lucide="file-down"></i>
+            </button>
         </div>
     `).join('');
+    grid.querySelectorAll('.acc-statement-btn').forEach((btn) => {
+        btn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            openStatementModal(btn.dataset.accountId, btn.dataset.accountName);
+        });
+    });
     if (window.lucide) lucide.createIcons();
 }
 
@@ -1769,6 +1780,92 @@ function renderHeadlineBalance() {
         .filter(a => a.currency === primaryCurrency)
         .reduce((sum, a) => sum + a.balance_minor, 0);
     el.textContent = formatMoney(total, primaryCurrency);
+}
+
+/* -------------------------------------------------------------------------
+ * Account statement download - the "extras de cont" icon on each account
+ * card (see renderAccountsGrid above) opens a small period picker, then
+ * downloads GET /accounts/{id}/statement/pdf as an actual file. A real
+ * file save, not a preview: fetched as a blob (the API is a different
+ * origin, so a plain <a href> wouldn't reliably carry the session cookie -
+ * same reasoning as previewDocumentPdf), then "clicked" through a hidden,
+ * temporary <a download> to trigger the browser's save dialog.
+ * ------------------------------------------------------------------------- */
+
+let statementAccountId = null;
+
+function openStatementModal(accountId, accountName) {
+    statementAccountId = accountId;
+    const modal = document.getElementById('statement-modal');
+    document.getElementById('statement-error').hidden = true;
+    document.getElementById('statement-account-name').textContent = accountName;
+
+    const today = new Date();
+    const monthAgo = new Date(today);
+    monthAgo.setDate(monthAgo.getDate() - 30);
+    document.getElementById('statement-period-end').value = today.toISOString().slice(0, 10);
+    document.getElementById('statement-period-start').value = monthAgo.toISOString().slice(0, 10);
+
+    modal.hidden = false;
+}
+
+function closeStatementModal() {
+    document.getElementById('statement-modal').hidden = true;
+    statementAccountId = null;
+}
+
+function showStatementError(message) {
+    const errorEl = document.getElementById('statement-error');
+    errorEl.textContent = message;
+    errorEl.hidden = false;
+}
+
+function wireStatementModal() {
+    const modal = document.getElementById('statement-modal');
+    if (!modal) return;
+
+    document.getElementById('close-statement-modal').addEventListener('click', closeStatementModal);
+    document.getElementById('cancel-statement').addEventListener('click', closeStatementModal);
+
+    document.getElementById('statement-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!statementAccountId) return;
+
+        const start = document.getElementById('statement-period-start').value;
+        const end = document.getElementById('statement-period-end').value;
+        if (start > end) {
+            showStatementError('Data de început trebuie să fie înainte de data de sfârșit.');
+            return;
+        }
+
+        const submitBtn = document.getElementById('statement-submit-btn');
+        submitBtn.disabled = true;
+        try {
+            const params = new URLSearchParams({ period_start: start, period_end: end });
+            const res = await fetch(
+                `${API_BASE_URL}/accounts/${statementAccountId}/statement/pdf?${params}`,
+                { credentials: 'include' },
+            );
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.error?.message || 'Extrasul nu a putut fi generat.');
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `extras-cont-${start}-${end}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            closeStatementModal();
+        } catch (err) {
+            showStatementError(err.message || 'Extrasul nu a putut fi generat.');
+        } finally {
+            submitBtn.disabled = false;
+        }
+    });
 }
 
 async function loadTransactions() {
