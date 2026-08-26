@@ -322,6 +322,7 @@
     "history": {
       "rename_title": "Beszélgetés átnevezése",
       "delete_title": "Beszélgetés törlése",
+      "delete_button": "Törlés",
       "rename_input_label": "Beszélgetés neve",
       "save_name": "Név mentése",
       "cancel_rename": "Mégse",

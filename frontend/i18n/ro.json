@@ -322,6 +322,7 @@
     "history": {
       "rename_title": "Redenumește conversația",
       "delete_title": "Șterge conversația",
+      "delete_button": "Șterge",
       "rename_input_label": "Nume conversație",
       "save_name": "Salvează numele",
       "cancel_rename": "Renunță",

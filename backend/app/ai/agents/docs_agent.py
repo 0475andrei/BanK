@@ -3,6 +3,7 @@ RAG (app/ai/knowledge), never from the model's own knowledge."""
 
 from __future__ import annotations
 
+from app.ai.agents.scope_guardrail import OFF_TOPIC_GUARDRAIL
 from app.ai.agents.tool_loop import MAX_ITERATIONS as _MAX_ITERATIONS
 from app.ai.agents.tool_loop import ToolLoopAgent
 from app.ai.routing import RoutingRule
@@ -48,7 +49,9 @@ DOCS_ROUTING_RULES = (
     ),
 )
 
-SYSTEM_PROMPT = """Ești asistentul de produse și comisioane al băncii.
+SYSTEM_PROMPT = f"""{OFF_TOPIC_GUARDRAIL}
+
+Ești asistentul de produse și comisioane al băncii.
 Răspunzi mereu în limba română.
 
 Regula esențială: răspunzi DOAR pe baza rezultatelor uneltei

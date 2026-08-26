@@ -322,6 +322,7 @@
     "history": {
       "rename_title": "Görüşmeyi yeniden adlandır",
       "delete_title": "Görüşmeyi sil",
+      "delete_button": "Sil",
       "rename_input_label": "Görüşme adı",
       "save_name": "Adı kaydet",
       "cancel_rename": "Vazgeç",
