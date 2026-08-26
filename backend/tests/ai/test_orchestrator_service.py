@@ -174,7 +174,7 @@ def _two_agent_orchestrator(classifier_script: list[ModelResponse] | None = None
         MockProvider(classifier_script) if classifier_script is not None else None
     )
     orchestrator = Orchestrator(provider=classifier)
-    orchestrator.register(InsightsAgent(provider, build_insights_tools(FakeSupabase())))
+    orchestrator.register(InsightsAgent(provider, build_insights_tools(FakeSupabase(), provider)))
     orchestrator.register(
         BankingAgent(provider, build_banking_tools(FakeSupabase())), default=True
     )
@@ -296,7 +296,7 @@ def test_insights_agent_has_own_system_prompt():
 def test_insights_agent_gets_only_its_own_tools():
     """An agent's reach is what it was handed: the analytical agent has no way
     to read card numbers."""
-    tools = build_insights_tools(FakeSupabase())
+    tools = build_insights_tools(FakeSupabase(), MockProvider([ModelResponse(text="ok")]))
 
     assert tools.names() == [
         "get_transactions_in_range",
@@ -333,7 +333,7 @@ def _three_agent_orchestrator(classifier_script: list[ModelResponse] | None = No
         MockProvider(classifier_script) if classifier_script is not None else None
     )
     orchestrator = Orchestrator(provider=classifier)
-    orchestrator.register(InsightsAgent(provider, build_insights_tools(FakeSupabase())))
+    orchestrator.register(InsightsAgent(provider, build_insights_tools(FakeSupabase(), provider)))
     orchestrator.register(
         BankingAgent(provider, build_banking_tools(FakeSupabase())), default=True
     )
