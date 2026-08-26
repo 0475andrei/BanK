@@ -341,6 +341,12 @@
       "reject_error": "Eroare la anulare.",
       "confirm_success": "Acțiunea a fost confirmată și executată cu succes!",
       "auth_failed": "Autentificare eșuată."
+    },
+    "agent_tooltip": {
+      "agent_label": "Agent",
+      "reason_label": "Motiv",
+      "rule_label": "Regulă",
+      "confidence_label": "Încredere"
     }
   },
   "dynamic": {
@@ -387,7 +393,44 @@
     "category_education": "Educație",
     "category_home": "Locuință & Amenajări",
     "category_insurance": "Asigurări",
-    "category_transfers": "Transferuri"
+    "category_transfers": "Transferuri",
+    "proposal_transfer": "Transfer de {amount} din {from} în {to}",
+    "proposal_payment": "Plată de {amount} către {name}",
+    "proposal_open_account": "Deschidere cont {product} «{name}» în {currency}",
+    "proposal_close_account": "Închidere cont «{name}»",
+    "proposal_cancel_card": "Anulare permanentă card •••• {last4}",
+    "proposal_sign_document": "Semnare electronică a documentului «{filename}»",
+    "product_checking": "curent",
+    "product_savings": "economii",
+    "product_term_deposit": "depozit la termen",
+    "agent_banking": "Bancar",
+    "agent_insights": "Analiză",
+    "agent_planning": "Planificare",
+    "agent_documents": "Documente",
+    "agent_docs": "Ajutor"
+  },
+  "esign": {
+    "sign_button": "Semnează electronic",
+    "sign_button_short": "Semnează",
+    "list_empty": "Nu ai documente de semnat momentan.",
+    "preview_button": "Previzualizează",
+    "signed_badge": "Semnat",
+    "preview_failed": "Previzualizarea documentului a eșuat.",
+    "sign_request_error": "Eroare la crearea cererii de semnătură.",
+    "sign_intent": "Am citit și sunt de acord cu conținutul documentului „{filename}”.",
+    "sign_intent_official": "Am citit și sunt de acord cu conținutul documentului oficial „{filename}”.",
+    "sending_code": "Se trimite codul de semnare...",
+    "code_sent": "Cod trimis pentru „{filename}”. Verifică Teams.",
+    "code_send_error": "Codul nu a putut fi trimis.",
+    "face_reason": "Semnare document oficial - identificare prin Face ID",
+    "sign_success": "Documentul a fost semnat cu succes!",
+    "sign_error": "Semnarea a eșuat."
+  },
+  "face_id": {
+    "status_check_error": "Nu am putut verifica starea Face ID. Încearcă din nou.",
+    "enrollment_required_generic": "Această acțiune necesită Face ID activat. Te redirecționăm către activare.",
+    "enrollment_required_payment": "Această plată necesită Face ID activat, pentru că e prima ta plată către această persoană sau depășește pragul de siguranță.",
+    "enrollment_required_card_reveal": "Activează Face ID ca să poți vedea numărul complet și CVV-ul cardului."
   },
   "errors": {
     "generic": "A apărut o problemă. Încearcă din nou."

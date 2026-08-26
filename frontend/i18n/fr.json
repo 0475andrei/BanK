@@ -341,6 +341,12 @@
       "reject_error": "Erreur lors de l'annulation.",
       "confirm_success": "L'action a été confirmée et exécutée avec succès !",
       "auth_failed": "Échec de l'authentification."
+    },
+    "agent_tooltip": {
+      "agent_label": "Agent",
+      "reason_label": "Motif",
+      "rule_label": "Règle",
+      "confidence_label": "Confiance"
     }
   },
   "dynamic": {
@@ -387,7 +393,44 @@
     "category_education": "Éducation",
     "category_home": "Maison et aménagement",
     "category_insurance": "Assurances",
-    "category_transfers": "Virements"
+    "category_transfers": "Virements",
+    "proposal_transfer": "Virement de {amount} de {from} vers {to}",
+    "proposal_payment": "Paiement de {amount} à {name}",
+    "proposal_open_account": "Ouverture d'un compte {product} « {name} » en {currency}",
+    "proposal_close_account": "Fermeture du compte « {name} »",
+    "proposal_cancel_card": "Annulation définitive de la carte •••• {last4}",
+    "proposal_sign_document": "Signature électronique du document « {filename} »",
+    "product_checking": "courant",
+    "product_savings": "épargne",
+    "product_term_deposit": "dépôt à terme",
+    "agent_banking": "Bancaire",
+    "agent_insights": "Analyse",
+    "agent_planning": "Planification",
+    "agent_documents": "Documents",
+    "agent_docs": "Aide"
+  },
+  "esign": {
+    "sign_button": "Signer électroniquement",
+    "sign_button_short": "Signer",
+    "list_empty": "Vous n'avez aucun document à signer pour le moment.",
+    "preview_button": "Aperçu",
+    "signed_badge": "Signé",
+    "preview_failed": "L'aperçu du document a échoué.",
+    "sign_request_error": "Erreur lors de la création de la demande de signature.",
+    "sign_intent": "J'ai lu et j'accepte le contenu du document « {filename} ».",
+    "sign_intent_official": "J'ai lu et j'accepte le contenu du document officiel « {filename} ».",
+    "sending_code": "Envoi du code de signature...",
+    "code_sent": "Code envoyé pour « {filename} ». Vérifiez Teams.",
+    "code_send_error": "Le code n'a pas pu être envoyé.",
+    "face_reason": "Signature d'un document officiel - vérification Face ID",
+    "sign_success": "Le document a été signé avec succès !",
+    "sign_error": "La signature a échoué."
+  },
+  "face_id": {
+    "status_check_error": "Impossible de vérifier l'état de Face ID. Réessayez.",
+    "enrollment_required_generic": "Cette action nécessite l'activation de Face ID. Vous allez être redirigé vers l'activation.",
+    "enrollment_required_payment": "Ce paiement nécessite Face ID, car c'est votre premier paiement à cette personne ou il dépasse le seuil de sécurité.",
+    "enrollment_required_card_reveal": "Activez Face ID pour voir le numéro complet et le CVV de la carte."
   },
   "errors": {
     "generic": "Une erreur s'est produite. Veuillez réessayer."

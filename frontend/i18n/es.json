@@ -341,6 +341,12 @@
       "reject_error": "Error al cancelar.",
       "confirm_success": "¡La acción fue confirmada y ejecutada con éxito!",
       "auth_failed": "Error de autenticación."
+    },
+    "agent_tooltip": {
+      "agent_label": "Agente",
+      "reason_label": "Motivo",
+      "rule_label": "Regla",
+      "confidence_label": "Confianza"
     }
   },
   "dynamic": {
@@ -387,7 +393,44 @@
     "category_education": "Educación",
     "category_home": "Hogar y decoración",
     "category_insurance": "Seguros",
-    "category_transfers": "Transferencias"
+    "category_transfers": "Transferencias",
+    "proposal_transfer": "Transferencia de {amount} de {from} a {to}",
+    "proposal_payment": "Pago de {amount} a {name}",
+    "proposal_open_account": "Apertura de cuenta {product} «{name}» en {currency}",
+    "proposal_close_account": "Cierre de la cuenta «{name}»",
+    "proposal_cancel_card": "Cancelación permanente de la tarjeta •••• {last4}",
+    "proposal_sign_document": "Firma electrónica del documento «{filename}»",
+    "product_checking": "corriente",
+    "product_savings": "de ahorro",
+    "product_term_deposit": "depósito a plazo",
+    "agent_banking": "Banca",
+    "agent_insights": "Análisis",
+    "agent_planning": "Planificación",
+    "agent_documents": "Documentos",
+    "agent_docs": "Ayuda"
+  },
+  "esign": {
+    "sign_button": "Firmar electrónicamente",
+    "sign_button_short": "Firmar",
+    "list_empty": "No tienes documentos por firmar en este momento.",
+    "preview_button": "Vista previa",
+    "signed_badge": "Firmado",
+    "preview_failed": "No se pudo previsualizar el documento.",
+    "sign_request_error": "Error al crear la solicitud de firma.",
+    "sign_intent": "He leído y acepto el contenido del documento «{filename}».",
+    "sign_intent_official": "He leído y acepto el contenido del documento oficial «{filename}».",
+    "sending_code": "Enviando código de firma...",
+    "code_sent": "Código enviado para «{filename}». Revisa Teams.",
+    "code_send_error": "No se pudo enviar el código.",
+    "face_reason": "Firma de documento oficial - verificación con Face ID",
+    "sign_success": "¡El documento se firmó correctamente!",
+    "sign_error": "La firma falló."
+  },
+  "face_id": {
+    "status_check_error": "No se pudo comprobar el estado de Face ID. Inténtalo de nuevo.",
+    "enrollment_required_generic": "Esta acción requiere tener Face ID activado. Te redirigimos para activarlo.",
+    "enrollment_required_payment": "Este pago requiere Face ID porque es tu primer pago a esta persona o supera el umbral de seguridad.",
+    "enrollment_required_card_reveal": "Activa Face ID para ver el número completo y el CVV de la tarjeta."
   },
   "errors": {
     "generic": "Algo salió mal. Inténtalo de nuevo."

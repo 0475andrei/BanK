@@ -74,7 +74,9 @@ async def chat(
     # fine since neither tool resolves anything through context (one has
     # no DB access at all, the other only reads users by email/national_id,
     # not by identity).
-    context = build_context(user_id=f"onboarding-{uuid.uuid4()}", account_ids=())
+    context = build_context(
+        user_id=f"onboarding-{uuid.uuid4()}", account_ids=(), language=payload.language
+    )
 
     tools = ToolRegistry([ProposeRegistrationTool(), CheckExistingAccountTool(supabase)])
     agent = OnboardingAgent(provider, tools)

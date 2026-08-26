@@ -96,6 +96,17 @@ class Context(BaseModel):
     #: for every agent except DocumentAgent and InsightsAgent's
     #: compare_statement_to_ledger.
     statement_id: str | None = None
+    #: The caller's selected UI language (an i18n code like "en", "fr" - see
+    #: frontend/language.js's LANGUAGES map), taken from the request body,
+    #: never inferred. "ro" is both the default and the language every
+    #: agent's SYSTEM_PROMPT is already written in - see
+    #: app/ai/agents/tool_loop.py's use of `language_directive`, which is a
+    #: no-op for "ro" so the overwhelming majority of callers (nobody has
+    #: touched the language switcher) see byte-identical behavior to before
+    #: this field existed. An unrecognized code degrades the same way: no
+    #: directive is appended and the agent replies in Romanian, rather than
+    #: rejecting the request over a locale typo.
+    language: str = "ro"
 
     @field_validator("account_ids", mode="before")
     @classmethod
@@ -174,6 +185,7 @@ def build_context(
     conversation_id: str | None = None,
     active_document_id: str | None = None,
     statement_id: str | None = None,
+    language: str = "ro",
 ) -> Context:
     """Explicit construction point for callers that already know the user.
 
@@ -187,6 +199,7 @@ def build_context(
         conversation_id=conversation_id,
         active_document_id=active_document_id,
         statement_id=statement_id,
+        language=language,
     )
 
 
@@ -197,6 +210,7 @@ async def build_context_for_user(
     conversation_id: str | None = None,
     active_document_id: str | None = None,
     statement_id: str | None = None,
+    language: str = "ro",
 ) -> Context:
     """Build a verified `Context` for an already-authenticated user.
 
@@ -227,4 +241,5 @@ async def build_context_for_user(
         conversation_id=conversation_id,
         active_document_id=active_document_id,
         statement_id=statement_id,
+        language=language,
     )

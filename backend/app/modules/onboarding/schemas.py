@@ -17,6 +17,10 @@ class OnboardingChatRequest(BaseModel):
     # reposts it each turn - same Message shape, just round-tripped instead
     # of stored.
     history: list[Message] = Field(default_factory=list)
+    #: Same field, same rationale as ChatRequest.language (see
+    #: app/modules/chat/schemas.py) - Comodul is the pre-auth equivalent of
+    #: the main chat, and the register page has the same language switcher.
+    language: str = "ro"
 
 
 class OnboardingChatResponse(BaseModel):

@@ -217,6 +217,32 @@ async def test_system_prompt_is_prepended(make_agent, context):
     assert provider.calls[0][0].role == "system"
 
 
+async def test_system_prompt_carries_no_language_directive_for_romanian(make_agent, context):
+    """context.language defaults to "ro" - the native language every prompt
+    is already written in, so nothing should be appended (see
+    app/ai/language_directive.py)."""
+    agent, provider = make_agent([ModelResponse(text="ok")])
+
+    await agent.run(user("hi"), context)
+
+    assert provider.calls[0][0].content == agent._system_prompt
+
+
+async def test_system_prompt_gets_a_language_directive_for_a_non_romanian_context(
+    make_agent, context
+):
+    """A caller whose context carries a non-"ro" language gets the reply-
+    language override appended after the agent's own (Romanian) prompt."""
+    agent, provider = make_agent([ModelResponse(text="ok")])
+    french_context = context.model_copy(update={"language": "fr"})
+
+    await agent.run(user("hi"), french_context)
+
+    system_content = provider.calls[0][0].content
+    assert system_content.startswith(agent._system_prompt)
+    assert "franceză" in system_content
+
+
 async def test_context_identity_is_never_sent_to_the_model(make_agent, context):
     """The model is told nothing about who it is serving.
 

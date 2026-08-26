@@ -67,6 +67,44 @@ async def test_chat_threads_context_into_the_ai_service(authed_client, scripted_
     assert payload["result"]["source"] == "ledger"
 
 
+async def test_chat_language_field_reaches_the_agents_system_prompt(
+    authed_client, scripted_provider
+):
+    """The frontend's language switcher (document.documentElement.lang) rides
+    on the request body straight through to Context.language and from there
+    into the language directive appended to the system prompt (see
+    app/ai/language_directive.py) - end to end, not just at the unit level."""
+    client, _user = authed_client
+    provider = scripted_provider(ModelResponse(text="ok"))
+
+    # A banking keyword ("balance") so routing resolves by rule with no LLM
+    # classification call first - keeps calls[0] the banking agent's own
+    # system prompt, not the routing classifier's (see BANKING_ROUTING_RULES).
+    resp = await client.post(
+        "/api/v1/chat", json={"message": "what's my balance?", "language": "fr"}
+    )
+
+    assert resp.status_code == 200, resp.text
+    system_message = provider.calls[0][0]
+    assert system_message.role == "system"
+    assert "franceză" in system_message.content
+
+
+async def test_chat_omitted_language_defaults_to_romanian_with_no_directive(
+    authed_client, scripted_provider
+):
+    """Every existing caller - nobody had a `language` field before this -
+    must see byte-identical behavior: no directive appended at all."""
+    client, _user = authed_client
+    provider = scripted_provider(ModelResponse(text="ok"))
+
+    resp = await client.post("/api/v1/chat", json={"message": "what's my balance?"})
+
+    assert resp.status_code == 200, resp.text
+    system_message = provider.calls[0][0]
+    assert "SUPRASCRIE" not in system_message.content
+
+
 async def test_chat_surfaces_a_card_order_proposal(authed_client, scripted_provider):
     """propose_card_order (app/ai/tools/banking/propose_card_order.py) never
     writes anything itself - it's a separate, older propose-only tool that

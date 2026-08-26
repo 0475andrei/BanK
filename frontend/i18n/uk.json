@@ -341,6 +341,12 @@
       "reject_error": "Помилка під час скасування.",
       "confirm_success": "Дію підтверджено та успішно виконано!",
       "auth_failed": "Помилка автентифікації."
+    },
+    "agent_tooltip": {
+      "agent_label": "Агент",
+      "reason_label": "Причина",
+      "rule_label": "Правило",
+      "confidence_label": "Впевненість"
     }
   },
   "dynamic": {
@@ -387,7 +393,44 @@
     "category_education": "Освіта",
     "category_home": "Дім і облаштування",
     "category_insurance": "Страхування",
-    "category_transfers": "Перекази"
+    "category_transfers": "Перекази",
+    "proposal_transfer": "Переказ {amount} з {from} на {to}",
+    "proposal_payment": "Оплата {amount} на ім'я {name}",
+    "proposal_open_account": "Відкриття рахунку {product} «{name}» у {currency}",
+    "proposal_close_account": "Закриття рахунку «{name}»",
+    "proposal_cancel_card": "Остаточне скасування картки •••• {last4}",
+    "proposal_sign_document": "Електронний підпис документа «{filename}»",
+    "product_checking": "поточний",
+    "product_savings": "ощадний",
+    "product_term_deposit": "строковий депозит",
+    "agent_banking": "Банківський",
+    "agent_insights": "Аналітика",
+    "agent_planning": "Планування",
+    "agent_documents": "Документи",
+    "agent_docs": "Довідка"
+  },
+  "esign": {
+    "sign_button": "Підписати електронно",
+    "sign_button_short": "Підписати",
+    "list_empty": "Наразі у вас немає документів для підпису.",
+    "preview_button": "Переглянути",
+    "signed_badge": "Підписано",
+    "preview_failed": "Не вдалося переглянути документ.",
+    "sign_request_error": "Помилка створення запиту на підпис.",
+    "sign_intent": "Я прочитав(ла) і погоджуюся зі змістом документа «{filename}».",
+    "sign_intent_official": "Я прочитав(ла) і погоджуюся зі змістом офіційного документа «{filename}».",
+    "sending_code": "Надсилання коду підпису...",
+    "code_sent": "Код надіслано для «{filename}». Перевірте Teams.",
+    "code_send_error": "Не вдалося надіслати код.",
+    "face_reason": "Підписання офіційного документа - перевірка Face ID",
+    "sign_success": "Документ успішно підписано!",
+    "sign_error": "Підписання не вдалося."
+  },
+  "face_id": {
+    "status_check_error": "Не вдалося перевірити стан Face ID. Спробуйте ще раз.",
+    "enrollment_required_generic": "Ця дія потребує активного Face ID. Перенаправляємо вас до налаштування.",
+    "enrollment_required_payment": "Цей платіж потребує Face ID, оскільки це ваш перший платіж цій особі або він перевищує поріг безпеки.",
+    "enrollment_required_card_reveal": "Активуйте Face ID, щоб побачити повний номер картки та CVV."
   },
   "errors": {
     "generic": "Щось пішло не так. Спробуйте ще раз."

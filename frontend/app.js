@@ -328,7 +328,7 @@ function renderDocumentChip(document_) {
     const signBtn = document.createElement('button');
     signBtn.type = 'button';
     signBtn.className = 'document-chip-sign';
-    signBtn.textContent = 'Semnează electronic';
+    signBtn.textContent = t('esign.sign_button', 'Semnează electronic');
     signBtn.addEventListener('click', () => handleSignDocument(document_, signBtn));
     chip.appendChild(signBtn);
 
@@ -379,14 +379,14 @@ async function handleSignDocument(document_, triggerBtn) {
         const proposal = await apiFetch(`/esign/documents/${document_.id}/sign-requests`, {
             method: 'POST',
             body: JSON.stringify({
-                intent: `Am citit și sunt de acord cu conținutul documentului „${document_.filename}”.`,
+                intent: t('esign.sign_intent', 'Am citit și sunt de acord cu conținutul documentului „{filename}”.', { filename: document_.filename }),
             }),
         });
         container.innerHTML = '';
         renderProposalCard(proposal, container);
         triggerBtn.hidden = true;
     } catch (err) {
-        showToast(err.message || 'Eroare la crearea cererii de semnătură.');
+        showToast(err.message || t('esign.sign_request_error', 'Eroare la crearea cererii de semnătură.'));
         triggerBtn.disabled = false;
     }
 }
@@ -410,19 +410,22 @@ function chatWelcomeText() {
     return t('chat.welcome', 'Salut! Sunt asistentul tău bancar. Pot să îți verific soldul conturilor și să răspund la întrebări despre bancă. Cu ce te pot ajuta?');
 }
 
-// Romanian labels for the routing tag - keys match RoutingDecision.agent_name
-// (see backend app/ai/orchestrator.py). Anything not listed falls back to a
-// capitalized version of the raw agent name.
-const AGENT_TAG_LABELS = {
-    banking: 'Bancar',
-    insights: 'Analiză',
-    planning: 'Planificare',
-    documents: 'Documente',
-    docs: 'Ajutor',
+// i18n keys (with their Romanian fallback text) for the routing tag - keys
+// match RoutingDecision.agent_name (see backend app/ai/orchestrator.py).
+// Anything not listed falls back to a capitalized version of the raw agent
+// name - the same "unknown shape degrades gracefully" pattern as
+// localizeProposalSummary above.
+const AGENT_TAG_LABEL_KEYS = {
+    banking: ['dynamic.agent_banking', 'Bancar'],
+    insights: ['dynamic.agent_insights', 'Analiză'],
+    planning: ['dynamic.agent_planning', 'Planificare'],
+    documents: ['dynamic.agent_documents', 'Documente'],
+    docs: ['dynamic.agent_docs', 'Ajutor'],
 };
 
 function agentTagLabel(agentName) {
-    if (AGENT_TAG_LABELS[agentName]) return AGENT_TAG_LABELS[agentName];
+    const entry = AGENT_TAG_LABEL_KEYS[agentName];
+    if (entry) return t(entry[0], entry[1]);
     return agentName.charAt(0).toUpperCase() + agentName.slice(1);
 }
 
@@ -478,15 +481,15 @@ function renderAgentChain(routingChain, container) {
             heading.textContent = `${index + 1}. ${agentTagLabel(hop.agent_name)}`;
             tooltip.appendChild(heading);
         }
-        tooltip.appendChild(agentTagTooltipRow('Agent', hop.agent_name));
-        tooltip.appendChild(agentTagTooltipRow('Motiv', hop.reason));
-        tooltip.appendChild(agentTagTooltipRow('Regulă', hop.matched_rule ?? '—'));
+        tooltip.appendChild(agentTagTooltipRow(t('chat.agent_tooltip.agent_label', 'Agent'), hop.agent_name));
+        tooltip.appendChild(agentTagTooltipRow(t('chat.agent_tooltip.reason_label', 'Motiv'), hop.reason));
+        tooltip.appendChild(agentTagTooltipRow(t('chat.agent_tooltip.rule_label', 'Regulă'), hop.matched_rule ?? '—'));
         // Keyword rules always match at confidence=1.0 - showing it there is
         // just noise. Only LLM-fallback routing (confidence < 1.0) is worth
         // surfacing. A handoff hop is always 1.0, so it never shows either.
         if (hop.confidence !== undefined && hop.confidence < 1.0) {
             const pct = Math.round(hop.confidence * 100);
-            tooltip.appendChild(agentTagTooltipRow('Încredere', `${pct}%`));
+            tooltip.appendChild(agentTagTooltipRow(t('chat.agent_tooltip.confidence_label', 'Încredere'), `${pct}%`));
         }
     });
     tag.appendChild(tooltip);
@@ -629,6 +632,11 @@ async function sendMessage() {
                 message,
                 conversation_id: currentConversationId,
                 document_id: currentDocumentId,
+                // Read straight off <html lang>, which language.js keeps in
+                // sync with the language selector - so the agent's reply
+                // follows whatever the user has switched to (see
+                // app/ai/language_directive.py on the backend).
+                language: document.documentElement.lang || 'ro',
             }),
         });
 
@@ -972,7 +980,7 @@ function renderProposalCard(proposal, container) {
 
     const body = document.createElement('div');
     body.className = 'action-proposal';
-    body.innerHTML = `<strong>${escapeHTML(t('chat.proposal.heading', 'Propunere de acțiune'))}</strong><p>${escapeHTML(proposal.summary)}</p>`;
+    body.innerHTML = `<strong>${escapeHTML(t('chat.proposal.heading', 'Propunere de acțiune'))}</strong><p>${escapeHTML(localizeProposalSummary(proposal.summary))}</p>`;
     card.appendChild(body);
 
     const actions = document.createElement('div');
@@ -1125,7 +1133,7 @@ function wireStepUpModal() {
 async function loadDocumentsToSign() {
     const list = document.getElementById('documents-to-sign-list');
     if (!list) return;
-    list.innerHTML = '<p class="field-hint">Se încarcă...</p>';
+    list.innerHTML = `<p class="field-hint">${escapeHTML(t('common.loading', 'Se încarcă...'))}</p>`;
 
     let documents;
     try {
@@ -1136,7 +1144,7 @@ async function loadDocumentsToSign() {
     }
 
     if (!documents.length) {
-        list.innerHTML = '<p class="field-hint">Nu ai documente de semnat momentan.</p>';
+        list.innerHTML = `<p class="field-hint">${escapeHTML(t('esign.list_empty', 'Nu ai documente de semnat momentan.'))}</p>`;
         return;
     }
 
@@ -1156,20 +1164,20 @@ async function loadDocumentsToSign() {
         const previewBtn = document.createElement('button');
         previewBtn.type = 'button';
         previewBtn.className = 'btn btn-secondary';
-        previewBtn.textContent = 'Previzualizează';
+        previewBtn.textContent = t('esign.preview_button', 'Previzualizează');
         previewBtn.addEventListener('click', () => previewDocumentPdf(`/documents/${doc.id}/pdf`));
         actions.appendChild(previewBtn);
 
         if (doc.signed) {
             const badge = document.createElement('span');
             badge.className = 'document-to-sign-status signed';
-            badge.innerHTML = '<i data-lucide="check-circle"></i> Semnat';
+            badge.innerHTML = `<i data-lucide="check-circle"></i> ${escapeHTML(t('esign.signed_badge', 'Semnat'))}`;
             actions.appendChild(badge);
         } else {
             const signBtn = document.createElement('button');
             signBtn.type = 'button';
             signBtn.className = 'btn btn-primary';
-            signBtn.textContent = 'Semnează';
+            signBtn.textContent = t('esign.sign_button_short', 'Semnează');
             signBtn.addEventListener('click', () => handleSignAdminDocument(doc, signBtn));
             actions.appendChild(signBtn);
         }
@@ -1190,11 +1198,11 @@ async function loadDocumentsToSign() {
 async function previewDocumentPdf(path) {
     try {
         const res = await fetch(`${API_BASE_URL}${path}`, { credentials: 'include' });
-        if (!res.ok) throw new Error('Previzualizarea documentului a eșuat.');
+        if (!res.ok) throw new Error(t('esign.preview_failed', 'Previzualizarea documentului a eșuat.'));
         const blob = await res.blob();
         window.open(URL.createObjectURL(blob), '_blank');
     } catch (err) {
-        showToast(err.message || 'Previzualizarea documentului a eșuat.');
+        showToast(err.message || t('esign.preview_failed', 'Previzualizarea documentului a eșuat.'));
     }
 }
 
@@ -1209,12 +1217,12 @@ async function handleSignAdminDocument(doc, triggerBtn) {
         const proposal = await apiFetch(`/esign/documents/${doc.id}/sign-requests`, {
             method: 'POST',
             body: JSON.stringify({
-                intent: `Am citit și sunt de acord cu conținutul documentului oficial „${doc.filename}”.`,
+                intent: t('esign.sign_intent_official', 'Am citit și sunt de acord cu conținutul documentului oficial „{filename}”.', { filename: doc.filename }),
             }),
         });
         await openAdminDocSignModal(proposal.id, doc.filename);
     } catch (err) {
-        showToast(err.message || 'Eroare la crearea cererii de semnătură.');
+        showToast(err.message || t('esign.sign_request_error', 'Eroare la crearea cererii de semnătură.'));
     } finally {
         triggerBtn.disabled = false;
     }
@@ -1237,13 +1245,13 @@ async function requestAdminDocSignCode() {
     const statusEl = document.getElementById('admin-doc-sign-status');
     const errorEl = document.getElementById('admin-doc-sign-error');
     errorEl.hidden = true;
-    statusEl.textContent = 'Se trimite codul de semnare...';
+    statusEl.textContent = t('esign.sending_code', 'Se trimite codul de semnare...');
     try {
         await apiFetch(`/esign/proposals/${adminDocSignProposalId}/signing-code`, { method: 'POST' });
-        statusEl.textContent = `Cod trimis pentru „${adminDocSignFilename}”. Verifică Teams.`;
+        statusEl.textContent = t('esign.code_sent', 'Cod trimis pentru „{filename}”. Verifică Teams.', { filename: adminDocSignFilename });
     } catch (err) {
         statusEl.textContent = '';
-        showAdminDocSignError(err.message || 'Codul nu a putut fi trimis.');
+        showAdminDocSignError(err.message || t('esign.code_send_error', 'Codul nu a putut fi trimis.'));
     }
 }
 
@@ -1288,7 +1296,7 @@ function wireAdminDocSignModal() {
         // finishing.
         modal.hidden = true;
         const faceToken = await requestFaceConfirmationToken(
-            'Semnare document oficial - identificare prin Face ID'
+            t('esign.face_reason', 'Semnare document oficial - identificare prin Face ID')
         );
         if (!faceToken) {
             modal.hidden = false;
@@ -1301,7 +1309,7 @@ function wireAdminDocSignModal() {
                 body: JSON.stringify({ otp_code: otpCode, face_token: faceToken }),
             });
             closeAdminDocSignModal();
-            showToast('Documentul a fost semnat cu succes!');
+            showToast(t('esign.sign_success', 'Documentul a fost semnat cu succes!'));
             await loadDocumentsToSign();
         } catch (err) {
             modal.hidden = false;
@@ -1309,7 +1317,7 @@ function wireAdminDocSignModal() {
             // point either way - a retry needs a fresh one, not another
             // attempt with the same value.
             document.getElementById('admin-doc-sign-otp-input').value = '';
-            showAdminDocSignError(err.message || 'Semnarea a eșuat.');
+            showAdminDocSignError(err.message || t('esign.sign_error', 'Semnarea a eșuat.'));
         }
     });
 }
@@ -1435,6 +1443,65 @@ function localizeTransactionDescription(description) {
     const payment = description?.match(/^Plată către (.+)$/);
     if (payment) return t('dynamic.transaction_payment', 'Payment to {name}', { name: payment[1] });
     return description;
+}
+
+//: Maps the backend's fixed Romanian product-type labels (see
+//: _PRODUCT_LABELS_RO in propose_tools.py) to i18n keys - same reason as
+//: SPENDING_CATEGORY_KEYS below: the backend has no locale concept, so
+//: "curent"/"economii"/"depozit la termen" arrive unchanged regardless of
+//: the selected language.
+const PROPOSAL_PRODUCT_LABEL_KEYS = {
+    'curent': 'dynamic.product_checking',
+    'economii': 'dynamic.product_savings',
+    'depozit la termen': 'dynamic.product_term_deposit',
+};
+
+/** An AI-proposed action's `summary` (see ChatResponse.proposal in
+ * chat/schemas.py) is server-built, fixed-Romanian prose - one of exactly
+ * six templates, one per propose_* tool plus e-sign (see
+ * app/ai/tools/propose_tools.py and app/modules/esign/service.py). Same
+ * regex-parse-then-re-render-via-t() pattern as localizeTransactionDescription
+ * above: translating the six templates would mean the backend tracking a
+ * locale it has no other concept of, so instead this parses the ONE fixed
+ * shape it always sends and rebuilds it in the active language. An
+ * unrecognized shape (a template added later and not yet taught here) falls
+ * back to the raw Romanian text rather than hiding it. */
+function localizeProposalSummary(summary) {
+    if (!summary) return summary;
+
+    let m = summary.match(/^Transfer de (.+) din (.+) în (.+)$/);
+    if (m) {
+        return t('dynamic.proposal_transfer', 'Transfer of {amount} from {from} to {to}', {
+            amount: m[1], from: m[2], to: m[3],
+        });
+    }
+
+    m = summary.match(/^Plată de (.+) către (.+)$/);
+    if (m) {
+        return t('dynamic.proposal_payment', 'Payment of {amount} to {name}', {
+            amount: m[1], name: m[2],
+        });
+    }
+
+    m = summary.match(/^Deschidere cont (.+) «(.+)» în (.+)$/);
+    if (m) {
+        const productKey = PROPOSAL_PRODUCT_LABEL_KEYS[m[1]];
+        const product = productKey ? t(productKey, m[1]) : m[1];
+        return t('dynamic.proposal_open_account', 'Open {product} account "{name}" in {currency}', {
+            product, name: m[2], currency: m[3],
+        });
+    }
+
+    m = summary.match(/^Închidere cont «(.+)»$/);
+    if (m) return t('dynamic.proposal_close_account', 'Close account "{name}"', { name: m[1] });
+
+    m = summary.match(/^Anulare permanentă card •••• (.+)$/);
+    if (m) return t('dynamic.proposal_cancel_card', 'Permanently cancel card •••• {last4}', { last4: m[1] });
+
+    m = summary.match(/^Semnare electronică a documentului «(.+)»$/);
+    if (m) return t('dynamic.proposal_sign_document', 'Electronically sign document "{filename}"', { filename: m[1] });
+
+    return summary;
 }
 
 //: Maps the backend's fixed, Romanian-only category names (see
@@ -2333,7 +2400,7 @@ async function submitWithFaceConfirmation(path, idempotencyKey, body) {
             // FaceConfirmationRequiredError) - use the Romanian one here
             // instead, matching the rest of this flow.
             promptFaceEnrollmentRequired(
-                'Această plată necesită Face ID activat, pentru că e prima ta plată către această persoană sau depășește pragul de siguranță.'
+                t('face_id.enrollment_required_payment', 'Această plată necesită Face ID activat, pentru că e prima ta plată către această persoană sau depășește pragul de siguranță.')
             );
             return CONFIRMATION_CANCELLED;
         }
@@ -2356,7 +2423,7 @@ async function submitWithFaceConfirmation(path, idempotencyKey, body) {
  * could supply, so the fix is "go enroll it", not "retry". Navigates
  * straight to the Face Login settings view once acknowledged. */
 function promptFaceEnrollmentRequired(message) {
-    alert(message || 'Această acțiune necesită Face ID activat. Te redirecționăm către activare.');
+    alert(message || t('face_id.enrollment_required_generic', 'Această acțiune necesită Face ID activat. Te redirecționăm către activare.'));
     goToProfileView('face-login');
 }
 
@@ -2637,12 +2704,12 @@ function renderCardsList(cards) {
                 try {
                     faceEnrolled = (await apiFetch('/auth/face/status')).enrolled;
                 } catch (err) {
-                    alert('Nu am putut verifica starea Face ID. Încearcă din nou.');
+                    alert(t('face_id.status_check_error', 'Nu am putut verifica starea Face ID. Încearcă din nou.'));
                     return;
                 }
                 if (!faceEnrolled) {
                     promptFaceEnrollmentRequired(
-                        'Activează Face ID ca să poți vedea numărul complet și CVV-ul cardului.'
+                        t('face_id.enrollment_required_card_reveal', 'Activează Face ID ca să poți vedea numărul complet și CVV-ul cardului.')
                     );
                     return;
                 }
