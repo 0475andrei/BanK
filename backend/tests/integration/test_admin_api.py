@@ -27,6 +27,9 @@ ADMIN_ENDPOINTS = [
     ("GET", f"/api/v1/admin/users/{uuid.uuid4()}"),
     ("PATCH", f"/api/v1/admin/users/{uuid.uuid4()}/role"),
     ("PATCH", f"/api/v1/admin/users/{uuid.uuid4()}/blocked"),
+    ("POST", f"/api/v1/admin/users/{uuid.uuid4()}/documents"),
+    ("GET", f"/api/v1/admin/users/{uuid.uuid4()}/documents"),
+    ("GET", f"/api/v1/admin/documents/{uuid.uuid4()}/pdf"),
     ("GET", f"/api/v1/admin/users/{uuid.uuid4()}/transactions"),
     ("GET", "/api/v1/admin/card-orders"),
     ("PATCH", f"/api/v1/admin/card-orders/{uuid.uuid4()}"),
@@ -49,13 +52,16 @@ async def _promote(supabase: AsyncClient, user: UserRead) -> None:
 
 
 async def _call(client: HTTPXAsyncClient, method: str, path: str):
-    if method != "PATCH":
-        return await client.get(path)
-    body = next(
-        (payload for suffix, payload in PATCH_BODIES.items() if path.endswith(suffix)),
-        {"status": "shipped"},  # the card-orders route
-    )
-    return await client.patch(path, json=body)
+    if method == "PATCH":
+        body = next(
+            (payload for suffix, payload in PATCH_BODIES.items() if path.endswith(suffix)),
+            {"status": "shipped"},  # the card-orders route
+        )
+        return await client.patch(path, json=body)
+    if method == "POST":
+        # The only POST route today - /users/{id}/documents.
+        return await client.post(path, json={"title": "T", "body": "B"})
+    return await client.get(path)
 
 
 @pytest.mark.parametrize(("method", "path"), ADMIN_ENDPOINTS)

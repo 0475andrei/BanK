@@ -14,14 +14,15 @@ router and the `read_document` tool instead of needing two.
 
 from __future__ import annotations
 
-from app.core.exceptions import NotFoundError
 from supabase import AsyncClient
+
+from app.core.exceptions import NotFoundError
 
 #: Every column except `content` - the raw PDF bytes are never returned by a
 #: normal read. See get_document_with_content for the one exception.
 _METADATA_AND_TEXT_COLUMNS = (
     "id, created_at, user_id, conversation_id, filename, mime_type, "
-    "size_bytes, extracted_text, page_count"
+    "size_bytes, extracted_text, page_count, issued_by_admin_id"
 )
 
 
@@ -35,6 +36,7 @@ async def create_document(
     content: bytes,
     extracted_text: str,
     page_count: int,
+    issued_by_admin_id: str | None = None,
 ) -> dict:
     inserted = (
         await supabase.table("documents")
@@ -52,6 +54,9 @@ async def create_document(
                 "content": "\\x" + content.hex(),
                 "extracted_text": extracted_text,
                 "page_count": page_count,
+                # None (the default) means "the user uploaded this
+                # themselves" - see 0019_admin_documents.sql.
+                "issued_by_admin_id": issued_by_admin_id,
             }
         )
         .execute()
@@ -130,3 +135,40 @@ async def list_documents_for_conversation(
         .execute()
     )
     return resp.data
+
+
+async def list_admin_issued_documents(supabase: AsyncClient, user_id: str) -> list[dict]:
+    """Documents an admin generated and sent to this user (see
+    admin/service.py::generate_and_send_document), each flagged with whether
+    it already has a signature - GET /documents/to-sign's "Documente de
+    semnat" list is exactly this.
+
+    Two queries rather than a PostgREST embed: `signatures` has no FK back
+    to `documents` that PostgREST would resolve as a to-many embed cleanly
+    for an "exists" check, and the document count here is always small (one
+    user's admin-issued documents), so N+1 isn't a concern - same reasoning
+    as admin/service.py::get_user_detail's per-account balance loop.
+    """
+    resp = (
+        await supabase.table("documents")
+        .select("id, filename, page_count, created_at")
+        .eq("user_id", user_id)
+        .not_.is_("issued_by_admin_id", "null")
+        .order("created_at", desc=True)
+        .execute()
+    )
+    documents = resp.data or []
+    if not documents:
+        return []
+
+    signed_resp = (
+        await supabase.table("signatures")
+        .select("document_id")
+        .in_("document_id", [doc["id"] for doc in documents])
+        .execute()
+    )
+    signed_document_ids = {row["document_id"] for row in (signed_resp.data or [])}
+
+    for document in documents:
+        document["signed"] = document["id"] in signed_document_ids
+    return documents

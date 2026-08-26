@@ -127,6 +127,7 @@
                     "referral":  "Referans kodum",
                     "change_password":  "Şifreyi değiştir",
                     "face_login":  "Yüz ile giriş",
+                    "documents_to_sign":  "İmzalanacak belgeler",
                     "back":  "Geri",
                     "choose_avatar":  "Avatarın için bir emoji seç",
                     "referral_hint":  "Bu kodla kayıt olan herkes ilk hesabı için 500 RON alır.",

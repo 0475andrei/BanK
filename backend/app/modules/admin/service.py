@@ -21,14 +21,26 @@ from supabase import AsyncClient
 
 from app.core.audit import record_audit_event
 from app.core.exceptions import ForbiddenError, NotFoundError
+from app.modules.admin.document_template import render_document_pdf
 from app.modules.card_orders.models import CardOrderStatus
+from app.modules.chat import conversations_service
+from app.modules.documents import service as documents_service
+from app.modules.documents.extractor import extract_pdf_text
 from app.modules.ledger import service as ledger_service
 from app.modules.users.schemas import UserRead
 
 _USER_LIST_COLUMNS = (
     "id, email, first_name, last_name, role, email_verified, created_at, blocked_at"
 )
-_USER_DETAIL_COLUMNS = _USER_LIST_COLUMNS + ", phone, address, national_id"
+_USER_DETAIL_COLUMNS = (
+    _USER_LIST_COLUMNS
+    + ", phone, address, national_id"
+    # Not surfaced by AdminUserDetail (extra dict keys are simply ignored by
+    # a schema that doesn't declare them) - selected so the same row can
+    # also validate as a full UserRead, which generate_and_send_document
+    # needs to create a conversation on the target user's behalf.
+    + ", gender, date_of_birth, referral_bonus_eligible, referral_code, referred_by_user_id"
+)
 #: Never card_number / cvv / expiry_month / expiry_year - see schemas.py.
 _CARD_COLUMNS = "id, account_id, last4, status, spending_limit_minor"
 _ACCOUNT_COLUMNS = "id, name, currency, status, iban"
@@ -206,6 +218,100 @@ async def set_user_blocked(
         entity=f"users:{user_id}",
     )
     return resp.data[0]
+
+
+async def generate_and_send_document(
+    supabase: AsyncClient,
+    admin: UserRead,
+    user_id: uuid.UUID,
+    *,
+    title: str,
+    body: str,
+) -> dict:
+    """Renders a PDF from the user's own profile data + the admin's text,
+    attaches it to a (new) conversation for that user, and stores it exactly
+    like a self-uploaded document - EXCEPT for `issued_by_admin_id`, which
+    is what later routes its signature through the stronger OTP+Face confirm
+    path instead of the ordinary Face-or-password one (see
+    esign/service.py).
+
+    The target user needs their own conversation for this, not the admin's -
+    conversations_service.create_conversation only reads `user.id` off
+    whatever UserRead it's given, so passing the target's is enough to
+    create it on their behalf; no session or ownership check stands in the
+    way, which is correct here (the admin is acting FOR the user, same as
+    any other admin write in this module).
+    """
+    target = await _require_user(supabase, user_id)
+    target_user = UserRead.model_validate(target)
+
+    pdf_bytes = render_document_pdf(
+        title=title,
+        body=body,
+        first_name=target["first_name"],
+        last_name=target["last_name"],
+        national_id=target.get("national_id"),
+        address=target.get("address"),
+    )
+    extracted_text, page_count = await extract_pdf_text(pdf_bytes)
+
+    conversation = await conversations_service.create_conversation(supabase, target_user)
+
+    document = await documents_service.create_document(
+        supabase,
+        user_id=str(user_id),
+        conversation_id=conversation["id"],
+        filename=f"{title}.pdf",
+        mime_type="application/pdf",
+        content=pdf_bytes,
+        extracted_text=extracted_text,
+        page_count=page_count,
+        issued_by_admin_id=str(admin.id),
+    )
+
+    await record_audit_event(
+        supabase,
+        user_id=admin.id,
+        action="admin.send_document",
+        entity=f"documents:{document['id']}",
+        metadata={"target_user_id": str(user_id), "title": title},
+    )
+    return document
+
+
+async def list_documents_for_user(supabase: AsyncClient, user_id: uuid.UUID) -> list[dict]:
+    """Admin-issued documents sent to this user, with their signed status -
+    the "Documente trimise" list in the user-detail panel. Thin wrapper:
+    documents_service.list_admin_issued_documents already takes a plain
+    user_id (not an ownership-checked caller), so there is nothing
+    admin-specific to add here beyond the 404 on an unknown user."""
+    await _require_user(supabase, user_id)
+    return await documents_service.list_admin_issued_documents(supabase, str(user_id))
+
+
+async def get_admin_issued_document_pdf(supabase: AsyncClient, document_id: uuid.UUID) -> dict:
+    """Admin-scoped PDF read for previewing a SENT document. Deliberately
+    narrower than "any document, any user": only documents with
+    `issued_by_admin_id` set are reachable here, so this new surface can
+    never become a backdoor for an admin to browse a user's own uploaded
+    PDFs (which stay private to that user and DocumentAgent - see
+    documents/service.py's module docstring). Raises NotFoundError for a
+    missing id OR a self-uploaded one, same "look identical" reasoning as
+    every other ownership check in this app."""
+    resp = (
+        await supabase.table("documents")
+        .select("*")
+        .eq("id", str(document_id))
+        .maybe_single()
+        .execute()
+    )
+    document = resp.data if resp is not None else None
+    if document is None or document.get("issued_by_admin_id") is None:
+        raise NotFoundError("Document not found.")
+    raw = document.get("content")
+    if isinstance(raw, str):
+        document["content"] = bytes.fromhex(raw.removeprefix("\\x"))
+    return document
 
 
 async def list_user_transactions(

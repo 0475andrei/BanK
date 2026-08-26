@@ -114,6 +114,9 @@
                         <button type="button" class="profile-menu-item" data-target="face-login">
                             <i data-lucide="scan-face" class="icon"></i> <span data-i18n="profile.face_login">Face Login</span>
                         </button>
+                        <button type="button" class="profile-menu-item" data-target="documents-to-sign">
+                            <i data-lucide="file-signature" class="icon"></i> <span data-i18n="profile.documents_to_sign">Documente de semnat</span>
+                        </button>
                     </div>
                 </div>
             </header>
@@ -184,6 +187,7 @@
                             </div>
                         </div>
                         <div class="document-chip" id="document-chip" hidden></div>
+                        <div id="document-sign-card-container"></div>
                         <div class="chat-input-area">
                             <button class="card-eye-btn" id="chat-attach-btn" type="button" title="Atașează o poză sau PDF cu extrasul de cont (pt. citit un IBAN)" aria-label="Atașează un fișier"><i data-lucide="paperclip"></i></button>
                             <input type="file" id="chat-attach-input" accept="image/png,image/jpeg,application/pdf" hidden>
@@ -415,6 +419,14 @@
 
                         <button type="button" class="card-cancel-btn" id="face-remove-btn" hidden style="margin-top: 16px;" data-i18n="profile.disable_face_login">Dezactivează Face Login</button>
                     </div>
+                </section>
+
+                <section id="view-documents-to-sign" class="view hidden">
+                    <button class="btn btn-secondary back-to-dashboard-btn" style="margin-bottom: 24px;">
+                        <i data-lucide="arrow-left" class="icon"></i> <span data-i18n="profile.back">Înapoi</span>
+                    </button>
+                    <h2 class="view-title">Documente de semnat</h2>
+                    <div id="documents-to-sign-list" class="documents-to-sign-list"></div>
                 </section>
             </div>
         </main>
@@ -698,6 +710,35 @@
                        placeholder="Introdu parola contului" required autocomplete="current-password">
                 <div class="modal-actions">
                     <button type="submit" class="btn btn-secondary" style="width:100%;">Confirmă</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Admin-document sign modal - the stronger OTP+Face confirm for a
+         document an admin generated and sent (see backend
+         app/modules/esign/service.py::confirm_admin_document). Opened by
+         handleSignAdminDocument() in app.js from "Documente de semnat".
+         Unlike step-up-auth-modal above, BOTH factors are required, one
+         after the other: the OTP code entered here, then Face ID captured
+         via the SAME requestFaceConfirmationToken()/#face-confirm-modal
+         flow the ordinary step-up uses. -->
+    <div class="modal-overlay" id="admin-doc-sign-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Semnare document oficial</h3>
+                <button class="modal-close" id="close-admin-doc-sign-modal"><i data-lucide="x"></i></button>
+            </div>
+            <p class="field-hint" id="admin-doc-sign-status">Se trimite codul de semnare...</p>
+            <div class="auth-error" id="admin-doc-sign-error" hidden></div>
+            <form id="admin-doc-sign-otp-form">
+                <label class="field-label" for="admin-doc-sign-otp-input">Cod de semnare (6 cifre)</label>
+                <input class="field-input" type="text" inputmode="numeric" pattern="[0-9]{6}"
+                       maxlength="6" id="admin-doc-sign-otp-input" placeholder="000000" required
+                       autocomplete="one-time-code">
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="admin-doc-sign-resend-btn">Retrimite codul</button>
+                    <button type="submit" class="btn btn-primary" id="admin-doc-sign-continue-btn">Continuă cu Face ID</button>
                 </div>
             </form>
         </div>

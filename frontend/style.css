@@ -2041,6 +2041,58 @@ html.i18n-pending body { visibility: hidden; }
 }
 .document-chip-close:hover { color: var(--expense-red); }
 
+.document-chip-sign {
+    background: none;
+    border: 1px solid var(--primary-teal);
+    border-radius: var(--border-radius-sm);
+    color: var(--primary-teal);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    padding: 4px 8px;
+    white-space: nowrap;
+}
+.document-chip-sign:hover { background-color: var(--primary-teal); color: #fff; }
+.document-chip-sign:disabled { opacity: 0.6; cursor: default; }
+
+#document-sign-card-container:empty { display: none; }
+#document-sign-card-container .human-in-the-loop-card {
+    margin: 12px 20px 0;
+}
+
+.documents-to-sign-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.document-to-sign-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 20px;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+}
+
+.document-to-sign-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.document-to-sign-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--income-green);
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
 .ocr-upload-box { margin-bottom: 20px; }
 
 .file-dropzone {
