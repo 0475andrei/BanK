@@ -66,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
     wireStatementModal();
     wireChatAttach();
     wireDocumentAttach();
+    wireChatMic();
     initDashboard();
 
     window.addEventListener('languagechange', () => {
@@ -81,8 +82,32 @@ document.addEventListener('DOMContentLoaded', () => {
         if (document.getElementById('view-cards')?.classList.contains('active')) {
             renderCardsList(loadedCards);
         }
+        const countryInput = document.getElementById('card-order-country');
+        if (countryInput?.dataset.defaultCountry === 'true' && countryInput.value === countryInput.dataset.currentDefault) {
+            countryInput.value = t('card_modal.default_country', 'Romania');
+            countryInput.dataset.currentDefault = countryInput.value;
+        }
+        document.querySelectorAll('#new-card-account option:disabled, #card-order-account option:disabled').forEach((option) => {
+            option.textContent = t('card_modal.create_account_first', 'Create an account first');
+        });
         if (document.getElementById('view-dashboard')?.classList.contains('active')) {
             renderSavingsAccountsList();
+            void loadTransactions();
+            void loadSpendingByCategory();
+            void loadScheduledTransfers();
+        }
+        if (document.getElementById('view-analytics')?.classList.contains('active')) {
+            renderSavingsAccountsList();
+            void loadSpendingByCategory();
+            void loadScheduledTransfers();
+            void loadAccountProducts();
+        }
+        if (document.getElementById('view-transactions')?.classList.contains('active')) {
+            void loadAllTransactions();
+        }
+        if (document.getElementById('view-payments')?.classList.contains('active')) {
+            void loadBeneficiaries();
+            void loadPayments();
         }
         if (document.getElementById('view-face-login')?.classList.contains('active') && faceStatusEnrolled !== null) {
             renderFaceStatus(faceStatusEnrolled);
@@ -111,7 +136,7 @@ function wireChatAttach() {
 
         statusEl.hidden = false;
         statusEl.className = 'field-hint';
-        statusEl.textContent = 'Se citește fișierul...';
+        statusEl.textContent = t('common.reading_file', 'Se citește fișierul...');
 
         const formData = new FormData();
         formData.append('file', file);
@@ -130,11 +155,11 @@ function wireChatAttach() {
             if (result.iban && !result.low_confidence) {
                 statusEl.hidden = true;
                 const chatInput = document.getElementById('chat-input');
-                chatInput.value = `IBAN citit din fișierul atașat: ${result.iban}`;
+                chatInput.value = t('chat.iban_read_from_file', 'IBAN citit din fișierul atașat: {iban}', { iban: result.iban });
                 await sendMessage();
             } else {
                 statusEl.className = 'field-hint ocr-warning';
-                statusEl.textContent = 'Nu am găsit un IBAN clar în fișier - te rog scrie-l manual.';
+                statusEl.textContent = t('chat.iban_not_found_in_file', 'Nu am găsit un IBAN clar în fișier - te rog scrie-l manual.');
             }
         } catch (err) {
             statusEl.hidden = false;
@@ -169,14 +194,14 @@ function wireDocumentAttach() {
         if (file.size > MAX_DOCUMENT_SIZE_BYTES) {
             statusEl.hidden = false;
             statusEl.className = 'field-hint ocr-warning';
-            statusEl.textContent = 'Fișierul depășește 5 MB.';
+            statusEl.textContent = t('chat.document_too_large', 'Fișierul depășește 5 MB.');
             attachInput.value = '';
             return;
         }
 
         statusEl.hidden = false;
         statusEl.className = 'field-hint';
-        statusEl.textContent = 'Se încarcă documentul...';
+        statusEl.textContent = t('chat.document_uploading', 'Se încarcă documentul...');
 
         const formData = new FormData();
         formData.append('file', file);
@@ -199,13 +224,89 @@ function wireDocumentAttach() {
             statusEl.hidden = true;
             setCurrentConversationId(result.conversation_id);
             renderDocumentChip(result.document);
-            showToast('Document atașat. Poți pune întrebări despre el.');
+            showToast(t('chat.document_attached', 'Document atașat. Poți pune întrebări despre el.'));
         } catch (err) {
             statusEl.hidden = false;
             statusEl.className = 'field-hint ocr-warning';
             statusEl.textContent = err.message;
         } finally {
             attachInput.value = '';
+        }
+    });
+}
+
+/** Maps the app's short language code (language.js sets document.documentElement.lang
+ * to one of these) to the BCP-47 locale the SpeechRecognition API expects. */
+const SPEECH_RECOGNITION_LOCALES = {
+    ro: 'ro-RO', en: 'en-US', uk: 'uk-UA', hu: 'hu-HU', tr: 'tr-TR',
+    it: 'it-IT', es: 'es-ES', fr: 'fr-FR', de: 'de-DE',
+};
+
+/** Lets the user dictate into the chat input using the browser's native
+ * SpeechRecognition API - no server round trip, no external service. The
+ * mic button toggles listening on/off; the recognized text replaces
+ * whatever was already in the box on start, and updates live (including
+ * interim results) until the user stops it or the browser detects silence.
+ * Recognition language follows the app's active language (see language.js),
+ * so switching languages changes what the mic expects to hear. Hides the
+ * button entirely on browsers that don't implement the API (e.g. Firefox). */
+function wireChatMic() {
+    const micBtn = document.getElementById('chat-mic-btn');
+    const chatInput = document.getElementById('chat-input');
+    if (!micBtn || !chatInput) return;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        micBtn.hidden = true;
+        return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    let listening = false;
+    let baseText = '';
+
+    const stopListening = () => {
+        listening = false;
+        micBtn.classList.remove('listening');
+        micBtn.setAttribute('aria-pressed', 'false');
+    };
+
+    recognition.addEventListener('start', () => {
+        listening = true;
+        micBtn.classList.add('listening');
+        micBtn.setAttribute('aria-pressed', 'true');
+        baseText = chatInput.value.trim() ? `${chatInput.value.trim()} ` : '';
+    });
+
+    recognition.addEventListener('result', (event) => {
+        let transcript = '';
+        for (let i = 0; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
+        }
+        chatInput.value = baseText + transcript;
+    });
+
+    recognition.addEventListener('error', (event) => {
+        stopListening();
+        if (event.error === 'no-speech' || event.error === 'aborted') return;
+        showToast(t('chat.voice_input_error', 'Voice input failed. Please try again or type your message.'));
+    });
+
+    recognition.addEventListener('end', stopListening);
+
+    micBtn.addEventListener('click', () => {
+        if (listening) {
+            recognition.stop();
+            return;
+        }
+        recognition.lang = SPEECH_RECOGNITION_LOCALES[document.documentElement.lang] || 'en-US';
+        try {
+            recognition.start();
+        } catch {
+            /* start() throws if recognition is already running; nothing to do. */
         }
     });
 }
@@ -235,11 +336,11 @@ function renderDocumentChip(document_) {
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'document-chip-close';
-    closeBtn.setAttribute('aria-label', 'Detașează documentul');
+    closeBtn.setAttribute('aria-label', t('chat.detach_document', 'Detașează documentul'));
     closeBtn.textContent = '✕';
     closeBtn.addEventListener('click', () => {
         clearActiveDocument();
-        showToast('Document detașat.');
+        showToast(t('chat.document_detached', 'Document detașat.'));
     });
     chip.appendChild(closeBtn);
 
@@ -647,7 +748,7 @@ async function loadConversationHistory() {
                     preview = null;
                 }
             }
-            return { ...conversation, preview: preview || 'Conversație nouă' };
+            return { ...conversation, preview: preview || t('dashboard.Conversație nouă', 'Conversație nouă') };
         }));
 
         renderConversationHistory();
@@ -658,7 +759,7 @@ async function loadConversationHistory() {
         }
     } catch (err) {
         list.innerHTML = '';
-        showConversationHistoryError('Istoricul conversațiilor nu a putut fi încărcat. Încearcă din nou.');
+        showConversationHistoryError(t('chat.history.load_error', 'Istoricul conversațiilor nu a putut fi încărcat. Încearcă din nou.'));
     }
 }
 
@@ -697,16 +798,16 @@ function renderConversationHistory() {
         const renameButton = document.createElement('button');
         renameButton.type = 'button';
         renameButton.className = 'conversation-history-action';
-        renameButton.title = 'Redenumește conversația';
-        renameButton.setAttribute('aria-label', 'Redenumește conversația');
+        renameButton.title = t('chat.history.rename_title', 'Redenumește conversația');
+        renameButton.setAttribute('aria-label', t('chat.history.rename_title', 'Redenumește conversația'));
         renameButton.innerHTML = '<i data-lucide="pencil"></i>';
         renameButton.addEventListener('click', () => beginConversationRename(item, conversation));
 
         const deleteButton = document.createElement('button');
         deleteButton.type = 'button';
         deleteButton.className = 'conversation-history-action';
-        deleteButton.title = 'Șterge conversația';
-        deleteButton.setAttribute('aria-label', 'Șterge conversația');
+        deleteButton.title = t('chat.history.delete_title', 'Șterge conversația');
+        deleteButton.setAttribute('aria-label', t('chat.history.delete_title', 'Șterge conversația'));
         deleteButton.innerHTML = '<i data-lucide="trash-2"></i>';
         deleteButton.addEventListener('click', () => deleteConversation(conversation));
 
@@ -748,7 +849,7 @@ async function openConversation(conversationId) {
             appendChatBubble('ai', chatWelcomeText());
         }
     } catch (err) {
-        showConversationHistoryError('Conversația nu a putut fi încărcată. Încearcă din nou.');
+        showConversationHistoryError(t('chat.history.open_error', 'Conversația nu a putut fi încărcată. Încearcă din nou.'));
     }
 }
 
@@ -764,7 +865,7 @@ function beginConversationRename(item, conversation) {
     input.className = 'conversation-history-rename-input';
     input.value = conversation.title || conversation.preview;
     input.maxLength = 120;
-    input.setAttribute('aria-label', 'Nume conversație');
+    input.setAttribute('aria-label', t('chat.history.rename_input_label', 'Nume conversație'));
     input.addEventListener('click', event => event.stopPropagation());
     input.addEventListener('keydown', event => {
         if (event.key === 'Enter') saveConversationRename(conversation, input.value);
@@ -776,16 +877,16 @@ function beginConversationRename(item, conversation) {
     const saveButton = document.createElement('button');
     saveButton.type = 'button';
     saveButton.className = 'conversation-history-action';
-    saveButton.title = 'Salvează numele';
-    saveButton.setAttribute('aria-label', 'Salvează numele');
+    saveButton.title = t('chat.history.save_name', 'Salvează numele');
+    saveButton.setAttribute('aria-label', t('chat.history.save_name', 'Salvează numele'));
     saveButton.innerHTML = '<i data-lucide="check"></i>';
     saveButton.addEventListener('click', () => saveConversationRename(conversation, input.value));
 
     const cancelButton = document.createElement('button');
     cancelButton.type = 'button';
     cancelButton.className = 'conversation-history-action';
-    cancelButton.title = 'Renunță';
-    cancelButton.setAttribute('aria-label', 'Renunță');
+    cancelButton.title = t('chat.history.cancel_rename', 'Renunță');
+    cancelButton.setAttribute('aria-label', t('chat.history.cancel_rename', 'Renunță'));
     cancelButton.innerHTML = '<i data-lucide="x"></i>';
     cancelButton.addEventListener('click', renderConversationHistory);
     actions.append(saveButton, cancelButton);
@@ -797,7 +898,7 @@ function beginConversationRename(item, conversation) {
 async function saveConversationRename(conversation, nextTitle) {
     const title = nextTitle.trim();
     if (!title) {
-        showConversationHistoryError('Numele conversației nu poate fi gol.');
+        showConversationHistoryError(t('chat.history.name_empty', 'Numele conversației nu poate fi gol.'));
         return;
     }
 
@@ -810,12 +911,12 @@ async function saveConversationRename(conversation, nextTitle) {
         conversation.preview = title;
         renderConversationHistory();
     } catch (err) {
-        showConversationHistoryError('Conversația nu a putut fi redenumită. Încearcă din nou.');
+        showConversationHistoryError(t('chat.history.rename_error', 'Conversația nu a putut fi redenumită. Încearcă din nou.'));
     }
 }
 
 async function deleteConversation(conversation) {
-    const approved = window.confirm(`Sigur vrei să ștergi conversația „${truncateConversationPreview(conversation.preview)}”?`);
+    const approved = window.confirm(t('chat.history.delete_confirm', 'Sigur vrei să ștergi conversația „{title}”?', { title: truncateConversationPreview(conversation.preview) }));
     if (!approved) return;
 
     try {
@@ -824,7 +925,7 @@ async function deleteConversation(conversation) {
         if (currentConversationId === conversation.id) startNewConversation();
         renderConversationHistory();
     } catch (err) {
-        showConversationHistoryError('Conversația nu a putut fi ștearsă. Încearcă din nou.');
+        showConversationHistoryError(t('chat.history.delete_error', 'Conversația nu a putut fi ștearsă. Încearcă din nou.'));
     }
 }
 
@@ -872,7 +973,7 @@ function renderProposalCard(proposal, container) {
 
     const body = document.createElement('div');
     body.className = 'action-proposal';
-    body.innerHTML = `<strong>Propunere de acțiune</strong><p>${escapeHTML(proposal.summary)}</p>`;
+    body.innerHTML = `<strong>${escapeHTML(t('chat.proposal.heading', 'Propunere de acțiune'))}</strong><p>${escapeHTML(proposal.summary)}</p>`;
     card.appendChild(body);
 
     const actions = document.createElement('div');
@@ -881,13 +982,13 @@ function renderProposalCard(proposal, container) {
     const confirmBtn = document.createElement('button');
     confirmBtn.type = 'button';
     confirmBtn.className = 'btn btn-primary';
-    confirmBtn.textContent = 'Confirmă';
+    confirmBtn.textContent = t('common.Confirmă', 'Confirmă');
     confirmBtn.addEventListener('click', () => openStepUpModal(proposal.id, card));
 
     const rejectBtn = document.createElement('button');
     rejectBtn.type = 'button';
     rejectBtn.className = 'btn btn-secondary';
-    rejectBtn.textContent = 'Anulează';
+    rejectBtn.textContent = t('common.Anulează', 'Anulează');
     rejectBtn.addEventListener('click', () => handleRejectProposal(proposal.id, card));
 
     actions.appendChild(confirmBtn);
@@ -907,8 +1008,8 @@ function markProposalCardResolved(card, state) {
     const label = document.createElement('div');
     label.className = `proposal-status-label ${state}`;
     label.innerHTML = state === 'confirmed'
-        ? '<i data-lucide="check-circle"></i> Confirmată'
-        : '<i data-lucide="x-circle"></i> Anulată';
+        ? `<i data-lucide="check-circle"></i> ${escapeHTML(t('chat.proposal.confirmed', 'Confirmată'))}`
+        : `<i data-lucide="x-circle"></i> ${escapeHTML(t('chat.proposal.rejected', 'Anulată'))}`;
     actions.replaceWith(label);
     if (window.lucide) lucide.createIcons();
 }
@@ -919,10 +1020,10 @@ async function handleRejectProposal(proposalId, card) {
     try {
         await apiFetch(`/chat/proposals/${proposalId}/reject`, { method: 'POST' });
         markProposalCardResolved(card, 'rejected');
-        showToast('Propunerea a fost anulată.');
+        showToast(t('chat.proposal.reject_success', 'Propunerea a fost anulată.'));
     } catch (err) {
         buttons.forEach(btn => { btn.disabled = false; });
-        showToast('Eroare la anulare.');
+        showToast(t('chat.proposal.reject_error', 'Eroare la anulare.'));
     }
 }
 
@@ -964,7 +1065,7 @@ async function confirmWithCredential(proposalId, authMethod, credential, card) {
         });
         closeStepUpModal();
         markProposalCardResolved(card, 'confirmed');
-        showToast('Acțiunea a fost confirmată și executată cu succes!');
+        showToast(t('chat.proposal.confirm_success', 'Acțiunea a fost confirmată și executată cu succes!'));
         return proposal;
     } catch (err) {
         if (err.status === 409) {
@@ -975,7 +1076,7 @@ async function confirmWithCredential(proposalId, authMethod, credential, card) {
             showToast(err.message);
             return null;
         }
-        showStepUpError(err.message || 'Autentificare eșuată.');
+        showStepUpError(err.message || t('chat.proposal.auth_failed', 'Autentificare eșuată.'));
         return null;
     }
 }
@@ -1329,6 +1430,41 @@ const SPENDING_CATEGORY_PALETTE = [
 const SPENDING_OTHER_CATEGORY_NAME = 'Altele';
 const SPENDING_OTHER_COLOR = '#898781';
 
+function localizeTransactionDescription(description) {
+    const transfer = description?.match(/^Transfer: (.+) → (.+)$/);
+    if (transfer) return t('dynamic.transaction_transfer', 'Transfer: {from} → {to}', { from: transfer[1], to: transfer[2] });
+    const payment = description?.match(/^Plată către (.+)$/);
+    if (payment) return t('dynamic.transaction_payment', 'Payment to {name}', { name: payment[1] });
+    return description;
+}
+
+//: Maps the backend's fixed, Romanian-only category names (see
+//: CATEGORY_KEYWORDS in categorize_transactions.py) to i18n keys - the
+//: backend has no locale concept, it always returns e.g. "Facturi &
+//: Utilități", so every category (not just "Altele") needs a lookup here
+//: or it stays hardcoded in Romanian regardless of the selected language.
+const SPENDING_CATEGORY_KEYS = {
+    'Facturi & Utilități': 'dynamic.category_bills_utilities',
+    'Telecomunicații': 'dynamic.category_telecom',
+    'Divertisment': 'dynamic.category_entertainment',
+    'Mâncare & Băutură': 'dynamic.category_food_drink',
+    'Cumpărături alimentare': 'dynamic.category_groceries',
+    'Transport / Combustibil': 'dynamic.category_transport',
+    'Sănătate': 'dynamic.category_health',
+    'Electronice': 'dynamic.category_electronics',
+    'Îmbrăcăminte': 'dynamic.category_clothing',
+    'Educație': 'dynamic.category_education',
+    'Locuință & Amenajări': 'dynamic.category_home',
+    'Asigurări': 'dynamic.category_insurance',
+    'Transferuri': 'dynamic.category_transfers',
+};
+
+function localizeCategoryName(name) {
+    if (name === SPENDING_OTHER_CATEGORY_NAME) return t('dynamic.category_other', 'Other');
+    const key = SPENDING_CATEGORY_KEYS[name];
+    return key ? t(key, name) : name;
+}
+
 //: Donut/pie is only honest "at a glance" up to ~6 slices (see dataviz
 //: skill's anti-patterns.md) - past that, distinct hues run out and slivers
 //: blur together. Anything past the cap folds into one trailing "Altele",
@@ -1426,7 +1562,7 @@ function buildSpendingDonutSegments(categories) {
 
         return `
             <g class="spending-segment" data-index="${i}" tabindex="0"
-               role="img" aria-label="${escapeHTML(cat.name)}"
+               role="img" aria-label="${escapeHTML(localizeCategoryName(cat.name))}"
                style="--rot: ${(startAngleDeg - 90).toFixed(3)}deg; --hx-active: ${dx.toFixed(2)}px; --hy-active: ${dy.toFixed(2)}px; --seg-delay: ${i * 70}ms;">
                 <circle class="spending-segment-hit"
                     cx="${SPENDING_DONUT_CENTER}" cy="${SPENDING_DONUT_CENTER}" r="${SPENDING_DONUT_RADIUS}"
@@ -1451,11 +1587,11 @@ function buildSpendingDonutSegments(categories) {
 function renderSpendingDonut(donutWrap, categories, primaryCurrency) {
     const totalMinor = categories.reduce((sum, c) => sum + c.total_minor, 0);
     donutWrap.innerHTML = `
-        <svg class="spending-donut" viewBox="0 0 ${SPENDING_DONUT_SIZE} ${SPENDING_DONUT_SIZE}" role="group" aria-label="Cheltuieli pe categorii">
+        <svg class="spending-donut" viewBox="0 0 ${SPENDING_DONUT_SIZE} ${SPENDING_DONUT_SIZE}" role="group" aria-label="${escapeHTML(t('dynamic.spending_by_category', 'Spending by category'))}">
             ${buildSpendingDonutSegments(categories)}
         </svg>
         <div class="spending-donut-center">
-            <span class="spending-donut-total-label">Total</span>
+            <span class="spending-donut-total-label">${escapeHTML(t('dynamic.total', 'Total'))}</span>
             <span class="spending-donut-total-value">${formatMoney(totalMinor, primaryCurrency)}</span>
         </div>
         <div class="spending-donut-tooltip" id="spending-donut-tooltip" hidden></div>
@@ -1504,7 +1640,7 @@ function wireSpendingCategoryHover(container, categories, primaryCurrency) {
         const cat = categories[index];
         tooltip.innerHTML = `
             <span class="spending-donut-tooltip-value">${formatMoney(cat.total_minor, primaryCurrency)}</span>
-            <span class="spending-donut-tooltip-label">${escapeHTML(cat.name)} &middot; ${cat.percentage.toFixed(0)}%</span>
+            <span class="spending-donut-tooltip-label">${escapeHTML(localizeCategoryName(cat.name))} &middot; ${cat.percentage.toFixed(0)}%</span>
         `;
         tooltip.hidden = false;
     }
@@ -1535,7 +1671,7 @@ async function loadSpendingByCategory() {
     if (active.length === 0) {
         donutWrap.innerHTML = '';
         donutWrap.style.display = 'none';
-        legend.innerHTML = '<div class="empty-state">Niciun cont activ încă.</div>';
+        legend.innerHTML = `<div class="empty-state">${escapeHTML(t('dynamic.no_active_accounts', 'No active accounts yet.'))}</div>`;
         return;
     }
 
@@ -1551,7 +1687,7 @@ async function loadSpendingByCategory() {
     } catch (err) {
         donutWrap.innerHTML = '';
         donutWrap.style.display = 'none';
-        legend.innerHTML = `<div class="empty-state">Nu s-au putut încărca categoriile: ${escapeHTML(err.message)}</div>`;
+        legend.innerHTML = `<div class="empty-state">${escapeHTML(t('dynamic.load_categories_error', 'Nu s-au putut încărca categoriile: {message}', { message: err.message }))}</div>`;
         return;
     }
 
@@ -1559,7 +1695,7 @@ async function loadSpendingByCategory() {
     if (rawCategories.length === 0) {
         donutWrap.innerHTML = '';
         donutWrap.style.display = 'none';
-        legend.innerHTML = '<div class="empty-state">Nicio cheltuială luna aceasta încă.</div>';
+        legend.innerHTML = `<div class="empty-state">${escapeHTML(t('dynamic.no_monthly_spending', 'No spending this month yet.'))}</div>`;
         return;
     }
 
@@ -1575,7 +1711,7 @@ async function loadSpendingByCategory() {
     legend.innerHTML = categories.map((cat, i) => `
         <div class="legend-item" data-index="${i}" tabindex="0">
             <span class="dot" style="background-color: ${cat.color};"></span>
-            ${escapeHTML(cat.name)} (${cat.percentage.toFixed(0)}%) &middot; ${formatMoney(cat.total_minor, primaryCurrency)}
+            ${escapeHTML(localizeCategoryName(cat.name))} (${cat.percentage.toFixed(0)}%) &middot; ${formatMoney(cat.total_minor, primaryCurrency)}
         </div>
     `).join('');
 
@@ -1587,7 +1723,7 @@ async function loadAccounts() {
     try {
         currentAccounts = await apiFetch('/accounts');
     } catch (err) {
-        grid.innerHTML = `<div class="empty-state">Nu s-au putut încărca conturile: ${escapeHTML(err.message)}</div>`;
+        grid.innerHTML = `<div class="empty-state">${escapeHTML(t('dynamic.load_accounts_error', 'Nu s-au putut încărca conturile: {message}', { message: err.message }))}</div>`;
         return;
     }
 
@@ -1601,7 +1737,7 @@ async function loadAccounts() {
 function renderAccountsGrid() {
     const grid = document.getElementById('accounts-grid');
     if (currentAccounts.length === 0) {
-        grid.innerHTML = '<div class="empty-state">Niciun cont încă. Creează primul cont.</div>';
+        grid.innerHTML = `<div class="empty-state">${escapeHTML(t('dynamic.no_accounts_yet', 'Niciun cont încă. Creează primul cont.'))}</div>`;
         return;
     }
     grid.innerHTML = currentAccounts.map(acc => `
@@ -1612,8 +1748,8 @@ function renderAccountsGrid() {
                 <p>${escapeHTML(acc.currency)}${acc.product_type !== 'checking' ? ` &middot; ${(acc.interest_rate_bps / 100).toFixed(1)}% p.a.` : ''}</p>
             </div>
             <div class="acc-balance">${formatMoney(acc.balance_minor, acc.currency)}</div>
-            ${acc.status === 'closed' ? '<span class="acc-status">Închis</span>' : ''}
-            ${!isSpendable(acc) ? '<span class="acc-status locked">Blocat</span>' : ''}
+            ${acc.status === 'closed' ? `<span class="acc-status">${escapeHTML(t('dynamic.account_closed', 'Închis'))}</span>` : ''}
+            ${!isSpendable(acc) ? `<span class="acc-status locked">${escapeHTML(t('dynamic.account_locked', 'Blocat'))}</span>` : ''}
             <button type="button" class="acc-statement-btn" data-account-id="${escapeHTML(acc.id)}"
                     data-account-name="${escapeHTML(acc.name)}" title="Descarcă extras de cont">
                 <i data-lucide="file-down"></i>
@@ -1761,7 +1897,7 @@ async function loadTransactions() {
                     <i data-lucide="${entry.direction === 'credit' ? 'arrow-down-left' : 'arrow-up-right'}"></i>
                 </div>
                 <div class="tx-details">
-                    <h4>${escapeHTML(entry.description)}</h4>
+                    <h4>${escapeHTML(localizeTransactionDescription(entry.description))}</h4>
                     <span class="time">${formatDateTime(entry.created_at)}</span>
                 </div>
                 <div class="tx-amount ${entry.direction === 'credit' ? 'positive' : 'negative'}">
@@ -1771,7 +1907,7 @@ async function loadTransactions() {
         `).join('');
         if (window.lucide) lucide.createIcons();
     } catch (err) {
-        list.innerHTML = `<div class="empty-state">Nu s-au putut încărca tranzacțiile: ${escapeHTML(err.message)}</div>`;
+        list.innerHTML = `<div class="empty-state">${escapeHTML(t('dynamic.load_transactions_error', 'Nu s-au putut încărca tranzacțiile: {message}', { message: err.message }))}</div>`;
     }
 }
 
@@ -1787,7 +1923,7 @@ async function loadAllTransactions() {
         return;
     }
 
-    container.innerHTML = '<div class="loading-state">Se încarcă...</div>';
+    container.innerHTML = `<div class="loading-state">${escapeHTML(t('common.loading', 'Se încarcă...'))}</div>`;
 
     try {
         const accountById = Object.fromEntries(active.map(a => [a.id, a]));
@@ -1808,7 +1944,7 @@ async function loadAllTransactions() {
 
         renderTransactionsByMonth(container, entries);
     } catch (err) {
-        container.innerHTML = `<div class="empty-state">Nu s-au putut încărca tranzacțiile: ${escapeHTML(err.message)}</div>`;
+        container.innerHTML = `<div class="empty-state">${escapeHTML(t('dynamic.load_transactions_error', 'Nu s-au putut încărca tranzacțiile: {message}', { message: err.message }))}</div>`;
     }
 }
 
@@ -1818,7 +1954,7 @@ function monthGroupKey(isoString) {
 }
 
 function monthGroupLabel(isoString) {
-    const label = new Date(isoString).toLocaleDateString('ro-RO', { month: 'long', year: 'numeric' });
+    const label = new Date(isoString).toLocaleDateString(document.documentElement.lang || 'ro', { month: 'long', year: 'numeric' });
     return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
@@ -1842,7 +1978,7 @@ function renderTransactionsByMonth(container, entries) {
                             <i data-lucide="${entry.direction === 'credit' ? 'arrow-down-left' : 'arrow-up-right'}"></i>
                         </div>
                         <div class="tx-details">
-                            <h4>${escapeHTML(entry.description)}</h4>
+                            <h4>${escapeHTML(localizeTransactionDescription(entry.description))}</h4>
                             <span class="time">${formatDateTime(entry.created_at)}${entry.accountName ? ' · ' + escapeHTML(entry.accountName) : ''}</span>
                         </div>
                         <div class="tx-amount ${entry.direction === 'credit' ? 'positive' : 'negative'}">
@@ -1859,8 +1995,9 @@ function renderTransactionsByMonth(container, entries) {
 
 function formatDateTime(isoString) {
     const date = new Date(isoString);
-    return date.toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' }) +
-        ', ' + date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+    const language = document.documentElement.lang || 'ro';
+    return date.toLocaleDateString(language, { day: 'numeric', month: 'short' }) +
+        ', ' + date.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' });
 }
 
 /* --- New account modal --- */
@@ -1940,13 +2077,17 @@ function wireSavingsModal() {
             return;
         }
         if (productType === 'savings') {
-            rateHint.textContent =
-                `Dobândă: ${(accountProducts.savings_interest_rate_bps / 100).toFixed(1)}% p.a., calculată lunar.`;
+            rateHint.textContent = t('savings.interest_monthly', 'Dobândă: {rate}% p.a., calculată lunar.', {
+                rate: (accountProducts.savings_interest_rate_bps / 100).toFixed(1),
+            });
         } else {
             const months = Number(termSelect.value);
             const option = accountProducts.term_deposit_options.find((o) => o.term_months === months);
             rateHint.textContent = option
-                ? `Dobândă: ${(option.interest_rate_bps / 100).toFixed(1)}% p.a., plătită la final. Banii sunt blocați ${months} luni.`
+                ? t('savings.interest_term', 'Dobândă: {rate}% p.a., plătită la final. Banii sunt blocați {months} luni.', {
+                    rate: (option.interest_rate_bps / 100).toFixed(1),
+                    months,
+                })
                 : '';
         }
     }
@@ -1974,9 +2115,15 @@ function wireSavingsModal() {
 
         projectionBox.hidden = false;
         projectionBox.innerHTML = `
-            Depui ${formatMoney(principalMinor, currency)} acum, pe ${months} luni la ${(option.interest_rate_bps / 100).toFixed(1)}% p.a.
+            ${escapeHTML(t('savings.projection_deposit', 'Depui {amount} acum, pe {months} luni la {rate}% p.a.', {
+                amount: formatMoney(principalMinor, currency),
+                months,
+                rate: (option.interest_rate_bps / 100).toFixed(1),
+            }))}
             <div class="projection-total">${formatMoney(totalMinor, currency)}</div>
-            <div>la maturitate (din care ${formatMoney(interestMinor, currency)} dobândă)</div>
+            <div>${escapeHTML(t('savings.projection_maturity', 'la maturitate (din care {interest} dobândă)', {
+                interest: formatMoney(interestMinor, currency),
+            }))}</div>
         `;
     }
 
@@ -1985,17 +2132,20 @@ function wireSavingsModal() {
         errorEl.hidden = true;
         form.reset();
         if (type === 'savings') {
-            titleEl.textContent = 'Cont de economii nou';
+            titleEl.textContent = t('savings.new_savings_title', 'Cont de economii nou');
             termRow.hidden = true;
             projectionRow.hidden = true;
             projectionBox.hidden = true;
         } else {
-            titleEl.textContent = 'Cont cu dobândă fixă nou';
+            titleEl.textContent = t('savings.new_term_title', 'Cont cu dobândă fixă nou');
             termRow.hidden = false;
             projectionRow.hidden = false;
             if (accountProducts) {
                 termSelect.innerHTML = accountProducts.term_deposit_options
-                    .map((o) => `<option value="${o.term_months}">${o.term_months} luni - ${(o.interest_rate_bps / 100).toFixed(1)}% p.a.</option>`)
+                    .map((o) => `<option value="${o.term_months}">${escapeHTML(t('savings.term_option', '{months} luni - {rate}% p.a.', {
+                        months: o.term_months,
+                        rate: (o.interest_rate_bps / 100).toFixed(1),
+                    }))}</option>`)
                     .join('');
             }
         }
@@ -2047,9 +2197,9 @@ function renderSavingsAccountsList() {
         const locked = !isSpendable(acc);
         const maturityLabel = acc.product_type === 'term_deposit'
             ? (locked
-                ? `Blocat până la ${new Date(acc.maturity_date).toLocaleDateString('ro-RO')}`
-                : `Maturitate atinsă (${new Date(acc.maturity_date).toLocaleDateString('ro-RO')}) - poți retrage`)
-            : 'Flexibil - retragi oricând';
+                ? t('dynamic.savings_locked', 'Locked until {date}', { date: new Date(acc.maturity_date).toLocaleDateString(document.documentElement.lang || 'ro') })
+                : t('dynamic.savings_matured', 'Maturity reached ({date}) - you can withdraw', { date: new Date(acc.maturity_date).toLocaleDateString(document.documentElement.lang || 'ro') }))
+            : t('dynamic.savings_flexible', 'Flexible - withdraw anytime');
         return `
             <div class="pot-item savings-account-item">
                 <div class="pot-header">
@@ -2090,7 +2240,7 @@ function wireTransferModal() {
         const fromAccount = currentAccounts.find(a => a.id === fromSelect.value);
         const amountMajor = parseFloat(document.getElementById('transfer-amount').value);
         if (!fromAccount || !Number.isFinite(amountMajor) || amountMajor <= 0) {
-            errorEl.textContent = 'Completează toate câmpurile obligatorii.';
+            errorEl.textContent = t('savings.required_fields', 'Completează toate câmpurile obligatorii.');
             errorEl.hidden = false;
             return;
         }
@@ -2118,10 +2268,8 @@ function wireTransferModal() {
 
 /* --- Scheduled/recurring transfers --- */
 
-const SCHEDULED_TRANSFER_FREQUENCY_LABELS = { weekly: 'Săptămânal', monthly: 'Lunar' };
-const SCHEDULED_TRANSFER_STATUS_LABELS = {
-    active: 'Activ', paused: 'Pauzat', cancelled: 'Anulat', completed: 'Finalizat',
-};
+const SCHEDULED_TRANSFER_FREQUENCY_KEYS = { weekly: 'dynamic.scheduled_weekly', monthly: 'dynamic.scheduled_monthly' };
+const SCHEDULED_TRANSFER_STATUS_KEYS = { active: 'dynamic.status_active', paused: 'dynamic.status_paused', cancelled: 'dynamic.status_cancelled', completed: 'dynamic.status_completed' };
 
 function populateScheduledTransferAccountSelects() {
     const fromSelect = document.getElementById('scheduled-transfer-from');
@@ -2142,7 +2290,7 @@ function populateScheduledTransferToOptions() {
     const eligible = active.filter(a => a.id !== fromSelect.value && a.currency === fromCurrency);
     toSelect.innerHTML = eligible.length
         ? eligible.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
-        : '<option value="" disabled selected>Niciun alt cont în aceeași monedă</option>';
+        : `<option value="" disabled selected>${escapeHTML(t('savings.no_other_account_same_currency', 'Niciun alt cont în aceeași monedă'))}</option>`;
 }
 
 function wireScheduledTransfersModal() {
@@ -2170,7 +2318,7 @@ function wireScheduledTransfersModal() {
         const fromAccount = currentAccounts.find(a => a.id === fromSelect.value);
         const amountMajor = parseFloat(document.getElementById('scheduled-transfer-amount').value);
         if (!fromAccount || !Number.isFinite(amountMajor) || amountMajor <= 0) {
-            errorEl.textContent = 'Completează toate câmpurile obligatorii.';
+            errorEl.textContent = t('savings.required_fields', 'Completează toate câmpurile obligatorii.');
             errorEl.hidden = false;
             return;
         }
@@ -2207,35 +2355,37 @@ async function loadScheduledTransfers() {
         const scheduled = await apiFetch('/scheduled-transfers');
         renderScheduledTransfersList(scheduled);
     } catch (err) {
-        list.innerHTML = `<div class="empty-state">Nu s-au putut încărca transferurile programate: ${escapeHTML(err.message)}</div>`;
+        list.innerHTML = `<div class="empty-state">${escapeHTML(t('dynamic.load_scheduled_error', 'Nu s-au putut încărca transferurile programate: {message}', { message: err.message }))}</div>`;
     }
 }
 
 function renderScheduledTransfersList(scheduled) {
     const list = document.getElementById('scheduled-transfers-list');
     if (scheduled.length === 0) {
-        list.innerHTML = '<div class="empty-state">Niciun transfer programat.</div>';
+        list.innerHTML = `<div class="empty-state">${escapeHTML(t('dynamic.no_scheduled_transfers', 'Niciun transfer programat.'))}</div>`;
         return;
     }
     list.innerHTML = scheduled.map(s => {
         const fromAccount = currentAccounts.find(a => a.id === s.from_account_id);
         const toAccount = currentAccounts.find(a => a.id === s.to_account_id);
-        const freqLabel = s.frequency ? SCHEDULED_TRANSFER_FREQUENCY_LABELS[s.frequency] : 'O singură dată';
+        const freqLabel = s.frequency
+            ? t(SCHEDULED_TRANSFER_FREQUENCY_KEYS[s.frequency], s.frequency)
+            : t('dynamic.scheduled_once', 'Once');
         const canAct = s.status === 'active' || s.status === 'paused';
         return `
         <div class="scheduled-transfer-item">
             <div>
                 <div class="name">${escapeHTML(fromAccount ? fromAccount.name : '?')} → ${escapeHTML(toAccount ? toAccount.name : '?')}</div>
-                <div class="meta">${formatMoney(s.amount_minor, s.currency)} &middot; ${freqLabel} &middot; ${SCHEDULED_TRANSFER_STATUS_LABELS[s.status] || s.status}</div>
+                <div class="meta">${formatMoney(s.amount_minor, s.currency)} &middot; ${freqLabel} &middot; ${SCHEDULED_TRANSFER_STATUS_KEYS[s.status] ? t(SCHEDULED_TRANSFER_STATUS_KEYS[s.status], s.status) : escapeHTML(s.status)}</div>
                 ${s.last_error ? `<div class="meta scheduled-transfer-error-note">${escapeHTML(s.last_error)}</div>` : ''}
             </div>
             ${canAct ? `
                 <div class="scheduled-transfer-actions">
                     ${s.status === 'active'
-                        ? `<button class="link-btn" data-id="${s.id}" data-action="pause">Pauză</button>`
-                        : `<button class="link-btn" data-id="${s.id}" data-action="resume">Reia</button>`
+                        ? `<button class="link-btn" data-id="${s.id}" data-action="pause">${t('dynamic.scheduled_pause', 'Pause')}</button>`
+                        : `<button class="link-btn" data-id="${s.id}" data-action="resume">${t('dynamic.scheduled_resume', 'Resume')}</button>`
                     }
-                    <button class="link-btn" data-id="${s.id}" data-action="cancel">Anulează</button>
+                    <button class="link-btn" data-id="${s.id}" data-action="cancel">${t('common.Anulează', 'Cancel')}</button>
                 </div>
             ` : ''}
         </div>
@@ -2340,7 +2490,7 @@ function showPriceIncreaseModal(details) {
         const confirmBtn = document.getElementById('price-increase-confirm');
         const cancelBtn = document.getElementById('price-increase-cancel');
 
-        merchantEl.textContent = details.beneficiary_name || 'Acest abonament';
+        merchantEl.textContent = details.beneficiary_name || t('price_increase.default_merchant', 'Acest abonament');
         oldEl.textContent = formatMoney(details.previous_amount_minor, details.currency);
         newEl.textContent = formatMoney(details.new_amount_minor, details.currency);
 
@@ -2366,7 +2516,9 @@ function showPriceIncreaseModal(details) {
     });
 }
 
-const FACE_CONFIRM_DEFAULT_REASON = 'Suma depășește pragul de confirmare - verifică-ți identitatea prin cameră.';
+function faceConfirmDefaultReason() {
+    return t('face_confirm.default_reason', 'Suma depășește pragul de confirmare - verifică-ți identitatea prin cameră.');
+}
 
 /** Opens the face-confirm modal, captures a photo, exchanges it for a
  * short-lived confirmation token via POST /auth/face/confirm. Resolves with
@@ -2374,7 +2526,7 @@ const FACE_CONFIRM_DEFAULT_REASON = 'Suma depășește pragul de confirmare - ve
  * show inline in the modal and let the user retry or cancel. `reason`
  * overrides the modal's explanatory text for callers other than the
  * large-transfer step-up this was originally built for. */
-function requestFaceConfirmationToken(reason = FACE_CONFIRM_DEFAULT_REASON) {
+function requestFaceConfirmationToken(reason = faceConfirmDefaultReason()) {
     return new Promise((resolve) => {
         const modal = document.getElementById('face-confirm-modal');
         const video = document.getElementById('face-confirm-video');
@@ -2404,7 +2556,7 @@ function requestFaceConfirmationToken(reason = FACE_CONFIRM_DEFAULT_REASON) {
         navigator.mediaDevices.getUserMedia({ video: true })
             .then((s) => { stream = s; video.srcObject = s; setFaceFlashlight(true, modal); })
             .catch(() => {
-                errorEl.textContent = 'Nu s-a putut accesa camera. Verifică permisiunile browserului.';
+                errorEl.textContent = t('face_confirm.camera_error', 'Nu s-a putut accesa camera. Verifică permisiunile browserului.');
                 errorEl.hidden = false;
             });
 
@@ -2463,7 +2615,7 @@ function populateTransferToOptions() {
     const eligible = active.filter(a => a.id !== fromSelect.value && a.currency === fromCurrency);
     toSelect.innerHTML = eligible.length
         ? eligible.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
-        : '<option value="" disabled selected>Niciun alt cont în aceeași monedă</option>';
+        : `<option value="" disabled selected>${escapeHTML(t('savings.no_other_account_same_currency', 'Niciun alt cont în aceeași monedă'))}</option>`;
 }
 
 /* --- Cards --- */
@@ -2478,7 +2630,9 @@ function applyCardSecretsVisibility(card, btn, revealing) {
     const secrets = card.querySelectorAll('.card-secret');
     secrets.forEach(el => { el.textContent = revealing ? el.dataset.value : (el.dataset.reveal === 'cvv' ? '•••' : '••/••'); });
     btn.innerHTML = `<i data-lucide="${revealing ? 'eye-off' : 'eye'}"></i>`;
-    btn.title = revealing ? 'Ascunde expirare și CVV' : 'Arată expirare și CVV';
+    const hintKey = revealing ? 'cards.hide_details' : 'cards.show_details';
+    btn.title = t(hintKey, revealing ? 'Hide expiry and CVV' : 'Show expiry and CVV');
+    btn.setAttribute('aria-label', btn.title);
     if (window.lucide) lucide.createIcons();
 }
 
@@ -2491,7 +2645,7 @@ async function loadCards() {
         loadedCards = cards;
         renderCardsList(cards);
     } catch (err) {
-        list.innerHTML = `<div class="empty-state">Nu s-au putut încărca cardurile: ${escapeHTML(err.message)}</div>`;
+        list.innerHTML = `<div class="empty-state">${escapeHTML(t('errors.generic', 'Could not load cards'))}: ${escapeHTML(err.message)}</div>`;
     }
 }
 
@@ -2635,7 +2789,7 @@ function renderCardsList(cards) {
                 ? (Number(btn.dataset.currentLimit) / 100).toString()
                 : '';
             const input = prompt(
-                'Noua limită de cheltuieli (lasă gol pentru a elimina limita):',
+                t('cards.limit_prompt', 'New spending limit (leave blank to remove the limit):'),
                 currentLimit
             );
             if (input === null) return;
@@ -2643,7 +2797,7 @@ function renderCardsList(cards) {
             const trimmed = input.trim();
             const spendingLimitMinor = trimmed ? Math.round(parseFloat(trimmed) * 100) : null;
             if (trimmed && (!Number.isFinite(spendingLimitMinor) || spendingLimitMinor <= 0)) {
-                alert('Introdu o sumă validă, mai mare decât 0.');
+                alert(t('cards.invalid_limit', 'Enter a valid amount greater than 0.'));
                 return;
             }
 
@@ -2672,7 +2826,7 @@ function wireNewCardModal() {
         const active = currentAccounts.filter(a => a.status === 'active');
         accountSelect.innerHTML = active.length
             ? active.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
-            : '<option value="" disabled selected>Creează mai întâi un cont</option>';
+            : `<option value="" disabled selected>${escapeHTML(t('card_modal.create_account_first', 'Create an account first'))}</option>`;
         modal.hidden = false;
     });
     document.getElementById('close-new-card-modal').addEventListener('click', () => { modal.hidden = true; });
@@ -2744,11 +2898,13 @@ function wireCardOrderModal() {
     document.getElementById('open-card-order-btn').addEventListener('click', async () => {
         errorEl.hidden = true;
         form.reset();
-        document.getElementById('card-order-country').value = 'România';
+        const countryInput = document.getElementById('card-order-country');
+        countryInput.value = t('card_modal.default_country', 'Romania');
+        countryInput.dataset.currentDefault = countryInput.value;
         const active = currentAccounts.filter(a => a.status === 'active');
         accountSelect.innerHTML = active.length
             ? active.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
-            : '<option value="" disabled selected>Creează mai întâi un cont</option>';
+            : `<option value="" disabled selected>${escapeHTML(t('card_modal.create_account_first', 'Create an account first'))}</option>`;
 
         try {
             const orders = await apiFetch('/card-orders');
@@ -2785,7 +2941,7 @@ function wireCardOrderModal() {
             });
             modal.hidden = true;
             const formattedNumber = order.card.card_number.replace(/(.{4})/g, '$1 ').trim();
-            alert(`Comanda a fost trimisă! Cardul tău: ${formattedNumber}`);
+            alert(t('card_modal.order_success', 'Comanda a fost trimisă! Cardul tău: {number}', { number: formattedNumber }));
             await loadCards();
         } catch (err) {
             errorEl.textContent = err.message;
@@ -2803,7 +2959,7 @@ function populatePaymentsAccountSelect() {
     const previousValue = select.value;
     select.innerHTML = spendable.length
         ? spendable.map(acc => `<option value="${acc.id}">${escapeHTML(acc.name)} (${acc.currency})</option>`).join('')
-        : '<option value="" disabled selected>Creează mai întâi un cont</option>';
+        : `<option value="" disabled selected>${escapeHTML(t('payments.no_account_create_first', 'Creează mai întâi un cont'))}</option>`;
     if (spendable.some(a => a.id === previousValue)) select.value = previousValue;
     updateMyIbanDisplay();
 }
@@ -2840,7 +2996,7 @@ function renderBeneficiariesList(contacts) {
                 <div class="iban">${escapeHTML(c.iban)}</div>
                 ${c.website ? `<a class="contact-website" href="${escapeHTML(c.website)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHTML(c.website)}</a>` : ''}
             </div>
-            <button type="button" class="contact-remove-btn" data-id="${c.id}" title="Șterge contactul" aria-label="Șterge contactul"><i data-lucide="x"></i></button>
+            <button type="button" class="contact-remove-btn" data-id="${c.id}" title="${escapeHTML(t('payments.remove_contact_title', 'Șterge contactul'))}" aria-label="${escapeHTML(t('payments.remove_contact_title', 'Șterge contactul'))}"><i data-lucide="x"></i></button>
             <i data-lucide="chevron-right" class="icon"></i>
         </div>
     `).join('');
@@ -2857,7 +3013,7 @@ function renderBeneficiariesList(contacts) {
     list.querySelectorAll('.contact-remove-btn').forEach(btn => {
         btn.addEventListener('click', async (event) => {
             event.stopPropagation();
-            if (!confirm('Ștergi acest contact salvat?')) return;
+            if (!confirm(t('payments.remove_contact_confirm', 'Ștergi acest contact salvat?'))) return;
             try {
                 await apiFetch(`/beneficiaries/${btn.dataset.id}`, { method: 'DELETE' });
                 await loadBeneficiaries();
@@ -2924,9 +3080,9 @@ function renderPaymentsList(payments) {
         <div class="payment-item">
             <div>
                 <div class="name">${escapeHTML(p.to_iban)}</div>
-                <div class="meta">${new Date(p.created_at).toLocaleString('ro-RO')}</div>
+                <div class="meta">${formatDateTime(p.created_at)}</div>
             </div>
-            <div class="amount">-${formatMoney(p.amount_minor, p.currency)}</div>
+            <div class="amount">${escapeHTML(t('dynamic.payment_amount', '-'))}${formatMoney(p.amount_minor, p.currency)}</div>
         </div>
     `).join('');
 }
@@ -2955,7 +3111,7 @@ function wirePaymentsForm() {
 
         ibanScanStatus.hidden = false;
         ibanScanStatus.className = 'field-hint';
-        ibanScanStatus.textContent = 'Se citește fișierul...';
+        ibanScanStatus.textContent = t('common.reading_file', 'Se citește fișierul...');
 
         const formData = new FormData();
         formData.append('file', file);
@@ -2974,10 +3130,10 @@ function wirePaymentsForm() {
                 ibanInput.value = result.iban;
                 ibanInput.dispatchEvent(new Event('input'));
                 ibanScanStatus.className = 'field-hint ocr-success';
-                ibanScanStatus.textContent = `IBAN citit: ${result.iban}`;
+                ibanScanStatus.textContent = t('payments.iban_read', 'IBAN citit: {iban}', { iban: result.iban });
             } else {
                 ibanScanStatus.className = 'field-hint ocr-warning';
-                ibanScanStatus.textContent = 'Nu am găsit un IBAN clar în fișier - introdu-l manual.';
+                ibanScanStatus.textContent = t('payments.iban_not_found_scan', 'Nu am găsit un IBAN clar în fișier - introdu-l manual.');
             }
         } catch (err) {
             ibanScanStatus.className = 'field-hint ocr-warning';
@@ -3221,7 +3377,7 @@ function wireFaceLoginPanel() {
             captureBtn.hidden = false;
             setFaceFlashlight(true);
         } catch {
-            errorEl.textContent = 'Nu s-a putut accesa camera. Verifică permisiunile browserului.';
+            errorEl.textContent = t('face_confirm.camera_error', 'Nu s-a putut accesa camera. Verifică permisiunile browserului.');
             errorEl.hidden = false;
         }
     });
@@ -3285,7 +3441,7 @@ async function refreshNotificationsBadge() {
 function renderNotifications(notifications) {
     const list = document.getElementById('notifications-list');
     if (notifications.length === 0) {
-        list.innerHTML = '<div class="empty-state">Nicio notificare încă.</div>';
+        list.innerHTML = `<div class="empty-state">${escapeHTML(t('common.no_notifications', 'Nicio notificare încă.'))}</div>`;
         return;
     }
     list.innerHTML = notifications.map(n => `
@@ -3310,7 +3466,7 @@ async function loadNotifications() {
             document.getElementById('notifications-badge').hidden = true;
         }
     } catch (err) {
-        list.innerHTML = `<div class="empty-state">Nu s-au putut încărca notificările: ${escapeHTML(err.message)}</div>`;
+        list.innerHTML = `<div class="empty-state">${escapeHTML(t('dynamic.load_notifications_error', 'Nu s-au putut încărca notificările: {message}', { message: err.message }))}</div>`;
     }
 }
 
@@ -3391,7 +3547,7 @@ function wireChangePasswordForm() {
         const confirmPassword = document.getElementById('new-password-profile-confirm').value;
 
         if (newPassword !== confirmPassword) {
-            errorEl.textContent = 'Parolele nu coincid.';
+            errorEl.textContent = t('recovery.password_mismatch', 'Parolele nu coincid.');
             errorEl.hidden = false;
             return;
         }
@@ -3401,7 +3557,7 @@ function wireChangePasswordForm() {
                 method: 'POST',
                 body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
             });
-            successEl.textContent = 'Parola a fost schimbată.';
+            successEl.textContent = t('profile.password_changed', 'Parola a fost schimbată.');
             successEl.hidden = false;
             form.reset();
         } catch (err) {
