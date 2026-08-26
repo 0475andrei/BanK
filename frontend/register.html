@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-i18n-title="registration.page_title">
 <head>
     <script>try { if (localStorage.getItem('bank_preferred_language') && localStorage.getItem('bank_preferred_language') !== 'ro') document.documentElement.classList.add('i18n-pending'); } catch (_) {}</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register - BanK</title>
+    <title data-i18n="registration.page_title">Register - BanK</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
@@ -33,7 +33,7 @@
                 <form id="register-form">
                     <div class="ocr-upload-box">
                         <label class="field-label" data-i18n="registration.ocr_label">Completare automată din buletin <span class="field-optional">(opțional)</span></label>
-                        <div class="file-dropzone" id="id-photo-dropzone" tabindex="0" role="button" aria-label="Încarcă poza buletinului">
+                        <div class="file-dropzone" id="id-photo-dropzone" tabindex="0" role="button" aria-label="Încarcă poza buletinului" data-i18n-aria-label="registration.upload_id">
                             <span class="file-dropzone-icon"><i data-lucide="paperclip"></i></span>
                             <span class="file-dropzone-text" id="id-photo-filename" data-i18n="registration.drop_id">Trage poza aici sau alege un fișier</span>
                             <input type="file" id="id_photo" accept="image/png" hidden>
@@ -58,7 +58,7 @@
                     <label class="field-label" for="password" data-i18n="registration.password">Password</label>
                     <div class="password-field-wrapper">
                         <input class="field-input" type="password" id="password" name="password" minlength="8" required autocomplete="new-password">
-                        <button type="button" class="password-toggle-btn" data-target="password" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
+                        <button type="button" class="password-toggle-btn" data-target="password" tabindex="-1" aria-label="Arată parola" data-i18n-aria-label="profile.show_password"><i data-lucide="eye"></i></button>
                     </div>
                     <p class="field-hint" data-i18n="registration.password_hint">At least 8 characters</p>
 
@@ -104,7 +104,7 @@
                     </div>
 
                     <div class="ocr-upload-box comodul-upload-box">
-                        <div class="file-dropzone" id="comodul-photo-dropzone" tabindex="0" role="button" aria-label="Încarcă poza buletinului">
+                        <div class="file-dropzone" id="comodul-photo-dropzone" tabindex="0" role="button" aria-label="Încarcă poza buletinului" data-i18n-aria-label="registration.upload_id">
                             <span class="file-dropzone-icon"><i data-lucide="paperclip"></i></span>
                             <span class="file-dropzone-text" id="comodul-photo-filename" data-i18n="registration.drop_id_optional">Trage poza buletinului aici sau alege un fișier (opțional)</span>
                             <input type="file" id="comodul_photo" accept="image/png" hidden>
@@ -113,6 +113,7 @@
 
                     <div class="chat-input-area">
                         <input type="text" class="chat-input" id="comodul-input" data-i18n-placeholder="registration.chat_placeholder" placeholder="Scrie un mesaj...">
+                        <button class="card-eye-btn chat-mic-btn" id="comodul-mic-btn" type="button" title="Dictează mesajul" aria-label="Dictează mesajul" aria-pressed="false" data-i18n-title="chat.voice_input_label" data-i18n-aria-label="chat.voice_input_label"><i data-lucide="mic"></i></button>
                         <button class="btn-send" id="comodul-send-btn" type="button">➤</button>
                     </div>
                 </div>
@@ -155,7 +156,7 @@
             });
             const body = await res.json();
             if (!res.ok) {
-                throw new Error(body?.error?.message || `Cererea a eșuat (${res.status})`);
+                throw new Error(body?.error?.message || t("registration.request_failed", "Cererea a eșuat ({status})", { status: res.status }));
             }
             return body;
         }
@@ -249,7 +250,7 @@
 
         wireDropzone("id-photo-dropzone", "id_photo", "id-photo-filename", async (file) => {
             const statusEl = document.getElementById("ocr-status");
-            statusEl.textContent = "Se extrag datele din buletin...";
+            statusEl.textContent = t("registration.ocr_extracting", "Se extrag datele din buletin...");
             statusEl.className = "field-hint";
 
             try {
@@ -264,15 +265,15 @@
                 }
                 if (body.low_confidence) {
                     statusEl.textContent = filledCount > 0
-                        ? `Poza pare neclară - am completat doar ${filledCount}/${autofillFields.length} câmpuri și e posibil să fie greșite. Verifică-le cu atenție sau încarcă o poză mai clară.`
-                        : "Poza pare neclară și nu am putut citi datele. Încearcă o poză mai clară a buletinului sau completează manual.";
+                        ? t("registration.ocr_low_confidence_partial", "Poza pare neclară - am completat doar {filled}/{total} câmpuri și e posibil să fie greșite. Verifică-le cu atenție sau încarcă o poză mai clară.", { filled: filledCount, total: autofillFields.length })
+                        : t("registration.ocr_low_confidence_none", "Poza pare neclară și nu am putut citi datele. Încearcă o poză mai clară a buletinului sau completează manual.");
                     statusEl.className = "field-hint ocr-warning";
                 } else if (filledCount > 0) {
                     statusEl.textContent =
-                        `Date completate din buletin (${filledCount}/${autofillFields.length} câmpuri) - verifică și corectează dacă e nevoie.`;
+                        t("registration.ocr_filled", "Date completate din buletin ({filled}/{total} câmpuri) - verifică și corectează dacă e nevoie.", { filled: filledCount, total: autofillFields.length });
                     statusEl.className = "field-hint ocr-success";
                 } else {
-                    statusEl.textContent = "Nu am putut citi datele din poză. Completează manual.";
+                    statusEl.textContent = t("registration.ocr_failed", "Nu am putut citi datele din poză. Completează manual.");
                     statusEl.className = "field-hint ocr-warning";
                 }
             } catch (err) {
@@ -346,12 +347,12 @@
 
         function renderConfirmationCard(fields) {
             const rows = [
-                ["Nume", `${fields.first_name || ""} ${fields.last_name || ""}`.trim()],
-                ["Email", fields.email],
-                ["CNP", fields.national_id],
-                ["Telefon", fields.phone || "—"],
-                ["Adresă", fields.address || "—"],
-                ["Cod referral", fields.referral_code || "—"],
+                [t("registration.summary_name", "Nume"), `${fields.first_name || ""} ${fields.last_name || ""}`.trim()],
+                [t("common.Email", "Email"), fields.email],
+                [t("registration.field_national_id_label", "CNP"), fields.national_id],
+                [t("registration.summary_phone", "Telefon"), fields.phone || "—"],
+                [t("registration.summary_address", "Adresă"), fields.address || "—"],
+                [t("registration.summary_referral", "Cod referral"), fields.referral_code || "—"],
             ];
             const summaryHTML = rows
                 .map(([label, value]) => `<div><strong>${escapeHTML(label)}:</strong> ${escapeHTML(String(value || "—"))}</div>`)
@@ -366,14 +367,14 @@
                 html: `
                     <div class="human-in-the-loop-card">
                         <div class="action-proposal">
-                            <strong>Confirmare date cont nou</strong>
+                            <strong>${escapeHTML(t("registration.confirm_heading", "Confirmare date cont nou"))}</strong>
                             <p style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px;">${summaryHTML}</p>
                         </div>
                         <label class="field-label" for="comodul-password-input">Parolă (minim 8 caractere)</label>
                         <input class="field-input" type="password" id="comodul-password-input" minlength="8" autocomplete="new-password" style="margin-bottom: 8px;">
                         <div class="auth-error comodul-password-error" hidden></div>
                         <div class="hitl-actions">
-                            <button class="btn btn-primary" id="comodul-confirm-btn">Confirmă și creează contul</button>
+                            <button class="btn btn-primary" id="comodul-confirm-btn">${escapeHTML(t("registration.confirm_button", "Confirmă și creează contul"))}</button>
                         </div>
                     </div>
                 `,
@@ -399,7 +400,7 @@
                     if (err.code === "email_already_registered" || err.code === "national_id_already_registered") {
                         showExistingAccountFallback(card, fields, err.code);
                     } else {
-                        card.innerHTML = `<div style="color: var(--expense-red);">Nu am putut crea contul: ${escapeHTML(err.message)}. Poți continua conversația ca să corectezi.</div>`;
+                        card.innerHTML = `<div style="color: var(--expense-red);">${escapeHTML(t("registration.create_account_failed", "Nu am putut crea contul: {message}. Poți continua conversația ca să corectezi.", { message: err.message }))}</div>`;
                     }
                 }
             });
@@ -415,12 +416,12 @@
         function accountConflictCardHTML(reason, email) {
             return `
                 <div class="action-proposal">
-                    <strong>Cont existent</strong>
-                    <p>${escapeHTML(reason)} Dacă e contul tău, te pot ajuta să-ți resetezi parola ca să te poți autentifica.</p>
+                    <strong>${escapeHTML(t("registration.existing_account_heading", "Cont existent"))}</strong>
+                    <p>${escapeHTML(reason)} ${escapeHTML(t("registration.existing_account_hint", "Dacă e contul tău, te pot ajuta să-ți resetezi parola ca să te poți autentifica."))}</p>
                 </div>
                 <div class="hitl-actions">
-                    <a class="btn btn-secondary" href="login.html">Înapoi la login</a>
-                    <a class="btn btn-primary" href="forgot-password.html?email=${encodeURIComponent(email)}">Resetează parola</a>
+                    <a class="btn btn-secondary" href="login.html">${escapeHTML(t("registration.back_to_login", "Înapoi la login"))}</a>
+                    <a class="btn btn-primary" href="forgot-password.html?email=${encodeURIComponent(email)}">${escapeHTML(t("recovery.submit", "Resetează parola"))}</a>
                 </div>
             `;
         }
@@ -428,8 +429,8 @@
         /** Late path: registration was actually attempted and rejected. */
         function showExistingAccountFallback(card, fields, errorCode) {
             const reason = errorCode === "email_already_registered"
-                ? "Există deja un cont cu acest email."
-                : "Acest CNP este deja asociat unui cont existent.";
+                ? t("registration.email_taken", "Există deja un cont cu acest email.")
+                : t("registration.national_id_taken", "Acest CNP este deja asociat unui cont existent.");
             card.innerHTML = accountConflictCardHTML(reason, fields.email);
         }
 
@@ -438,8 +439,8 @@
          * existing confirmation card (there isn't one yet). */
         function renderAccountConflictBubble(conflict) {
             const reason = conflict.matched_field === "email"
-                ? "Există deja un cont cu acest email."
-                : "Acest CNP este deja asociat unui cont existent.";
+                ? t("registration.email_taken", "Există deja un cont cu acest email.")
+                : t("registration.national_id_taken", "Acest CNP este deja asociat unui cont existent.");
             appendComodulBubble("ai", "", {
                 html: `<div class="human-in-the-loop-card">${accountConflictCardHTML(reason, conflict.email)}</div>`,
             });
@@ -462,7 +463,7 @@
             const typingBubble = appendComodulBubble("ai", "", {
                 bubbleClass: "typing",
                 html:
-                    '<div class="typing-label">Comodul scrie...</div>' +
+                    `<div class="typing-label">${escapeHTML(t("registration.chat_typing", "Comodul scrie..."))}</div>` +
                     '<div class="typing-dots"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>',
             });
 
@@ -482,7 +483,7 @@
                 }
             } catch (err) {
                 typingBubble.remove();
-                appendComodulBubble("ai", `A apărut o problemă: ${err.message}`, { bubbleClass: "error" });
+                appendComodulBubble("ai", t("registration.chat_error", "A apărut o problemă: {message}", { message: err.message }), { bubbleClass: "error" });
             } finally {
                 sendBtn.disabled = false;
                 input.focus();
@@ -501,13 +502,86 @@
             }
         });
 
+        /** Maps the app's short language code (language.js sets document.documentElement.lang
+         * to one of these) to the BCP-47 locale the SpeechRecognition API expects. Mirrors
+         * the same table in app.js for the main dashboard chat. */
+        const SPEECH_RECOGNITION_LOCALES = {
+            ro: "ro-RO", en: "en-US", uk: "uk-UA", hu: "hu-HU", tr: "tr-TR",
+            it: "it-IT", es: "es-ES", fr: "fr-FR", de: "de-DE",
+        };
+
+        /** Lets the user dictate into Comodul's chat input using the browser's native
+         * SpeechRecognition API - same behaviour as the main dashboard chat's mic button
+         * (see wireChatMic in app.js). Hides the button on browsers without the API. */
+        function wireComodulMic() {
+            const micBtn = document.getElementById("comodul-mic-btn");
+            const input = document.getElementById("comodul-input");
+            if (!micBtn || !input) return;
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                micBtn.hidden = true;
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = true;
+
+            let listening = false;
+            let baseText = "";
+
+            const stopListening = () => {
+                listening = false;
+                micBtn.classList.remove("listening");
+                micBtn.setAttribute("aria-pressed", "false");
+            };
+
+            recognition.addEventListener("start", () => {
+                listening = true;
+                micBtn.classList.add("listening");
+                micBtn.setAttribute("aria-pressed", "true");
+                baseText = input.value.trim() ? `${input.value.trim()} ` : "";
+            });
+
+            recognition.addEventListener("result", (event) => {
+                let transcript = "";
+                for (let i = 0; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                input.value = baseText + transcript;
+            });
+
+            recognition.addEventListener("error", (event) => {
+                stopListening();
+                if (event.error === "no-speech" || event.error === "aborted") return;
+                appendComodulBubble("ai", t("chat.voice_input_error", "Voice input failed. Please try again or type your message."), { bubbleClass: "error" });
+            });
+
+            recognition.addEventListener("end", stopListening);
+
+            micBtn.addEventListener("click", () => {
+                if (listening) {
+                    recognition.stop();
+                    return;
+                }
+                recognition.lang = SPEECH_RECOGNITION_LOCALES[document.documentElement.lang] || "en-US";
+                try {
+                    recognition.start();
+                } catch {
+                    /* start() throws if recognition is already running; nothing to do. */
+                }
+            });
+        }
+        wireComodulMic();
+
         wireDropzone("comodul-photo-dropzone", "comodul_photo", "comodul-photo-filename", async (file) => {
             appendComodulBubble("user", "", {
                 html: `<span class="attachment-icon"><i data-lucide="paperclip"></i></span> ${escapeHTML(file.name)}`,
             });
             const typingBubble = appendComodulBubble("ai", "", {
                 bubbleClass: "typing",
-                html: '<div class="typing-label">Citesc poza...</div>',
+                html: `<div class="typing-label">${escapeHTML(t("registration.reading_photo", "Citesc poza..."))}</div>`,
             });
 
             let extracted;
@@ -515,25 +589,25 @@
                 extracted = await extractIdPhoto(file);
             } catch (err) {
                 typingBubble.remove();
-                appendComodulBubble("ai", `Nu am putut citi poza: ${err.message}. Putem continua și manual, prin chat.`, { bubbleClass: "error" });
+                appendComodulBubble("ai", t("registration.photo_read_failed", "Nu am putut citi poza: {message}. Putem continua și manual, prin chat.", { message: err.message }), { bubbleClass: "error" });
                 return;
             }
             typingBubble.remove();
 
             const readFields = [
-                extracted.last_name && `Nume: ${extracted.last_name}`,
-                extracted.first_name && `Prenume: ${extracted.first_name}`,
-                extracted.national_id && `CNP: ${extracted.national_id}`,
-                extracted.address && `Adresă: ${extracted.address}`,
+                extracted.last_name && t("registration.field_last_name", "Nume: {value}", { value: extracted.last_name }),
+                extracted.first_name && t("registration.field_first_name", "Prenume: {value}", { value: extracted.first_name }),
+                extracted.national_id && t("registration.field_national_id", "CNP: {value}", { value: extracted.national_id }),
+                extracted.address && t("registration.field_address", "Adresă: {value}", { value: extracted.address }),
             ].filter(Boolean);
 
             let message = readFields.length
-                ? `Am încărcat o poză a buletinului. Datele citite automat sunt: ${readFields.join(", ")}.`
-                : "Am încărcat o poză a buletinului, dar nu s-a putut citi nimic din ea.";
+                ? t("registration.photo_uploaded_fields", "Am încărcat o poză a buletinului. Datele citite automat sunt: {fields}.", { fields: readFields.join(", ") })
+                : t("registration.photo_uploaded_empty", "Am încărcat o poză a buletinului, dar nu s-a putut citi nimic din ea.");
             if (extracted.low_confidence) {
                 message += readFields.length
-                    ? " Poza pare neclară, deci verifică-mi te rog dacă datele astea sunt corecte sau spune-mi dacă vrei să încarc o poză mai clară."
-                    : " Poza pare neclară - poate ar trebui să încarc alta, mai clară.";
+                    ? t("registration.photo_low_confidence_hint", " Poza pare neclară, deci verifică-mi te rog dacă datele astea sunt corecte sau spune-mi dacă vrei să încarc o poză mai clară.")
+                    : t("registration.photo_low_confidence_hint_empty", " Poza pare neclară - poate ar trebui să încarc alta, mai clară.");
             }
 
             await sendComodulMessage(message);

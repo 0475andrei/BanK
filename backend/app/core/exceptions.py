@@ -171,6 +171,18 @@ class InvalidResetCodeError(AppError):
     default_message = "Invalid or expired reset code."
 
 
+class InvalidSigningCodeError(AppError):
+    """The OTP half of an admin-document signature (see
+    app/modules/esign/service.py::request_signing_code /
+    confirm_admin_document) was wrong, expired, already used, or never
+    requested. Deliberately as vague as InvalidResetCodeError - which of
+    those it was is not useful to an attacker guessing codes."""
+
+    status_code = 400
+    error_code = "invalid_signing_code"
+    default_message = "Invalid or expired signing code."
+
+
 class FaceConfirmationRequiredError(AppError):
     """This amount needs step-up face auth first - see
     app/modules/face_auth::enforce_face_confirmation. 428 Precondition
@@ -258,6 +270,17 @@ class AIProviderError(AppError):
     status_code = 502
     error_code = "ai_provider_error"
     default_message = "AI model request failed"
+
+
+class ESignUnavailableError(AppError):
+    """ESIGN_PRIVATE_KEY is unset or unusable - see
+    app/modules/esign/keys.py::_load_private_key. Fails closed rather than
+    generating a throwaway key at import time, same reasoning as
+    AIServiceUnavailableError."""
+
+    status_code = 503
+    error_code = "esign_unavailable"
+    default_message = "Electronic signing is not available right now."
 
 
 class AIProviderMisconfiguredError(AppError):

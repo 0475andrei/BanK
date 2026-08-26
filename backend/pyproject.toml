@@ -14,16 +14,24 @@ dependencies = [
     "openai>=1.40",
     # Required by FastAPI's UploadFile/File(...) to parse multipart/form-data.
     "python-multipart>=0.0.12",
-    # Talks to vision-service (see app/core/vision_client.py) - OCR, PDF
-    # text and face embeddings all run in that container now, which is why
-    # pytesseract/Pillow/pymupdf/face-recognition are no longer here.
+    # Talks to vision-service (see app/core/vision_client.py) - OCR and
+    # face embeddings run in that container, which is why pytesseract/
+    # face-recognition are not here.
     "httpx>=0.27",
+    # PDF GENERATION (app/modules/admin/document_template.py) - composing a
+    # new PDF from scratch, not reading one, so this doesn't need the native
+    # OCR toolchain that motivated moving pymupdf's other use (text
+    # extraction, still in vision-service) out of this image.
+    "pymupdf>=1.24",
     # app/ai/knowledge: RAG ingestion for the docs agent. Document
     # Intelligence extracts structured text (tables as rows, not flattened
     # prose) from a PDF; embeddings + storage reuse Azure OpenAI (via
     # `openai` above) and Supabase's pgvector (via `supabase` above) - no
     # extra dependency needed for either of those two.
     "azure-ai-documentintelligence>=1.0.0",
+    # e-Sign (app/modules/esign): Ed25519 detached signatures over uploaded
+    # documents. Not already a transitive dependency of anything above.
+    "cryptography>=43",
 ]
 
 [project.optional-dependencies]
@@ -33,13 +41,10 @@ dev = [
     "httpx>=0.27",
     "ruff>=0.6",
     "mypy>=1.11",
-    # TEST INPUT GENERATION ONLY - not used by any code under app/.
-    # tests/integration/test_iban_ocr_api.py, test_documents_api.py and
-    # test_chat_with_document.py synthesize real PNGs/PDFs to feed the
-    # upload endpoints, rather than stubbing the extraction. The extraction
-    # itself now happens in vision-service, so those three tests need it
-    # reachable (it is, under docker compose).
-    "pymupdf>=1.24",
+    # TEST INPUT GENERATION ONLY - not used by any code under app/. Renders
+    # PNGs to feed OCR-adjacent upload endpoints; pymupdf itself moved to the
+    # main dependency list above once app/modules/admin/document_template.py
+    # started using it for real.
     "Pillow>=10.4",
 ]
 

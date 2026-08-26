@@ -123,6 +123,19 @@ class Settings(BaseSettings):
     # failing open - see vision/app/main.py::require_service_token.
     VISION_SERVICE_TOKEN: str | None = None
 
+    # ------------------------------------------------------------------
+    # e-Sign (app/modules/esign) - Ed25519 detached signatures.
+    # ------------------------------------------------------------------
+    # Base64-encoded 32-byte Ed25519 seed. Generate one with:
+    #   python -c "import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())"
+    # Unset means signing fails closed (require_esign() below) rather than
+    # generating a throwaway key at import time - a signature must be
+    # traceable to a key an operator actually chose to keep.
+    ESIGN_PRIVATE_KEY: str | None = None
+    # Identifies which key signed a given row (signatures.key_id) so a key
+    # can be rotated without invalidating signatures made under the old one.
+    ESIGN_KEY_ID: str = "esign-dev-1"
+
     @field_validator("AZURE_OPENAI_ENDPOINT")
     @classmethod
     def _normalise_endpoint(cls, value: str | None) -> str | None:
@@ -232,6 +245,17 @@ class Settings(BaseSettings):
             endpoint=self.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
             key=self.AZURE_DOCUMENT_INTELLIGENCE_KEY,
         )
+
+    def require_esign(self) -> str:
+        """The raw ESIGN_PRIVATE_KEY value, proven present. Callers still do
+        their own base64/length validation - this only enforces "configured
+        at all", the same fail-closed shape as require_azure()."""
+        if not self.ESIGN_PRIVATE_KEY:
+            raise ConfigurationError(
+                "Missing ESIGN_PRIVATE_KEY. Add it to "
+                f"{_BACKEND_DIR / '.env'} (see .env.example)."
+            )
+        return self.ESIGN_PRIVATE_KEY
 
 
 class AzureOpenAIConfig(BaseSettings):

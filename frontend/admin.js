@@ -378,6 +378,19 @@ async function loadUserDetail(userId) {
             ${field('Rol', user.role)}
             ${field('Creat', formatDateTime(user.created_at))}
         </div>
+        <h3 class="admin-subheading">Trimite document spre semnare</h3>
+        <form id="admin-send-document-form" class="admin-send-document-form">
+            <input type="text" class="field-input" id="admin-doc-title" placeholder="Titlu document" maxlength="200" required>
+            <textarea class="field-input" id="admin-doc-body" placeholder="Conținutul documentului..." maxlength="3000" rows="4" required></textarea>
+            <button type="submit" class="admin-mini-btn">Generează și trimite</button>
+            <p class="field-hint" id="admin-send-document-status" hidden></p>
+        </form>
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead><tr><th>Document</th><th>Trimis</th><th>Stare</th><th></th></tr></thead>
+                <tbody id="admin-sent-documents-body"></tbody>
+            </table>
+        </div>
         <h3 class="admin-subheading">Conturi</h3>
         <div class="admin-table-wrap">
             <table class="admin-table">
@@ -442,9 +455,39 @@ async function loadUserDetail(userId) {
         });
     }
 
+    document.getElementById('admin-send-document-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const statusEl = document.getElementById('admin-send-document-status');
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        const title = document.getElementById('admin-doc-title').value.trim();
+        const body = document.getElementById('admin-doc-body').value.trim();
+        if (!title || !body) return;
+
+        submitBtn.disabled = true;
+        statusEl.hidden = true;
+        try {
+            const doc = await apiFetch(`/admin/users/${encodeURIComponent(userId)}/documents`, {
+                method: 'POST',
+                body: JSON.stringify({ title, body }),
+            });
+            e.target.reset();
+            statusEl.hidden = false;
+            statusEl.className = 'field-hint';
+            statusEl.textContent = `Document trimis: ${doc.filename}`;
+            await loadSentDocuments(userId);
+        } catch (err) {
+            statusEl.hidden = false;
+            statusEl.className = 'field-hint ocr-warning';
+            statusEl.textContent = `Trimiterea a eșuat: ${err.message}`;
+        } finally {
+            submitBtn.disabled = false;
+        }
+    });
+
     document.getElementById('admin-tx-card')
         .addEventListener('change', (e) => loadUserTransactions(userId, e.target.value));
     await loadUserTransactions(userId, '');
+    await loadSentDocuments(userId);
 
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -495,6 +538,56 @@ async function loadUserTransactions(userId, cardId) {
             </tr>`;
         })
         .join('');
+}
+
+async function loadSentDocuments(userId) {
+    if (userId !== openUserId) return;
+
+    const table = document.getElementById('admin-sent-documents-body')?.closest('table');
+    if (!table) return;
+
+    let documents;
+    try {
+        documents = await apiFetch(`/admin/users/${encodeURIComponent(userId)}/documents`);
+    } catch (err) {
+        showAdminError(`Documentele trimise nu au putut fi încărcate: ${err.message}`);
+        return;
+    }
+    if (userId !== openUserId) return;
+
+    if (!documents.length) {
+        emptyRow(table, 4, 'Niciun document trimis încă.');
+        return;
+    }
+
+    const tbody = table.querySelector('tbody');
+    tbody.innerHTML = documents.map((doc) => `
+        <tr>
+            <td>${esc(doc.filename)}</td>
+            <td class="nowrap">${esc(formatDateTime(doc.created_at))}</td>
+            <td class="nowrap">${doc.signed
+                ? '<span class="admin-badge delivered">semnat</span>'
+                : '<span class="admin-badge">nesemnat</span>'}</td>
+            <td class="nowrap"><button type="button" class="admin-mini-btn" data-doc-id="${esc(doc.id)}">Previzualizează</button></td>
+        </tr>`).join('');
+
+    tbody.querySelectorAll('button[data-doc-id]').forEach((btn) => {
+        btn.addEventListener('click', () => previewDocumentPdf(`/admin/documents/${btn.dataset.docId}/pdf`));
+    });
+}
+
+/** Opens a document's PDF in a new tab - fetched as an authenticated blob,
+ * same reasoning as previewDocumentPdf() in app.js (a plain link would
+ * cross origins without reliably carrying the session cookie). */
+async function previewDocumentPdf(path) {
+    try {
+        const res = await fetch(`${API_BASE_URL}${path}`, { credentials: 'include' });
+        if (!res.ok) throw new Error('Previzualizarea documentului a eșuat.');
+        const blob = await res.blob();
+        window.open(URL.createObjectURL(blob), '_blank');
+    } catch (err) {
+        showAdminError(err.message || 'Previzualizarea documentului a eșuat.');
+    }
 }
 
 // ---------------------------------------------------------------------------

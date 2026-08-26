@@ -11,6 +11,7 @@ per route.
 import uuid
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from supabase import AsyncClient
 
 from app.core.dependencies import require_admin
@@ -20,6 +21,8 @@ from app.modules.admin.schemas import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
     AdminCardOrderRead,
+    AdminDocumentSendRequest,
+    AdminDocumentSent,
     AdminIdentity,
     AdminStats,
     AdminTransaction,
@@ -31,6 +34,7 @@ from app.modules.admin.schemas import (
     UserRoleUpdate,
 )
 from app.modules.card_orders.models import CardOrderStatus
+from app.modules.documents.schemas import DocumentToSign
 from app.modules.users.schemas import UserRead
 
 router = APIRouter(dependencies=[Depends(require_admin)])
@@ -84,6 +88,46 @@ async def set_user_blocked(
     supabase: AsyncClient = Depends(get_supabase),
 ) -> dict:
     return await service.set_user_blocked(supabase, admin, user_id, payload.blocked)
+
+
+@router.post("/users/{user_id}/documents", response_model=AdminDocumentSent)
+async def send_document(
+    user_id: uuid.UUID,
+    payload: AdminDocumentSendRequest,
+    admin: UserRead = Depends(require_admin),
+    supabase: AsyncClient = Depends(get_supabase),
+) -> dict:
+    """Generates a PDF from `payload` + the target user's own profile data
+    and attaches it to a conversation of theirs - see
+    service.generate_and_send_document. The user signs it themselves, later,
+    from "Documente de semnat" (GET /documents/to-sign), through the OTP+Face
+    confirm path (see app/modules/esign)."""
+    return await service.generate_and_send_document(
+        supabase, admin, user_id, title=payload.title, body=payload.body
+    )
+
+
+@router.get("/users/{user_id}/documents", response_model=list[DocumentToSign])
+async def list_documents_for_user(
+    user_id: uuid.UUID,
+    supabase: AsyncClient = Depends(get_supabase),
+) -> list[dict]:
+    """Documents this admin (or another admin) has sent to the user, with
+    signed status - "Documente trimise" in the user-detail panel."""
+    return await service.list_documents_for_user(supabase, user_id)
+
+
+@router.get("/documents/{document_id}/pdf")
+async def get_document_pdf(
+    document_id: uuid.UUID,
+    supabase: AsyncClient = Depends(get_supabase),
+) -> Response:
+    """Raw PDF bytes for previewing a SENT document - admin-issued only,
+    never a user's own upload (see service.get_admin_issued_document_pdf).
+    Fetched as a blob by the frontend, same as the user-facing
+    GET /documents/{id}/pdf - see previewDocumentPdf() in admin.js."""
+    document = await service.get_admin_issued_document_pdf(supabase, document_id)
+    return Response(content=document["content"], media_type="application/pdf")
 
 
 @router.get("/users/{user_id}/transactions", response_model=list[AdminTransaction])

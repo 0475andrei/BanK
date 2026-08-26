@@ -4,7 +4,8 @@ The AI layer never executes a write directly (see app/ai/tools/propose_tools.py
 and the `read_only` flag on app/ai/tools/base.py::Tool) - a propose_* tool only
 ever inserts a `pending` row here. Only `confirm_proposal`, after verifying the
 caller's step-up credential SERVER-SIDE, calls the real service function
-(create_transfer, create_payment, open_account, close_account, cancel_card).
+(create_transfer, create_payment, open_account, close_account, cancel_card,
+sign_document).
 
 THE RULE, same as everywhere else identity/auth is involved: never trust the
 frontend's "the user proved who they are" - the password is checked against
@@ -143,18 +144,13 @@ async def get_proposal(supabase: AsyncClient, user: UserRead, proposal_id: str) 
     return proposal
 
 
-async def confirm_proposal(
-    supabase: AsyncClient,
-    user: UserRead,
-    proposal_id: str,
-    auth_method: str,
-    credential: str,
-) -> dict:
-    proposal = await get_proposal(supabase, user, proposal_id)
+async def ensure_pending_and_not_expired(supabase: AsyncClient, proposal: dict) -> None:
+    """The status + expiry gate, shared by every way a proposal can be
+    confirmed - the ordinary single-credential path below, and esign's
+    OTP+Face path for admin-issued documents (confirm_admin_document).
 
-    # Status gate - prevents double-execution on a double-click or a replayed
-    # request. Checked BEFORE expiry so an already-decided proposal reports
-    # its real state rather than "expired" if it happens to also be old.
+    Status is checked BEFORE expiry so an already-decided proposal reports
+    its real state rather than "expired" if it happens to also be old."""
     if proposal["status"] != "pending":
         raise ProposalNotPendingError()
 
@@ -167,6 +163,36 @@ async def confirm_proposal(
             .execute()
         )
         raise ProposalExpiredError()
+
+
+async def mark_confirmed(supabase: AsyncClient, proposal: dict, result: dict) -> dict:
+    """The final state transition, shared for the same reason as
+    ensure_pending_and_not_expired above - only ever called after whichever
+    step-up check applies has already succeeded."""
+    updated = (
+        await supabase.table("proposals")
+        .update(
+            {
+                "status": "confirmed",
+                "confirmed_at": datetime.now(UTC).isoformat(),
+                "result": result,
+            }
+        )
+        .eq("id", proposal["id"])
+        .execute()
+    )
+    return updated.data[0]
+
+
+async def confirm_proposal(
+    supabase: AsyncClient,
+    user: UserRead,
+    proposal_id: str,
+    auth_method: str,
+    credential: str,
+) -> dict:
+    proposal = await get_proposal(supabase, user, proposal_id)
+    await ensure_pending_and_not_expired(supabase, proposal)
 
     # THE critical security gate. Only reached with a still-pending, not-yet-
     # expired proposal; only past this point does anything real execute.
@@ -205,21 +231,8 @@ async def confirm_proposal(
         raise ValidationError("Metodă de autentificare necunoscută.")
 
     await _clear_confirm_attempts(supabase, str(user.id), proposal["id"])
-    result = await _execute(supabase, user, proposal)
-
-    updated = (
-        await supabase.table("proposals")
-        .update(
-            {
-                "status": "confirmed",
-                "confirmed_at": datetime.now(UTC).isoformat(),
-                "result": result,
-            }
-        )
-        .eq("id", proposal["id"])
-        .execute()
-    )
-    return updated.data[0]
+    result = await _execute(supabase, user, proposal, auth_method)
+    return await mark_confirmed(supabase, proposal, result)
 
 
 async def reject_proposal(supabase: AsyncClient, user: UserRead, proposal_id: str) -> dict:
@@ -236,7 +249,9 @@ async def reject_proposal(supabase: AsyncClient, user: UserRead, proposal_id: st
     return updated.data[0]
 
 
-async def _execute(supabase: AsyncClient, user: UserRead, proposal: dict) -> dict:
+async def _execute(
+    supabase: AsyncClient, user: UserRead, proposal: dict, auth_method: str
+) -> dict:
     """Dispatch on proposal_type. Each branch calls the REAL service function,
     with `proposal_pre_authorized=True` where that parameter exists - the
     step-up check above already stood in for the amount/new-recipient face
@@ -245,7 +260,13 @@ async def _execute(supabase: AsyncClient, user: UserRead, proposal: dict) -> dic
     The proposal's own id is the idempotency key: a proposal is confirmed at
     most once (the status gate in confirm_proposal enforces that), so it is
     already a natural, stable, unique key for the underlying write - no
-    separate key generation needed."""
+    separate key generation needed.
+
+    `auth_method` is only used by "sign_document" - it becomes part of the
+    signature's canonical payload (which credential kind proved identity for
+    THIS signature is part of what the signature attests to). No other
+    branch needs it: a transfer/payment/etc. doesn't record how the user
+    authenticated, only that confirm_proposal already required it."""
     proposal_type = proposal["proposal_type"]
     payload = proposal["payload"]
     idempotency_key = str(proposal["id"])
@@ -290,5 +311,18 @@ async def _execute(supabase: AsyncClient, user: UserRead, proposal: dict) -> dic
 
     if proposal_type == "cancel_card":
         return await cancel_card(supabase, user, uuid.UUID(payload["card_id"]))
+
+    if proposal_type == "sign_document":
+        from app.modules.esign.service import sign_document
+
+        return await sign_document(
+            supabase,
+            user,
+            proposal,
+            document_id=payload["document_id"],
+            intent=payload["intent"],
+            auth_method=auth_method,
+            expected_document_sha256=payload["document_sha256"],
+        )
 
     raise ValueError(f"Unknown proposal_type: {proposal_type!r}")
