@@ -113,6 +113,7 @@
 
                     <div class="chat-input-area">
                         <input type="text" class="chat-input" id="comodul-input" data-i18n-placeholder="registration.chat_placeholder" placeholder="Scrie un mesaj...">
+                        <button class="card-eye-btn chat-mic-btn" id="comodul-mic-btn" type="button" title="Dictează mesajul" aria-label="Dictează mesajul" aria-pressed="false" data-i18n-title="chat.voice_input_label" data-i18n-aria-label="chat.voice_input_label"><i data-lucide="mic"></i></button>
                         <button class="btn-send" id="comodul-send-btn" type="button">➤</button>
                     </div>
                 </div>
@@ -481,6 +482,79 @@
                 if (message) sendComodulMessage(message);
             }
         });
+
+        /** Maps the app's short language code (language.js sets document.documentElement.lang
+         * to one of these) to the BCP-47 locale the SpeechRecognition API expects. Mirrors
+         * the same table in app.js for the main dashboard chat. */
+        const SPEECH_RECOGNITION_LOCALES = {
+            ro: "ro-RO", en: "en-US", uk: "uk-UA", hu: "hu-HU", tr: "tr-TR",
+            it: "it-IT", es: "es-ES", fr: "fr-FR", de: "de-DE",
+        };
+
+        /** Lets the user dictate into Comodul's chat input using the browser's native
+         * SpeechRecognition API - same behaviour as the main dashboard chat's mic button
+         * (see wireChatMic in app.js). Hides the button on browsers without the API. */
+        function wireComodulMic() {
+            const micBtn = document.getElementById("comodul-mic-btn");
+            const input = document.getElementById("comodul-input");
+            if (!micBtn || !input) return;
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                micBtn.hidden = true;
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = true;
+
+            let listening = false;
+            let baseText = "";
+
+            const stopListening = () => {
+                listening = false;
+                micBtn.classList.remove("listening");
+                micBtn.setAttribute("aria-pressed", "false");
+            };
+
+            recognition.addEventListener("start", () => {
+                listening = true;
+                micBtn.classList.add("listening");
+                micBtn.setAttribute("aria-pressed", "true");
+                baseText = input.value.trim() ? `${input.value.trim()} ` : "";
+            });
+
+            recognition.addEventListener("result", (event) => {
+                let transcript = "";
+                for (let i = 0; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                input.value = baseText + transcript;
+            });
+
+            recognition.addEventListener("error", (event) => {
+                stopListening();
+                if (event.error === "no-speech" || event.error === "aborted") return;
+                appendComodulBubble("ai", t("chat.voice_input_error", "Voice input failed. Please try again or type your message."), { bubbleClass: "error" });
+            });
+
+            recognition.addEventListener("end", stopListening);
+
+            micBtn.addEventListener("click", () => {
+                if (listening) {
+                    recognition.stop();
+                    return;
+                }
+                recognition.lang = SPEECH_RECOGNITION_LOCALES[document.documentElement.lang] || "en-US";
+                try {
+                    recognition.start();
+                } catch {
+                    /* start() throws if recognition is already running; nothing to do. */
+                }
+            });
+        }
+        wireComodulMic();
 
         wireDropzone("comodul-photo-dropzone", "comodul_photo", "comodul-photo-filename", async (file) => {
             appendComodulBubble("user", "", {
