@@ -25,6 +25,22 @@ _SUFFIX_BY_CONTENT_TYPE = {
     "application/pdf": ".pdf",
 }
 
+#: The real file signature for each accepted Content-Type, checked in
+#: addition to the client-supplied header - same defence-in-depth as
+#: documents/extractor.py::validate_pdf_magic_bytes. Keyed the same way as
+#: `_SUFFIX_BY_CONTENT_TYPE` above, so a Content-Type that passed that
+#: lookup is guaranteed to have a magic entry here too.
+_MAGIC_BY_CONTENT_TYPE = {
+    "image/png": b"\x89PNG\r\n\x1a\n",
+    "image/jpeg": b"\xff\xd8\xff",
+    "application/pdf": b"%PDF-",
+}
+
+
+def _validate_magic_bytes(content: bytes, content_type: str) -> None:
+    if not content.startswith(_MAGIC_BY_CONTENT_TYPE[content_type]):
+        raise ValidationError("Fișierul nu corespunde tipului declarat.")
+
 
 @router.post("/extract", response_model=IbanOcrResult)
 async def extract(
@@ -40,6 +56,11 @@ async def extract(
         raise ValidationError("Uploaded file is empty.")
     if len(contents) > _MAX_UPLOAD_BYTES:
         raise ValidationError("File is too large (max 8 MB).")
+    # file.content_type is one of _SUFFIX_BY_CONTENT_TYPE's keys here (the
+    # `suffix is None` branch above already rejected anything else), so it
+    # is always present in _MAGIC_BY_CONTENT_TYPE too.
+    assert file.content_type is not None
+    _validate_magic_bytes(contents, file.content_type)
 
     try:
         # The suffix travels with the upload: vision-service picks its PDF

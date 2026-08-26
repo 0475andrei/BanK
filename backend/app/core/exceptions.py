@@ -152,6 +152,19 @@ class LoginRateLimitedError(AppError):
     default_message = "Too many failed login attempts. Try again later."
 
 
+class ProposalRateLimitedError(AppError):
+    """Too many wrong confirm attempts on one proposal (Step 16, item 5) -
+    see chat/proposals_service.py::confirm_proposal. Same shape as
+    LoginRateLimitedError, keyed on (proposal_id, user_id) instead of email:
+    the 10-minute proposal expiry bounds the window on its own, but without
+    this a single pending proposal could still absorb hundreds of guesses
+    per second."""
+
+    status_code = 429
+    error_code = "proposal_rate_limited"
+    default_message = "Prea multe încercări. Propunerea a fost blocată."
+
+
 class InvalidResetCodeError(AppError):
     status_code = 400
     error_code = "invalid_reset_code"

@@ -280,7 +280,12 @@ def requires_face_confirmation(amount_minor: int) -> bool:
 
 
 async def enforce_face_confirmation(
-    supabase: AsyncClient, user: UserRead, *, required: bool, token: str | None
+    supabase: AsyncClient,
+    user: UserRead,
+    *,
+    required: bool,
+    token: str | None,
+    require_enrolled: bool = False,
 ) -> None:
     """Single call site transfers/service.py and payments/service.py use
     before executing a money movement. `required` is the caller's decision -
@@ -296,7 +301,20 @@ async def enforce_face_confirmation(
     This used to no-op for a user with no Face ID enrolled, treating it as
     an optional extra rather than a real requirement - changed so a large
     transfer or a first payment to someone new can never go through
-    unverified just because the sender skipped enrolling."""
+    unverified just because the sender skipped enrolling.
+
+    `require_enrolled` (default False, existing callers never pass it) is a
+    SEPARATE gate from `required`: enrollment as a precondition for the
+    action to be attempted at all, independent of whether *this particular*
+    call also demands a fresh step-up token. `required=False` still means
+    "no step-up needed for this amount", so it still no-ops for a caller
+    that also leaves `require_enrolled` at its default - existing behaviour,
+    unchanged. A future caller for which Face ID is the primary auth (not a
+    bonus on top of session auth) passes `require_enrolled=True` to reject
+    an unenrolled user up front, before any token/amount logic runs."""
+    if require_enrolled and not await has_face_enrolled(supabase, user):
+        raise FaceEnrollmentRequiredError()
+
     if not required:
         return
     if not await has_face_enrolled(supabase, user):
