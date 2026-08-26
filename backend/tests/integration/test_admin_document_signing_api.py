@@ -220,6 +220,60 @@ async def test_wrong_otp_code_is_rejected(
     assert resp2 is None or resp2.data is None
 
 
+async def test_five_wrong_otp_codes_locks_out_further_attempts(
+    supabase, authed_client, authed_client_factory, monkeypatch
+):
+    """confirm_admin_document is a deliberately separate function from
+    proposals_service.confirm_proposal (see its docstring) with its own
+    counter - document_signing_codes.attempts, same threshold of 5 as
+    CONFIRM_MAX_FAILED_ATTEMPTS - rather than the shared login_attempts-based
+    one the password/face path uses. This proves that counter actually
+    trips, the same guarantee the other two auth methods get from theirs."""
+    admin_client, admin = authed_client
+    await _promote(supabase, admin)
+    target_client, target = await authed_client_factory()
+    captured = _capture_teams(monkeypatch)
+    _mock_face_auth(monkeypatch)
+
+    send_resp = await admin_client.post(
+        f"/api/v1/admin/users/{target.id}/documents",
+        json={"title": "Adeverință", "body": "Conținut oficial."},
+    )
+    document_id = send_resp.json()["id"]
+    sign_request_resp = await target_client.post(
+        f"/api/v1/esign/documents/{document_id}/sign-requests",
+        json={"intent": "Sunt de acord."},
+    )
+    proposal_id = sign_request_resp.json()["id"]
+    await target_client.post(f"/api/v1/esign/proposals/{proposal_id}/signing-code")
+    otp_code = re.search(r"\*\*(\d{6})\*\*", captured["text"]).group(1)
+
+    for _ in range(5):
+        resp = await target_client.post(
+            f"/api/v1/esign/proposals/{proposal_id}/confirm-admin-document",
+            json={"otp_code": "000000", "face_token": "a-valid-face-token"},
+        )
+        assert resp.status_code == 400, resp.text
+        assert resp.json()["error"]["code"] == "invalid_signing_code"
+
+    # 6th attempt is locked out even with the CORRECT code now.
+    resp = await target_client.post(
+        f"/api/v1/esign/proposals/{proposal_id}/confirm-admin-document",
+        json={"otp_code": otp_code, "face_token": "a-valid-face-token"},
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"]["code"] == "invalid_signing_code"
+
+    resp2 = (
+        await supabase.table("signatures")
+        .select("id")
+        .eq("proposal_id", proposal_id)
+        .maybe_single()
+        .execute()
+    )
+    assert resp2 is None or resp2.data is None
+
+
 async def test_self_uploaded_document_cannot_use_otp_face_path(
     authed_client, monkeypatch
 ):
