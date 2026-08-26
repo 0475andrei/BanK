@@ -1357,6 +1357,105 @@ let currentCards = [];
 
 const CURRENCY_ICONS = { RON: 'coins', EUR: 'euro', USD: 'dollar-sign' };
 
+/* --- Balance count-up/down animation ---
+ * Every balance display (headline total, account cards, savings pots) is
+ * rebuilt from scratch via innerHTML on each refresh, so there's no DOM node
+ * to tween across renders. Instead we remember the last value we displayed
+ * for each element's key (see previousBalances below) and, right after the
+ * new markup is inserted, replay a short count from that old value up to the
+ * true new one on the freshly created element - the final state is always
+ * correct even if the animation is skipped or interrupted. */
+
+/** accountId (or a fixed key like 'headline') -> last balance_minor shown,
+ * so the next render knows what to count FROM. Persisted to sessionStorage
+ * (not just an in-memory Map) so the count survives an actual browser
+ * reload, not only a same-tab refreshDashboard() call: without this, F5
+ * right after a transfer would show the new balance appearing already-final
+ * with no animation, since a reload wipes all in-memory JS state and there'd
+ * be nothing to count FROM. sessionStorage (not localStorage) so a stale
+ * balance from a previous session/device never leaks in as a bogus "from"
+ * value - it's scoped to this tab and cleared when the tab closes. */
+const BALANCE_STORAGE_KEY = 'bank_previous_balances';
+
+function loadPreviousBalances() {
+    try {
+        const raw = sessionStorage.getItem(BALANCE_STORAGE_KEY);
+        return raw ? new Map(Object.entries(JSON.parse(raw))) : new Map();
+    } catch {
+        return new Map(); // Corrupt/unavailable storage - just start fresh.
+    }
+}
+
+function savePreviousBalances() {
+    try {
+        sessionStorage.setItem(BALANCE_STORAGE_KEY, JSON.stringify(Object.fromEntries(previousBalances)));
+    } catch { /* Storage is optional - worst case a reload skips one animation. */ }
+}
+
+const previousBalances = loadPreviousBalances();
+
+/** el -> in-flight requestAnimationFrame id, so re-rendering mid-animation
+ * (e.g. two refreshes in quick succession) cancels the stale tween instead
+ * of racing it. */
+const balanceAnimations = new WeakMap();
+
+/** Counts `el`'s text from `fromMinor` to `toMinor` over `duration`ms,
+ * formatting each frame with `format` (defaults to plain formatMoney).
+ * Briefly tints the text green/red while it moves, fading back to normal.
+ * Jumps straight to the final value with no animation when there's nothing
+ * to animate, or when the user prefers reduced motion. */
+function animateBalance(el, fromMinor, toMinor, currency, { duration = 700, format } = {}) {
+    if (!el) return;
+    const formatFn = format || ((amount) => formatMoney(amount, currency));
+
+    const pending = balanceAnimations.get(el);
+    if (pending) cancelAnimationFrame(pending);
+
+    if (fromMinor === toMinor || !Number.isFinite(fromMinor) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        el.textContent = formatFn(toMinor);
+        el.classList.remove('balance-flash-up', 'balance-flash-down');
+        return;
+    }
+
+    // The element's text was just set to the FINAL value a moment ago (e.g.
+    // by the innerHTML template that created it) - jump it back to the
+    // starting value synchronously, before the browser gets a chance to
+    // paint, so what's on screen the instant this runs is the count's start,
+    // not a flash of the answer followed by a rewind down to where it
+    // "should" have started.
+    el.textContent = formatFn(fromMinor);
+
+    // Restart the flash even if it's already mid-fade from a previous change.
+    el.classList.remove('balance-flash-up', 'balance-flash-down');
+    void el.offsetWidth;
+    el.classList.add(toMinor > fromMinor ? 'balance-flash-up' : 'balance-flash-down');
+
+    const easeOutCubic = (x) => 1 - (1 - x) ** 3;
+    const start = performance.now();
+
+    const tick = (now) => {
+        const progress = Math.min((now - start) / duration, 1);
+        const current = Math.round(fromMinor + (toMinor - fromMinor) * easeOutCubic(progress));
+        el.textContent = formatFn(current);
+        if (progress < 1) {
+            balanceAnimations.set(el, requestAnimationFrame(tick));
+        } else {
+            balanceAnimations.delete(el);
+            el.classList.remove('balance-flash-up', 'balance-flash-down');
+        }
+    };
+    balanceAnimations.set(el, requestAnimationFrame(tick));
+}
+
+/** Looks up the previous value for `key`, animates `el` from there to
+ * `toMinor`, then remembers `toMinor` as the new baseline for next time. */
+function animateBalanceFor(key, el, toMinor, currency, options) {
+    const fromMinor = previousBalances.has(key) ? previousBalances.get(key) : toMinor;
+    animateBalance(el, fromMinor, toMinor, currency, options);
+    previousBalances.set(key, toMinor);
+    savePreviousBalances();
+}
+
 /** A term deposit can receive money anytime but can't be the SOURCE of a
  * transfer/payment until maturity_date - matches the backend's
  * assert_not_locked_for_debit, kept here too so the UI never offers a
@@ -1778,7 +1877,7 @@ function renderAccountsGrid() {
                 <h3>${escapeHTML(acc.name)}</h3>
                 <p>${escapeHTML(acc.currency)}${acc.product_type !== 'checking' ? ` &middot; ${(acc.interest_rate_bps / 100).toFixed(1)}% p.a.` : ''}</p>
             </div>
-            <div class="acc-balance">${formatMoney(acc.balance_minor, acc.currency)}</div>
+            <div class="acc-balance" data-account-id="${escapeHTML(acc.id)}">${formatMoney(acc.balance_minor, acc.currency)}</div>
             ${acc.status === 'closed' ? `<span class="acc-status">${escapeHTML(t('dynamic.account_closed', 'Închis'))}</span>` : ''}
             ${!isSpendable(acc) ? `<span class="acc-status locked">${escapeHTML(t('dynamic.account_locked', 'Blocat'))}</span>` : ''}
             <button type="button" class="acc-statement-btn" data-account-id="${escapeHTML(acc.id)}"
@@ -1793,6 +1892,15 @@ function renderAccountsGrid() {
             openStatementModal(btn.dataset.accountId, btn.dataset.accountName);
         });
     });
+    // Each card starts out showing its true final balance (see the innerHTML
+    // above, for correctness with JS disabled/before this runs); this replays
+    // it as a count from whatever we last showed for that account, so a
+    // balance change from a transfer/payment ticks up or down instead of
+    // silently appearing already-updated on the next refresh.
+    grid.querySelectorAll('.acc-balance').forEach((el) => {
+        const acc = currentAccounts.find((a) => a.id === el.dataset.accountId);
+        if (acc) animateBalanceFor(`account:${acc.id}`, el, acc.balance_minor, acc.currency);
+    });
     if (window.lucide) lucide.createIcons();
 }
 
@@ -1800,17 +1908,21 @@ function renderHeadlineBalance() {
     const el = document.getElementById('total-balance');
     const active = currentAccounts.filter(a => a.status === 'active');
     if (active.length === 0) {
-        el.innerHTML = formatMoney(0, 'RON');
+        animateBalanceFor('headline:RON', el, 0, 'RON');
         return;
     }
     // Accounts can hold different currencies, which can't be summed together -
     // the headline number totals accounts in the first active account's
     // currency only (there's no "home currency" concept in the backend).
+    // The currency is baked into the key itself (not tracked separately) so
+    // a currency switch (e.g. the first active account changed) naturally
+    // looks up a fresh, never-seen key instead of counting from a total that
+    // was in a different currency entirely.
     const primaryCurrency = active[0].currency;
     const total = active
         .filter(a => a.currency === primaryCurrency)
         .reduce((sum, a) => sum + a.balance_minor, 0);
-    el.textContent = formatMoney(total, primaryCurrency);
+    animateBalanceFor(`headline:${primaryCurrency}`, el, total, primaryCurrency);
 }
 
 /* -------------------------------------------------------------------------
@@ -2236,12 +2348,20 @@ function renderSavingsAccountsList() {
                 <div class="pot-header">
                     <span class="pot-icon"><i data-lucide="${acc.product_type === 'term_deposit' ? 'lock' : 'piggy-bank'}"></i></span>
                     <div class="pot-name">${escapeHTML(acc.name)}</div>
-                    <div class="pot-amounts">${formatMoney(acc.balance_minor, acc.currency)} &middot; ${rate}</div>
+                    <div class="pot-amounts" data-account-id="${escapeHTML(acc.id)}">${formatMoney(acc.balance_minor, acc.currency)} &middot; ${rate}</div>
                 </div>
                 <div class="savings-account-maturity ${locked ? 'locked' : ''}">${maturityLabel}</div>
             </div>
         `;
     }).join('');
+    list.querySelectorAll('.pot-amounts').forEach((el) => {
+        const acc = savingsAccounts.find((a) => a.id === el.dataset.accountId);
+        if (!acc) return;
+        const rate = `${(acc.interest_rate_bps / 100).toFixed(1)}% p.a.`;
+        animateBalanceFor(`savings:${acc.id}`, el, acc.balance_minor, acc.currency, {
+            format: (amount) => `${formatMoney(amount, acc.currency)} · ${rate}`,
+        });
+    });
     if (window.lucide) lucide.createIcons();
 }
 

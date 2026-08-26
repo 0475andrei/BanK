@@ -796,6 +796,15 @@ body {
     font-weight: 700;
 }
 
+/* Count-up/down feedback for balance figures (see animateBalance in app.js):
+   a brief green/red tint while the number is ticking toward its new value,
+   fading back to the normal text color once the animation finishes. */
+.acc-balance, .balance, .pot-amounts {
+    transition: color 0.4s ease;
+}
+.balance-flash-up { color: var(--income-green); }
+.balance-flash-down { color: var(--expense-red); }
+
 .transactions-list {
     background-color: var(--bg-surface);
     border-radius: var(--border-radius);
