@@ -1055,16 +1055,31 @@ function angleToOffset(midAngleDeg, distance) {
     return { dx: Math.sin(rad) * distance, dy: -Math.cos(rad) * distance };
 }
 
-/** Builds the ring's SVG markup: one <circle> per category, each a full
- * circle whose stroke-dasharray only paints its own arc (with a small gap
+/** Builds the ring's SVG markup: two <circle>s per category, sharing the
+ * same arc (stroke-dasharray only paints that one slice, with a small gap
  * on either side instead of a border - see dataviz skill's anti-patterns.md
- * on borders between marks). Positioning, the mount animation, and the
- * hover pop-out are ALL one CSS `transform` chain on the circle itself
- * (`translate() rotate() scale()`, right-to-left composition) driven by
- * --rot/--hx/--hy/--scale custom properties - deliberately NOT split across
- * an SVG `rotate` attribute on a wrapping <g> plus a separate CSS transform
- * on the child, which would nest the child's translate inside the parent's
- * rotation and swing the hover offset off in the wrong direction. */
+ * on borders between marks).
+ *
+ * They're split in two because pointer-events hit-test an SVG shape's
+ * CURRENT painted geometry, transform included: a single circle that both
+ * received hover events AND translated outward on hover would move out from
+ * under a cursor sitting near its outer edge, fire pointerleave, snap back
+ * under the cursor, fire pointerenter, and repeat - a self-triggering flicker
+ * users see as the slice "flying" right where they're pointing. So
+ * `.spending-segment-hit` (transparent, never transformed by hover state)
+ * is the only thing hit-tested, and `.spending-segment-fill` (the visible
+ * color, `pointer-events: none`) is free to pop outward on hover without
+ * ever being able to move itself out from under the pointer that triggered
+ * it.
+ *
+ * Positioning, the mount animation, and the hover pop-out on the fill circle
+ * are ALL one CSS `transform` chain (`translate() rotate() scale()`,
+ * right-to-left composition) driven by --rot/--hx/--hy/--scale custom
+ * properties - deliberately NOT split across an SVG `rotate` attribute on a
+ * wrapping <g> plus a separate CSS transform on the child, which would nest
+ * the child's translate inside the parent's rotation and swing the hover
+ * offset off in the wrong direction. The hit circle shares --rot (so its
+ * hit area still tracks the slice's position) but never --hx/--hy/--scale. */
 function buildSpendingDonutSegments(categories) {
     let cumulativePercent = 0;
     return categories.map((cat, i) => {
@@ -1080,7 +1095,13 @@ function buildSpendingDonutSegments(categories) {
             <g class="spending-segment" data-index="${i}" tabindex="0"
                role="img" aria-label="${escapeHTML(cat.name)}"
                style="--rot: ${(startAngleDeg - 90).toFixed(3)}deg; --hx-active: ${dx.toFixed(2)}px; --hy-active: ${dy.toFixed(2)}px; --seg-delay: ${i * 70}ms;">
-                <circle
+                <circle class="spending-segment-hit"
+                    cx="${SPENDING_DONUT_CENTER}" cy="${SPENDING_DONUT_CENTER}" r="${SPENDING_DONUT_RADIUS}"
+                    fill="none" stroke="transparent" stroke-width="${SPENDING_DONUT_STROKE}"
+                    stroke-linecap="round"
+                    stroke-dasharray="0 ${SPENDING_DONUT_GAP_PX / 2} ${visibleLen} ${SPENDING_DONUT_CIRCUMFERENCE}"
+                ></circle>
+                <circle class="spending-segment-fill"
                     cx="${SPENDING_DONUT_CENTER}" cy="${SPENDING_DONUT_CENTER}" r="${SPENDING_DONUT_RADIUS}"
                     fill="none" stroke="${cat.color}" stroke-width="${SPENDING_DONUT_STROKE}"
                     stroke-linecap="round"
