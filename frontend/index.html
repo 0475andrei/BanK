@@ -716,6 +716,23 @@
         </div>
     </div>
 
+    <!-- Sleek in-app replacement for window.confirm() (see showConfirmDialog
+         in app.js) - a generic, animated yes/no dialog with a warning icon
+         and a soft cancel / danger-red confirm button pair. Currently wired
+         to conversation deletion (see deleteConversation), but built as a
+         reusable component. -->
+    <div class="modal-overlay confirm-dialog-overlay" id="confirm-dialog-overlay" hidden>
+        <div class="modal confirm-dialog">
+            <div class="confirm-dialog-icon"><i data-lucide="triangle-alert"></i></div>
+            <h3 class="confirm-dialog-title" id="confirm-dialog-title"></h3>
+            <p class="confirm-dialog-message" id="confirm-dialog-message"></p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="confirm-dialog-cancel"></button>
+                <button type="button" class="btn btn-danger" id="confirm-dialog-confirm"></button>
+            </div>
+        </div>
+    </div>
+
     <!-- Step-up auth modal - confirms an AI-proposed action (see
          app/modules/chat/proposals_service.py) with Face ID or password
          before the backend executes it. Opened by openStepUpModal() in

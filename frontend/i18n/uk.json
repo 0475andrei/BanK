@@ -322,6 +322,7 @@
     "history": {
       "rename_title": "Перейменувати розмову",
       "delete_title": "Видалити розмову",
+      "delete_button": "Видалити",
       "rename_input_label": "Назва розмови",
       "save_name": "Зберегти назву",
       "cancel_rename": "Скасувати",

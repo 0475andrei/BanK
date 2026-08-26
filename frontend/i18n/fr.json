@@ -322,6 +322,7 @@
     "history": {
       "rename_title": "Renommer la conversation",
       "delete_title": "Supprimer la conversation",
+      "delete_button": "Supprimer",
       "rename_input_label": "Nom de la conversation",
       "save_name": "Enregistrer le nom",
       "cancel_rename": "Annuler",

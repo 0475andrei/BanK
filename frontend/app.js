@@ -927,8 +927,55 @@ async function saveConversationRename(conversation, nextTitle) {
     }
 }
 
+/** Sleek in-app replacement for window.confirm() - fades in a
+ * backdrop-blurred dialog with a warning icon, a title, a message, and a
+ * soft cancel / danger-red confirm button pair (see #confirm-dialog-overlay
+ * in index.html). Resolves true if the user confirms, false if they cancel,
+ * dismiss via Escape, or click the backdrop - never rejects, matching the
+ * other confirm-style modals in this file (see showPriceIncreaseModal). */
+function showConfirmDialog({ title, message, confirmLabel, cancelLabel, danger = true } = {}) {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('confirm-dialog-overlay');
+        const titleEl = document.getElementById('confirm-dialog-title');
+        const messageEl = document.getElementById('confirm-dialog-message');
+        const cancelBtn = document.getElementById('confirm-dialog-cancel');
+        const confirmBtn = document.getElementById('confirm-dialog-confirm');
+
+        titleEl.textContent = title || '';
+        messageEl.textContent = message || '';
+        cancelBtn.textContent = cancelLabel || t('common.Anulează', 'Cancel');
+        confirmBtn.textContent = confirmLabel || t('common.Anulează', 'Confirm');
+        confirmBtn.classList.toggle('btn-danger', danger);
+        confirmBtn.classList.toggle('btn-primary', !danger);
+
+        overlay.hidden = false;
+        if (window.lucide) lucide.createIcons();
+
+        function close(result) {
+            overlay.hidden = true;
+            cancelBtn.onclick = null;
+            confirmBtn.onclick = null;
+            overlay.onclick = null;
+            document.removeEventListener('keydown', onKeydown);
+            resolve(result);
+        }
+        function onKeydown(event) {
+            if (event.key === 'Escape') close(false);
+        }
+
+        cancelBtn.onclick = () => close(false);
+        confirmBtn.onclick = () => close(true);
+        overlay.onclick = (event) => { if (event.target === overlay) close(false); };
+        document.addEventListener('keydown', onKeydown);
+    });
+}
+
 async function deleteConversation(conversation) {
-    const approved = window.confirm(t('chat.history.delete_confirm', 'Sigur vrei să ștergi conversația „{title}”?', { title: truncateConversationPreview(conversation.preview) }));
+    const approved = await showConfirmDialog({
+        title: t('chat.history.delete_title', 'Delete conversation'),
+        message: t('chat.history.delete_confirm', 'Sigur vrei să ștergi conversația „{title}”?', { title: truncateConversationPreview(conversation.preview) }),
+        confirmLabel: t('chat.history.delete_button', 'Delete'),
+    });
     if (!approved) return;
 
     try {

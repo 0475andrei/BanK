@@ -322,6 +322,7 @@
     "history": {
       "rename_title": "Unterhaltung umbenennen",
       "delete_title": "Unterhaltung löschen",
+      "delete_button": "Löschen",
       "rename_input_label": "Name der Unterhaltung",
       "save_name": "Namen speichern",
       "cancel_rename": "Abbrechen",
