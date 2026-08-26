@@ -174,6 +174,7 @@ def test_all_banking_tools_are_registered(supabase):
         "list_cards",
         "list_transfers",
         "resolve_iban_holder",
+        "find_beneficiary_by_name",
         "freeze_card",
         "unfreeze_card",
         "set_card_spending_limit",
