@@ -212,6 +212,23 @@
     margin-bottom: 4px;
 }
 
+.admin-send-document-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+    max-width: 520px;
+}
+
+.admin-send-document-form textarea.field-input {
+    resize: vertical;
+    font-family: inherit;
+}
+
+.admin-send-document-form .admin-mini-btn {
+    align-self: flex-start;
+}
+
 .admin-subheading {
     margin: 22px 0 10px;
     font-size: 0.95rem;

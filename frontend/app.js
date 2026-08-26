@@ -62,6 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     wireStepUpModal();
+    wireAdminDocSignModal();
     wireChatAttach();
     wireDocumentAttach();
     initDashboard();
@@ -223,6 +224,13 @@ function renderDocumentChip(document_) {
     label.textContent = `${document_.page_count} pag. · ${document_.filename}`;
     chip.appendChild(label);
 
+    const signBtn = document.createElement('button');
+    signBtn.type = 'button';
+    signBtn.className = 'document-chip-sign';
+    signBtn.textContent = 'Semnează electronic';
+    signBtn.addEventListener('click', () => handleSignDocument(document_, signBtn));
+    chip.appendChild(signBtn);
+
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'document-chip-close';
@@ -246,6 +254,39 @@ function clearActiveDocument() {
     if (chip) {
         chip.hidden = true;
         chip.innerHTML = '';
+    }
+    const signContainer = document.getElementById('document-sign-card-container');
+    if (signContainer) signContainer.innerHTML = '';
+}
+
+/** "Semnează electronic" on the attached document's chip. Deliberately a
+ * direct REST call (POST /esign/documents/{id}/sign-requests), not a chat
+ * message - the AI's DocumentAgent has no write tools at all (see
+ * backend app/ai/tools/document_tools.py), so a real sign action has to
+ * come from an explicit user click, never from asking the chatbot to do it.
+ *
+ * The call only creates a PENDING proposal - it renders through the exact
+ * same confirm/reject card and Face ID/password step-up modal as any other
+ * AI-proposed action (see renderProposalCard/openStepUpModal above), because
+ * the backend returns the same ProposalRead shape. */
+async function handleSignDocument(document_, triggerBtn) {
+    const container = document.getElementById('document-sign-card-container');
+    if (!container) return;
+
+    triggerBtn.disabled = true;
+    try {
+        const proposal = await apiFetch(`/esign/documents/${document_.id}/sign-requests`, {
+            method: 'POST',
+            body: JSON.stringify({
+                intent: `Am citit și sunt de acord cu conținutul documentului „${document_.filename}”.`,
+            }),
+        });
+        container.innerHTML = '';
+        renderProposalCard(proposal, container);
+        triggerBtn.hidden = true;
+    } catch (err) {
+        showToast(err.message || 'Eroare la crearea cererii de semnătură.');
+        triggerBtn.disabled = false;
     }
 }
 
@@ -968,6 +1009,207 @@ function wireStepUpModal() {
         const password = passwordInput.value;
         if (!password) return;
         await confirmWithCredential(stepUpProposalId, 'password', password, stepUpCard);
+    });
+}
+
+/* -------------------------------------------------------------------------
+ * "Documente de semnat" - documents an admin generated and sent (see
+ * backend app/modules/admin/service.py::generate_and_send_document),
+ * listed from GET /documents/to-sign. Signing one goes through the
+ * STRONGER OTP+Face confirm path (esign_service.confirm_admin_document),
+ * not the ordinary Face-or-password step-up modal above - see
+ * wireAdminDocSignModal/handleSignAdminDocument below.
+ * ------------------------------------------------------------------------- */
+
+async function loadDocumentsToSign() {
+    const list = document.getElementById('documents-to-sign-list');
+    if (!list) return;
+    list.innerHTML = '<p class="field-hint">Se încarcă...</p>';
+
+    let documents;
+    try {
+        documents = await apiFetch('/documents/to-sign');
+    } catch (err) {
+        list.innerHTML = `<p class="field-hint ocr-warning">${escapeHTML(err.message)}</p>`;
+        return;
+    }
+
+    if (!documents.length) {
+        list.innerHTML = '<p class="field-hint">Nu ai documente de semnat momentan.</p>';
+        return;
+    }
+
+    list.innerHTML = '';
+    documents.forEach((doc) => {
+        const card = document.createElement('div');
+        card.className = 'document-to-sign-card';
+
+        const info = document.createElement('div');
+        info.innerHTML = `<strong>${escapeHTML(doc.filename)}</strong>` +
+            `<p class="field-hint">${escapeHTML(formatDateTime(doc.created_at))} · ${doc.page_count} pag.</p>`;
+        card.appendChild(info);
+
+        const actions = document.createElement('div');
+        actions.className = 'document-to-sign-actions';
+
+        const previewBtn = document.createElement('button');
+        previewBtn.type = 'button';
+        previewBtn.className = 'btn btn-secondary';
+        previewBtn.textContent = 'Previzualizează';
+        previewBtn.addEventListener('click', () => previewDocumentPdf(`/documents/${doc.id}/pdf`));
+        actions.appendChild(previewBtn);
+
+        if (doc.signed) {
+            const badge = document.createElement('span');
+            badge.className = 'document-to-sign-status signed';
+            badge.innerHTML = '<i data-lucide="check-circle"></i> Semnat';
+            actions.appendChild(badge);
+        } else {
+            const signBtn = document.createElement('button');
+            signBtn.type = 'button';
+            signBtn.className = 'btn btn-primary';
+            signBtn.textContent = 'Semnează';
+            signBtn.addEventListener('click', () => handleSignAdminDocument(doc, signBtn));
+            actions.appendChild(signBtn);
+        }
+        card.appendChild(actions);
+
+        list.appendChild(card);
+    });
+    if (window.lucide) lucide.createIcons();
+}
+
+/** Opens a document's actual PDF in a new tab. A plain `<a href>` to the
+ * API won't work: the API is a different origin from this page (see
+ * API_BASE_URL), so the browser wouldn't send the session cookie on a
+ * fresh navigation reliably across browsers/SameSite settings. Fetching as
+ * a blob with credentials included sidesteps that - same reasoning as
+ * every other authenticated call in this file, just with `res.blob()`
+ * instead of JSON. */
+async function previewDocumentPdf(path) {
+    try {
+        const res = await fetch(`${API_BASE_URL}${path}`, { credentials: 'include' });
+        if (!res.ok) throw new Error('Previzualizarea documentului a eșuat.');
+        const blob = await res.blob();
+        window.open(URL.createObjectURL(blob), '_blank');
+    } catch (err) {
+        showToast(err.message || 'Previzualizarea documentului a eșuat.');
+    }
+}
+
+/** Creates the sign-request proposal (same endpoint the self-uploaded-
+ * document "Semnează electronic" chip button uses - see handleSignDocument)
+ * then opens the OTP+Face modal for it, instead of the generic proposal
+ * card + step-up modal - an admin-issued document never goes through
+ * POST /chat/proposals/{id}/confirm. */
+async function handleSignAdminDocument(doc, triggerBtn) {
+    triggerBtn.disabled = true;
+    try {
+        const proposal = await apiFetch(`/esign/documents/${doc.id}/sign-requests`, {
+            method: 'POST',
+            body: JSON.stringify({
+                intent: `Am citit și sunt de acord cu conținutul documentului oficial „${doc.filename}”.`,
+            }),
+        });
+        await openAdminDocSignModal(proposal.id, doc.filename);
+    } catch (err) {
+        showToast(err.message || 'Eroare la crearea cererii de semnătură.');
+    } finally {
+        triggerBtn.disabled = false;
+    }
+}
+
+let adminDocSignProposalId = null;
+let adminDocSignFilename = null;
+
+function showAdminDocSignError(message) {
+    const errorEl = document.getElementById('admin-doc-sign-error');
+    errorEl.textContent = message;
+    errorEl.hidden = false;
+}
+
+/** Requests a fresh OTP (POST .../signing-code, 204, delivered out-of-band
+ * via Teams - same convention as password-reset codes) and shows the modal
+ * for entering it. Re-callable as "Retrimite codul" without closing the
+ * modal. */
+async function requestAdminDocSignCode() {
+    const statusEl = document.getElementById('admin-doc-sign-status');
+    const errorEl = document.getElementById('admin-doc-sign-error');
+    errorEl.hidden = true;
+    statusEl.textContent = 'Se trimite codul de semnare...';
+    try {
+        await apiFetch(`/esign/proposals/${adminDocSignProposalId}/signing-code`, { method: 'POST' });
+        statusEl.textContent = `Cod trimis pentru „${adminDocSignFilename}”. Verifică Teams.`;
+    } catch (err) {
+        statusEl.textContent = '';
+        showAdminDocSignError(err.message || 'Codul nu a putut fi trimis.');
+    }
+}
+
+async function openAdminDocSignModal(proposalId, filename) {
+    adminDocSignProposalId = proposalId;
+    adminDocSignFilename = filename;
+
+    const modal = document.getElementById('admin-doc-sign-modal');
+    const errorEl = document.getElementById('admin-doc-sign-error');
+    const otpInput = document.getElementById('admin-doc-sign-otp-input');
+    errorEl.hidden = true;
+    otpInput.value = '';
+    modal.hidden = false;
+
+    await requestAdminDocSignCode();
+}
+
+function closeAdminDocSignModal() {
+    document.getElementById('admin-doc-sign-modal').hidden = true;
+    adminDocSignProposalId = null;
+    adminDocSignFilename = null;
+}
+
+function wireAdminDocSignModal() {
+    const modal = document.getElementById('admin-doc-sign-modal');
+    if (!modal) return;
+
+    document.getElementById('close-admin-doc-sign-modal').addEventListener('click', closeAdminDocSignModal);
+    document.getElementById('admin-doc-sign-resend-btn').addEventListener('click', requestAdminDocSignCode);
+
+    document.getElementById('admin-doc-sign-otp-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const proposalId = adminDocSignProposalId;
+        if (!proposalId) return;
+
+        const otpCode = document.getElementById('admin-doc-sign-otp-input').value.trim();
+        if (otpCode.length !== 6) return;
+
+        // Second factor: reuses the SAME camera-capture flow the ordinary
+        // step-up modal uses for Face ID - hide this modal while it's on
+        // top, bring it back if the user cancels the camera instead of
+        // finishing.
+        modal.hidden = true;
+        const faceToken = await requestFaceConfirmationToken(
+            'Semnare document oficial - identificare prin Face ID'
+        );
+        if (!faceToken) {
+            modal.hidden = false;
+            return;
+        }
+
+        try {
+            await apiFetch(`/esign/proposals/${proposalId}/confirm-admin-document`, {
+                method: 'POST',
+                body: JSON.stringify({ otp_code: otpCode, face_token: faceToken }),
+            });
+            closeAdminDocSignModal();
+            showToast('Documentul a fost semnat cu succes!');
+            await loadDocumentsToSign();
+        } catch (err) {
+            modal.hidden = false;
+            // The OTP is already consumed (or was never valid) at this
+            // point either way - a retry needs a fresh one, not another
+            // attempt with the same value.
+            document.getElementById('admin-doc-sign-otp-input').value = '';
+            showAdminDocSignError(err.message || 'Semnarea a eșuat.');
+        }
     });
 }
 
@@ -2821,6 +3063,7 @@ function goToProfileView(target) {
 
     if (target === 'referral') loadReferralCode();
     if (target === 'face-login') loadFaceStatus();
+    if (target === 'documents-to-sign') loadDocumentsToSign();
 }
 
 /* --- Face login enrollment (profile menu section) ---

@@ -10,9 +10,9 @@ field here later.
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.modules.card_orders.models import CardOrderStatus
 
@@ -138,6 +138,35 @@ class UserBlockUpdate(BaseModel):
     """Body of PATCH /admin/users/{id}/blocked."""
 
     blocked: bool
+
+
+class AdminDocumentSendRequest(BaseModel):
+    """Body of POST /admin/users/{id}/documents.
+
+    `title` is capped at 100 chars (roughly what two lines of the rendered
+    title actually hold - see document_template.py's _TITLE_HEIGHT) and
+    `body` at 2000 (empirically, ~2500 is where the single non-paginated A4
+    page actually overflows at the font size used - 2000 leaves real
+    margin for text that packs less efficiently than the sample used to
+    measure that boundary). Both are enforced again at render time
+    regardless (document_template.py raises ValidationError on real
+    overflow) - these limits just turn the common case into an immediate
+    422 instead of a round trip through PDF rendering first.
+    """
+
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    body: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
+class AdminDocumentSent(BaseModel):
+    """What POST /admin/users/{id}/documents returns - just enough for the
+    admin panel to confirm what was sent, not the full DocumentRead shape
+    (this response never needs `conversation_id`, which belongs to the
+    target user's chat, not the admin's session)."""
+
+    id: uuid.UUID
+    filename: str
+    created_at: datetime
 
 
 class AdminTransaction(BaseModel):

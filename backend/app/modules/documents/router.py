@@ -19,6 +19,8 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi.responses import Response
+from supabase import AsyncClient
 
 from app.core.dependencies import get_current_user
 from app.core.exceptions import ValidationError
@@ -31,11 +33,39 @@ from app.modules.documents.extractor import (
     extract_pdf_text,
     validate_pdf_magic_bytes,
 )
-from app.modules.documents.schemas import DocumentRead, DocumentUploadResponse
+from app.modules.documents.schemas import DocumentRead, DocumentToSign, DocumentUploadResponse
 from app.modules.users.schemas import UserRead
-from supabase import AsyncClient
 
 router = APIRouter()
+
+
+@router.get("/to-sign", response_model=list[DocumentToSign])
+async def list_documents_to_sign(
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> list[DocumentToSign]:
+    """Backs the "Documente de semnat" profile section - admin-issued
+    documents belonging to the caller, signed or not."""
+    documents = await documents_service.list_admin_issued_documents(supabase, str(user.id))
+    return [DocumentToSign.model_validate(doc) for doc in documents]
+
+
+@router.get("/{document_id}/pdf")
+async def get_document_pdf(
+    document_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> Response:
+    """Raw PDF bytes for previewing a document - own upload or admin-issued,
+    same ownership check either way (documents_service.get_document_with_
+    content). The frontend fetches this as a blob (credentials included,
+    not a plain navigable link - the API is a different origin from the
+    frontend) and opens it as an object URL; see previewDocumentPdf() in
+    app.js/admin.js."""
+    document = await documents_service.get_document_with_content(
+        supabase, str(user.id), document_id
+    )
+    return Response(content=document["content"], media_type="application/pdf")
 
 
 @router.post("/upload", response_model=DocumentUploadResponse)
