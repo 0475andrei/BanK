@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 
+from app.ai.agents.scope_guardrail import OFF_TOPIC_GUARDRAIL
 from app.ai.agents.tool_loop import ToolLoopAgent
 from app.ai.routing import RoutingRule
 
@@ -87,7 +88,9 @@ INSIGHTS_ROUTING_RULES = (
     ),
 )
 
-SYSTEM_PROMPT = """Ești asistentul analitic al băncii. Rolul tău este să ajuți
+SYSTEM_PROMPT = f"""{OFF_TOPIC_GUARDRAIL}
+
+Ești asistentul analitic al băncii. Rolul tău este să ajuți
 utilizatorul să înțeleagă cum își cheltuie și își gestionează banii — analize,
 categorii, tendințe, tipare de cheltuieli.
 
