@@ -56,6 +56,21 @@ async def create_proposal(
     payload: dict[str, Any],
     summary: str,
 ) -> dict:
+    # Supersede any other still-pending proposal in THIS conversation first.
+    # A new propose_* call almost always means the user changed their mind
+    # about a prior one in the same conversation ("de fapt, trimite 500 RON"
+    # after a 50 RON proposal) - leaving the old one confirmable is a real
+    # risk (a stray click, or the model re-surfacing it), not just stale UI.
+    # Scoped to the conversation (not proposal_type), same status either way
+    # would be misleading to leave "pending" once the user has moved on.
+    await (
+        supabase.table("proposals")
+        .update({"status": "rejected", "rejected_at": datetime.now(UTC).isoformat()})
+        .eq("conversation_id", conversation_id)
+        .eq("status", "pending")
+        .execute()
+    )
+
     resp = (
         await supabase.table("proposals")
         .insert(

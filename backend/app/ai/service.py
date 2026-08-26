@@ -21,6 +21,7 @@ from app.ai.schemas import Message
 from app.ai.tools.banking import (
     AddBeneficiaryTool,
     CreateScheduledTransferTool,
+    FindBeneficiaryByNameTool,
     FreezeCardTool,
     GetBalanceTool,
     ListAccountsTool,
@@ -82,6 +83,7 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
             ListCardsTool(supabase),
             ListTransfersTool(supabase),
             ResolveIbanHolderTool(supabase),
+            FindBeneficiaryByNameTool(supabase),
             # Low-stakes and reversible: execute directly (see each tool's
             # own docstring for why it doesn't need a UI-level confirm step).
             FreezeCardTool(supabase),
