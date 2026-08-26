@@ -29,6 +29,7 @@ from app.ai.agents.base import Agent
 from app.ai.context import Context
 from app.ai.routing import RoutingDecision, normalise
 from app.ai.schemas import Message
+from app.ai.turn import TurnDispatchResult, TurnResult
 
 if TYPE_CHECKING:
     from app.ai.providers.base import ModelProvider
@@ -40,6 +41,58 @@ logger = logging.getLogger(__name__)
 #: self-report calibrated confidence produces fluent noise, and a fixed value at
 #: least means the same thing every time.
 LLM_FALLBACK_CONFIDENCE = 0.7
+
+#: Cross-agent handoff (Step 15): how many times ONE turn may change agent.
+#: Two is a chain of three agents at most, which is already more than any real
+#: question needs; the cap exists so a pair of agents that each think the other
+#: should answer cannot burn a request between them.
+MAX_HOPS = 2
+
+#: Who may hand a turn to whom. THE authority on this - the `target_agent`
+#: argument on `handoff_to_agent` is a name the MODEL produced, so it is checked
+#: here, against a table the model cannot reach, rather than inside the tool
+#: that carried it.
+#:
+#: An agent absent from this table can never be a SOURCE. `documents` is absent
+#: from every value as well, so it can never be a TARGET either - enforced
+#: separately and explicitly in `dispatch` too, because that one is a security
+#: boundary rather than a policy knob (see
+#: app/ai/service.py::build_document_tools).
+#:
+#: - insights -> banking: the demo path. An analytical finding ("this
+#:   subscription charges you every month") becomes a bankable action, which
+#:   Insights has no tools for.
+#: - insights -> planning: an observation about spending turning into a goal.
+#: - planning -> banking: a plan that needs a concrete proposal to start.
+#: - banking: TERMINAL, deliberately absent. It is the agent that produces
+#:   proposals, i.e. the end of a chain, and it is also the one holding every
+#:   write-adjacent tool - the fewer ways to arrive at it, the better.
+ALLOWED_HANDOFF_TARGETS: dict[str, frozenset[str]] = {
+    "insights": frozenset({"banking", "planning"}),
+    "planning": frozenset({"banking"}),
+}
+
+#: Shown when a handoff was asked for, refused, and the agent that asked had
+#: not written anything yet - which is the NORMAL case, since a model emits
+#: either text or tool calls, never both, so an agent that ends its turn on a
+#: handoff call has said nothing at all.
+#:
+#: Without this the user would get an empty bubble whenever a gate fired. The
+#: source agent is not re-run to produce something better: it already decided
+#: it could not finish this itself, and asking it again is a second model call
+#: for an answer it has just said it does not have.
+HANDOFF_REFUSED_REPLY = (
+    "Am găsit ceva ce nu pot duce eu la capăt și nu am putut continua cu "
+    "celălalt asistent. Spune-mi direct ce vrei să faci și te ajut de acolo."
+)
+
+#: The agent that may never take part in a handoff, in either direction. Its
+#: isolation is the structural half of the Step 12 prompt-injection defense:
+#: document and statement text is untrusted, and an agent that has no write
+#: tools AND no way to reach an agent that does cannot be talked into one.
+#: Named as a constant rather than a bare string so the checks enforcing it
+#: are greppable.
+QUARANTINED_AGENT = "documents"
 
 
 class Orchestrator:
@@ -216,19 +269,163 @@ class Orchestrator:
         messages: Sequence[Message],
         user_message: str,
         context: Context,
-    ) -> tuple[str, list[Message], RoutingDecision]:
-        """Route, then run the chosen agent with the trusted context.
+    ) -> TurnDispatchResult:
+        """Route, then run the chosen agent - and any agent it hands off to.
 
         Single funnel: every path from the service to an agent carries a
-        `Context`, so there is no way to reach a tool without one. Returns
-        `(reply, trace, routing)` - the trace exactly as `Agent.run` produced
-        it, plus the decision that picked the agent, so callers can persist and
-        surface it.
+        `Context`, so there is no way to reach a tool without one. Returns the
+        ordered chain of hops that actually ran, each with its own reply, trace
+        and `RoutingDecision`, so callers can persist and surface every leg (see
+        `TurnDispatchResult`). A turn with no handoff is a one-hop chain - the
+        same shape, not a special case.
 
-        TODO: if this grows past 3 elements, switch to a TurnResult Pydantic
-        model rather than widening the tuple again.
+        HANDOFF INVARIANTS, all enforced below and all deliberate:
+
+        * `route()` runs EXACTLY ONCE, for the first hop. It is never re-run on
+          a handoff. Re-running it would re-apply the context-first override
+          (see `route`), so in any document or statement conversation every
+          handoff would land back on DocumentAgent - a ping-pong, and one that
+          walks straight through the isolation that override exists to protect.
+        * `context` is NEVER rebuilt. Every hop runs on the same frozen instance
+          the first one did, so a handoff cannot widen identity, account access
+          or authorisation by construction rather than by review.
+        * A handoff is a REQUEST. Five separate things can refuse it: the hop
+          cap, the quarantine, the per-source allow-list, the cycle set and the
+          statement-mode gate. A refusal is logged and ends the chain with the
+          source agent's own reply, or with HANDOFF_REFUSED_REPLY when it had
+          not written one - never an error shown to the user, who asked a
+          perfectly reasonable question and is owed an answer either way.
         """
         decision = self.route(user_message, context)
         agent = self._agents[decision.agent_name]
-        reply, trace = await agent.run(messages, context)
-        return reply, trace, decision
+
+        hops: list[TurnResult] = []
+        # Every agent that has already run this turn. Seeded with the first, so
+        # a handoff can never return to where the turn started (no A->B->A).
+        visited: set[str] = {agent.name}
+        hops_used = 0
+        # Each hop after the first sees the source's context_hint appended as a
+        # synthetic user turn; the caller's history is never mutated.
+        turn_messages: list[Message] = list(messages)
+
+        while True:
+            result = await agent.run(turn_messages, context)
+            # The agent knows what it did, not why it was picked - see
+            # TurnResult.routing. Stamping it here is why TurnResult is the one
+            # unfrozen type in app/ai/turn.py.
+            result.routing = decision
+            hops.append(result)
+
+            handoff = result.handoff
+            if handoff is None:
+                break
+
+            source = agent.name
+            target = handoff.target_agent
+
+            hops_used += 1
+            if hops_used > MAX_HOPS:
+                logger.warning(
+                    "handoff cap reached (max_hops=%d) after agent=%s; ending turn",
+                    MAX_HOPS,
+                    source,
+                )
+                break
+
+            if not self._handoff_allowed(source, target, visited, context):
+                break
+
+            visited.add(target)
+            decision = RoutingDecision(
+                agent_name=target,
+                reason=handoff.reason,
+                confidence=1.0,
+                matched_rule=f"handoff_from:{source}",
+                handoff_from=source,
+            )
+            agent = self._agents[target]
+            # The hint becomes the target's "user message". It is model-authored
+            # PROMPT TEXT and nothing else - the target treats it as untrusted
+            # user input, exactly as it treats anything the real user typed. See
+            # HandoffToAgentTool.execute for the one case that would need more
+            # than that (content lifted out of a document or a statement).
+            turn_messages = [
+                *turn_messages,
+                Message(role="user", content=handoff.context_hint),
+            ]
+            logger.info("handoff accepted source=%s target=%s", source, target)
+
+        # A last hop still carrying a `handoff` is one whose request was NOT
+        # honoured - every `break` above leaves it that way, and an honoured
+        # one always has another hop after it. If it also said nothing, the
+        # user would otherwise be handed an empty bubble.
+        last = hops[-1]
+        if last.handoff is not None and not last.reply:
+            last.reply = HANDOFF_REFUSED_REPLY
+
+        return TurnDispatchResult(hops=hops)
+
+    def _handoff_allowed(
+        self, source: str, target: str, visited: set[str], context: Context
+    ) -> bool:
+        """Whether `source` may hand this turn to `target`. Logs every refusal.
+
+        `target` is MODEL-AUTHORED. It is never logged as free text before it
+        has been matched against a registered agent name - same reasoning as
+        `_classify_with_model`'s unregistered-name branch.
+        """
+        if target == QUARANTINED_AGENT:
+            # Both directions of the quarantine are closed: DocumentAgent is
+            # never handed the handoff tool (so it can never be a source), and
+            # this rejects it as a target however it was named.
+            logger.warning(
+                "handoff rejected source=%s: %s is quarantined and cannot be a target",
+                source,
+                QUARANTINED_AGENT,
+            )
+            return False
+
+        if target not in ALLOWED_HANDOFF_TARGETS.get(source, frozenset()):
+            logger.warning(
+                "handoff rejected source=%s: target is not in that agent's allow-list",
+                source,
+            )
+            return False
+
+        if target not in self._agents:
+            logger.warning(
+                "handoff rejected source=%s target=%s: allowed but not registered",
+                source,
+                target,
+            )
+            return False
+
+        if target in visited:
+            # Cycle prevention. A turn that came back to an agent that already
+            # ran would re-read the same data and reach the same conclusion,
+            # i.e. loop - the hop cap would stop it eventually, but late and
+            # after paying for it.
+            logger.warning(
+                "handoff rejected source=%s target=%s: already ran this turn",
+                source,
+                target,
+            )
+            return False
+
+        if context.statement_id is not None and target == "banking":
+            # STATEMENT-MODE GATE (Step 13 interaction). With a statement
+            # active, the insights tools read `statement_rows` instead of the
+            # ledger, so the ids in their output are statement_rows.id values,
+            # NOT ledger references. A banking action taken as a consequence of
+            # such a finding would be reasoning about ids that mean something
+            # else entirely - silently unsafe rather than loudly broken.
+            # Conservative for Step 15; a later step can relax it per-action,
+            # once statement-aware banking actions exist to relax it for.
+            logger.warning(
+                "handoff rejected source=%s target=banking: a statement is active, so "
+                "insights ids are statement_rows ids and not ledger references",
+                source,
+            )
+            return False
+
+        return True

@@ -70,13 +70,17 @@ async def test_dispatch_routes_and_runs_with_the_context(context):
     provider = MockProvider([ModelResponse(text="routed")])
     orchestrator = Orchestrator([BankingAgent(provider, build_banking_tools(FakeSupabase()))])
 
-    reply, trace, routing = await orchestrator.dispatch(
+    turn = await orchestrator.dispatch(
         [Message(role="user", content="hi")], "hi", context
     )
 
-    assert reply == "routed"
-    assert trace == []
-    assert routing.agent_name == "banking"
+    # A turn with no handoff is a one-hop chain, not a special case (Step 15).
+    assert len(turn.hops) == 1
+    assert turn.final_reply == "routed"
+    assert turn.hops[0].trace == []
+    assert turn.hops[0].handoff is None
+    assert [d.agent_name for d in turn.routing_chain] == ["banking"]
+    assert turn.routing_chain[0].handoff_from is None
 
 
 async def test_service_handle_message_end_to_end_with_tool_call(context):
@@ -88,18 +92,19 @@ async def test_service_handle_message_end_to_end_with_tool_call(context):
         ]
     )
 
-    reply, history, _ = await service.handle_message([], "what's my balance?", context)
+    turn = await service.handle_message([], "what's my balance?", context)
 
-    assert reply == "You have $123.45."
+    assert turn.final_reply == "You have $123.45."
     assert provider.call_count == 2
 
-    # Returned history now carries the whole round trip: the user turn, the
-    # assistant's tool-call request, the tool result, and the final reply -
-    # everything a caller needs to persist and replay the transcript.
-    assert [m.role for m in history] == ["user", "assistant", "tool", "assistant"]
-    assert history[0].content == "what's my balance?"
-    assert history[1].tool_calls[0].name == "get_balance"
-    assert history[2].name == "get_balance"
+    # `new_messages` carries the whole round trip minus the user turn the
+    # caller already has: the assistant's tool-call request, the tool result,
+    # and the final reply - everything a caller persists to replay the
+    # transcript (see TurnDispatchResult.new_messages).
+    history = turn.new_messages
+    assert [m.role for m in history] == ["assistant", "tool", "assistant"]
+    assert history[0].tool_calls[0].name == "get_balance"
+    assert history[1].name == "get_balance"
     assert history[-1].content == "You have $123.45."
 
 
@@ -130,10 +135,12 @@ async def test_service_threads_history_across_turns(context):
         [ModelResponse(text="first"), ModelResponse(text="second")]
     )
 
-    _, history, _ = await service.handle_message([], "soldul one", context)
-    reply, history, _ = await service.handle_message(history, "soldul two", context)
+    first = await service.handle_message([], "soldul one", context)
+    history = [Message(role="user", content="soldul one"), *first.new_messages]
+    second = await service.handle_message(history, "soldul two", context)
+    history = [*history, Message(role="user", content="soldul two"), *second.new_messages]
 
-    assert reply == "second"
+    assert second.final_reply == "second"
     assert [m.role for m in history] == ["user", "assistant", "user", "assistant"]
 
     # The second provider call saw the whole prior conversation.
@@ -295,7 +302,11 @@ def test_insights_agent_has_own_system_prompt():
 
 def test_insights_agent_gets_only_its_own_tools():
     """An agent's reach is what it was handed: the analytical agent has no way
-    to read card numbers."""
+    to read card numbers.
+
+    `handoff_to_agent` (Step 15) does not change that. It reads nothing and
+    writes nothing - it asks for the turn to continue on an agent that CAN act,
+    and whether that is permitted is decided in the orchestrator, not here."""
     tools = build_insights_tools(FakeSupabase())
 
     assert tools.names() == [
@@ -305,6 +316,7 @@ def test_insights_agent_gets_only_its_own_tools():
         "compute_spending_stats",
         "detect_anomalies",
         "compare_statement_to_ledger",
+        "handoff_to_agent",
     ]
     assert tools.get("list_cards") is None
     assert all(tool.read_only for tool in tools)
@@ -435,7 +447,13 @@ def test_planning_agent_gets_only_its_own_tools():
     to read card numbers or categorize spending."""
     tools = build_planning_tools(FakeSupabase())
 
-    assert tools.names() == ["project_balance", "simulate_scenario", "savings_goal"]
+    assert tools.names() == [
+        "project_balance",
+        "simulate_scenario",
+        "savings_goal",
+        # Step 15, same reasoning as the insights registry above.
+        "handoff_to_agent",
+    ]
     assert tools.get("list_cards") is None
     assert tools.get("categorize_transactions") is None
     assert all(tool.read_only for tool in tools)

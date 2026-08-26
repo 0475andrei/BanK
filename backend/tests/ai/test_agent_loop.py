@@ -30,7 +30,7 @@ async def test_plain_text_response_is_returned_unchanged(make_agent, context):
     """1. Model answers directly, no tool call -> agent returns that text."""
     agent, provider = make_agent([ModelResponse(text="Hello, how can I help?")])
 
-    reply, trace = await agent.run(user("hi"), context)
+    reply, trace = _run(await agent.run(user("hi"), context))
     assert trace == []
 
     assert reply == "Hello, how can I help?"
@@ -46,7 +46,7 @@ async def test_tool_call_then_final_text(make_agent, context):
         ]
     )
 
-    reply, trace = await agent.run(user("what's my balance?"), context)
+    reply, trace = _run(await agent.run(user("what's my balance?"), context))
 
     assert reply == "Your balance is $123.45."
     assert provider.call_count == 2
@@ -155,7 +155,7 @@ async def test_invalid_tool_input_is_reported_not_raised(make_agent, context, ar
         ]
     )
 
-    reply, _ = await agent.run(user("balance?"), context)
+    reply, _ = _run(await agent.run(user("balance?"), context))
 
     assert reply == "I couldn't read that account."
 
@@ -172,7 +172,7 @@ async def test_unknown_tool_is_reported_not_raised(make_agent, context):
         ]
     )
 
-    reply, _ = await agent.run(user("send money"), context)
+    reply, _ = _run(await agent.run(user("send money"), context))
 
     assert reply == "I can't do that."
     payload = tool_payload(provider.calls[1])
@@ -188,7 +188,7 @@ async def test_max_iterations_guard_returns_fallback(make_agent, context):
         max_iterations=5,
     )
 
-    reply, _ = await agent.run(user("loop forever"), context)
+    reply, _ = _run(await agent.run(user("loop forever"), context))
 
     assert reply == FALLBACK_REPLY
     assert provider.call_count == 5  # stopped exactly at the cap
@@ -238,3 +238,14 @@ async def test_context_identity_is_never_sent_to_the_model(make_agent, context):
     assert context.user_id not in prompt_text
     for account_id in context.account_ids:
         assert account_id not in prompt_text
+
+
+def _run(result):
+    """Unpack a TurnResult the way these tests read `(reply, trace)`.
+
+    Step 15 replaced the tuple `Agent.run` returned with `TurnResult`. The
+    assertions below are about the loop, not about that shape, so they keep
+    reading two values through this rather than growing a `.reply` on every
+    line.
+    """
+    return result.reply, result.trace

@@ -296,36 +296,113 @@ function agentTagTooltipRow(label, value) {
     return row;
 }
 
-/** Small metadata pill naming which agent produced a reply (see
- * ChatResponse.routing / RoutingDecision). Appended to `container` before
- * the bubble is added, so it renders above it, not inside it. Hover/focus
- * reveals a custom tooltip (see .agent-tag-tooltip) instead of the OS-styled
- * `title` attribute tooltip. */
+/** Small metadata pill naming which agent produced a reply. LEGACY, kept as
+ * the fallback for anything with no chain semantics: rows stored before Step
+ * 15, and any caller still passing a single RoutingDecision. New code goes
+ * through renderAgentChain, which renders a one-element chain identically. */
 function renderAgentTag(routing, container) {
+    renderAgentChain([routing], container);
+}
+
+/** The agent chain that produced a reply (see ChatResponse.routing_chain).
+ * One hop renders "→ Bancar"; a mid-turn handoff renders
+ * "→ Analiză → Bancar". Appended to `container` before the bubble is added,
+ * so it renders above it, not inside it. Hover/focus reveals a custom tooltip
+ * (see .agent-tag-tooltip) listing every hop, instead of the OS-styled `title`
+ * attribute tooltip.
+ *
+ * XSS: built with createElement/textContent throughout, never innerHTML - the
+ * tooltip echoes server-side text (routing.reason, matched_rule) and must
+ * never be parsed as markup. */
+function renderAgentChain(routingChain, container) {
+    const chain = (routingChain || []).filter(Boolean);
+    if (!chain.length) return;
+
     const tag = document.createElement('div');
-    tag.className = 'agent-tag';
+    tag.className = chain.length > 1 ? 'agent-tag agent-tag-chain' : 'agent-tag';
     tag.tabIndex = 0;
-    tag.appendChild(document.createTextNode(`→ ${agentTagLabel(routing.agent_name)}`));
+    tag.appendChild(document.createTextNode(
+        chain.map(hop => `→ ${agentTagLabel(hop.agent_name)}`).join(' ')
+    ));
 
     const tooltip = document.createElement('div');
     tooltip.className = 'agent-tag-tooltip';
-    tooltip.appendChild(agentTagTooltipRow('Agent', routing.agent_name));
-    tooltip.appendChild(agentTagTooltipRow('Motiv', routing.reason));
-    tooltip.appendChild(agentTagTooltipRow('Regulă', routing.matched_rule ?? '—'));
-    // Keyword rules always match at confidence=1.0 - showing it there is just
-    // noise. Only LLM-fallback routing (confidence < 1.0) is worth surfacing.
-    if (routing.confidence !== undefined && routing.confidence < 1.0) {
-        const pct = Math.round(routing.confidence * 100);
-        tooltip.appendChild(agentTagTooltipRow('Încredere', `${pct}%`));
-    }
+    chain.forEach((hop, index) => {
+        // A multi-hop chain needs its rows grouped per agent, otherwise three
+        // "Motiv:" lines in a row say nothing about which agent each belongs to.
+        if (chain.length > 1) {
+            const heading = document.createElement('div');
+            heading.className = 'agent-tag-tooltip-hop';
+            heading.textContent = `${index + 1}. ${agentTagLabel(hop.agent_name)}`;
+            tooltip.appendChild(heading);
+        }
+        tooltip.appendChild(agentTagTooltipRow('Agent', hop.agent_name));
+        tooltip.appendChild(agentTagTooltipRow('Motiv', hop.reason));
+        tooltip.appendChild(agentTagTooltipRow('Regulă', hop.matched_rule ?? '—'));
+        // Keyword rules always match at confidence=1.0 - showing it there is
+        // just noise. Only LLM-fallback routing (confidence < 1.0) is worth
+        // surfacing. A handoff hop is always 1.0, so it never shows either.
+        if (hop.confidence !== undefined && hop.confidence < 1.0) {
+            const pct = Math.round(hop.confidence * 100);
+            tooltip.appendChild(agentTagTooltipRow('Încredere', `${pct}%`));
+        }
+    });
     tag.appendChild(tooltip);
 
     container.appendChild(tag);
 }
 
+/** Rebuild each turn's agent chain from stored history rows.
+ *
+ * Live replies carry `routing_chain` on the response; replayed ones don't -
+ * the server stores one row per hop, each with its own routing_metadata, and
+ * the chain is implied by ORDER (see _persist_turn in chat/router.py). This
+ * walks the assistant rows in order and groups a row onto the run in progress
+ * when its `handoff_from` names the previous row's agent - which is exactly
+ * what a handoff wrote there.
+ *
+ * Returns a Map keyed by the message object, holding the chain to draw on it.
+ * Only the LAST row of each run gets an entry: it is the hop that produced the
+ * visible reply, and the earlier hops of a chain usually have empty content
+ * (the source agent handed off before saying anything) and draw no bubble at
+ * all. Rows predating Step 15 have no handoff_from anywhere, so every one of
+ * them is its own single-element chain - the old behaviour, unchanged. */
+function agentChainsByMessage(messages) {
+    const chains = new Map();
+    let run = [];
+
+    const flush = () => {
+        if (!run.length) return;
+        chains.set(run[run.length - 1].message, run.map(entry => entry.routing));
+        run = [];
+    };
+
+    messages.forEach(message => {
+        // A user turn is the only thing that definitely ends a chain - one
+        // turn is one user message, however many agents answered it.
+        if (message.role === 'user') {
+            flush();
+            return;
+        }
+        const routing = message.role === 'assistant' ? message.routing : null;
+        // Trace rows (tool calls and their results) carry no decision. They sit
+        // BETWEEN a chain's hops, so skipping them is not the same as ending
+        // the chain - treating them as a break would split every two-hop turn
+        // back into two unrelated single-agent tags.
+        if (!routing) return;
+        const previous = run.length ? run[run.length - 1].routing : null;
+        if (previous && routing.handoff_from !== previous.agent_name) flush();
+        run.push({ message, routing });
+    });
+    flush();
+
+    return chains;
+}
+
 /** Builds a chat bubble matching the existing markup and appends it.
- * `options.routing`, when present on an 'ai' message, renders the agent tag
- * (see renderAgentTag) above the bubble. */
+ * `options.routingChain`, when present on an 'ai' message, renders the agent
+ * chain (see renderAgentChain) above the bubble. `options.routing` is the
+ * single-decision legacy form of the same thing. */
 function appendChatBubble(role, text, options = {}) {
     const chatMessages = document.getElementById('chat-messages');
 
@@ -344,7 +421,9 @@ function appendChatBubble(role, text, options = {}) {
     const content = document.createElement('div');
     content.className = 'message-content';
 
-    if (role === 'ai' && options.routing) {
+    if (role === 'ai' && options.routingChain) {
+        renderAgentChain(options.routingChain, content);
+    } else if (role === 'ai' && options.routing) {
         renderAgentTag(options.routing, content);
     }
 
@@ -413,6 +492,10 @@ async function sendMessage() {
 
         typingBubble.remove();
         const aiBubble = appendChatBubble('ai', response.reply, {
+            // routing_chain since Step 15: several agents can answer one turn.
+            // `routing` is the server's backward-compatible last-hop duplicate,
+            // used only if an older backend omits the chain entirely.
+            routingChain: response.routing_chain?.length ? response.routing_chain : undefined,
             routing: response.routing || undefined,
         });
         if (response.proposal) {
@@ -603,6 +686,10 @@ async function openConversation(conversationId) {
         const messages = await apiFetch(`/chat/conversations/${conversationId}/messages`);
         const chatMessages = document.getElementById('chat-messages');
         chatMessages.innerHTML = '';
+        // Chains are reconstructed from ALL rows, before the empty-content
+        // filter below: a hop that handed off has no text of its own, but it
+        // is still the first half of the chain drawn on the reply that follows.
+        const chains = agentChainsByMessage(messages);
         const dialogue = messages.filter(message =>
             (message.role === 'user' || message.role === 'assistant') && message.content
         );
@@ -610,7 +697,10 @@ async function openConversation(conversationId) {
             dialogue.forEach(message => appendChatBubble(
                 message.role === 'user' ? 'user' : 'ai',
                 message.content,
-                { routing: message.routing || undefined }
+                {
+                    routingChain: chains.get(message),
+                    routing: message.routing || undefined,
+                }
             ));
         } else {
             appendChatBubble('ai', chatWelcomeText());

@@ -21,7 +21,9 @@ from app.ai.agents.base import Agent
 from app.ai.context import Context
 from app.ai.providers.base import ModelProvider
 from app.ai.schemas import Message, ToolCall, ToolResult
+from app.ai.tools.handoff_tool import HANDOFF_SENTINEL_KEY, HANDOFF_TRACE_MARKER
 from app.ai.tools.registry import ToolRegistry
+from app.ai.turn import HandoffRequest, TurnResult
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,7 @@ class ToolLoopAgent(Agent):
         self._system_prompt = system_prompt if system_prompt is not None else self.system_prompt
         self._max_iterations = max_iterations
 
-    async def run(self, messages: Sequence[Message], context: Context) -> tuple[str, list[Message]]:
+    async def run(self, messages: Sequence[Message], context: Context) -> TurnResult:
         # `context` is threaded straight to the tools and is never rendered into
         # the prompt — the model must not be able to read or restate identity.
         #
@@ -73,9 +75,10 @@ class ToolLoopAgent(Agent):
             response = self._provider.complete(working, specs)
 
             if not response.wants_tools:
-                return response.text or "", working[trace_start:]
+                return TurnResult(reply=response.text or "", trace=working[trace_start:])
 
-            working.append(response.to_assistant_message())
+            assistant_turn = response.to_assistant_message()
+            working.append(assistant_turn)
             for call in response.tool_calls:
                 # Log the tool name only — arguments and results may carry PII.
                 logger.info(
@@ -85,6 +88,35 @@ class ToolLoopAgent(Agent):
                     call.name,
                 )
                 result = await self._execute(call, context)
+
+                handoff = _handoff_from(result)
+                if handoff is not None:
+                    # STOP HERE. The rest of this turn belongs to another agent
+                    # (if dispatch permits it), so there is nothing left for
+                    # this model to say - anything it added now would be
+                    # written before an answer it cannot see.
+                    #
+                    # The sentinel result is replaced rather than appended
+                    # as-is: it is protocol plumbing, not data, and replaying
+                    # it into a later prompt would teach the model to imitate
+                    # the shape instead of calling the tool.
+                    working.append(
+                        ToolResult(
+                            tool_call_id=result.tool_call_id,
+                            name=result.name,
+                            data={"status": HANDOFF_TRACE_MARKER},
+                        ).to_message()
+                    )
+                    logger.info("agent=%s requested a handoff; stopping loop", self.name)
+                    # `reply` is whatever text the model produced alongside the
+                    # handoff call, usually nothing. The target agent's reply is
+                    # what the user sees for this leg of the chain.
+                    return TurnResult(
+                        reply=assistant_turn.content or "",
+                        trace=working[trace_start:],
+                        handoff=handoff,
+                    )
+
                 working.append(result.to_message())
 
         logger.warning(
@@ -92,7 +124,7 @@ class ToolLoopAgent(Agent):
             self.name,
             self._max_iterations,
         )
-        return self.fallback_reply, working[trace_start:]
+        return TurnResult(reply=self.fallback_reply, trace=working[trace_start:])
 
     async def _execute(self, call: ToolCall, context: Context) -> ToolResult:
         tool = self._tools.get(call.name)
@@ -106,3 +138,27 @@ class ToolLoopAgent(Agent):
             )
         # `execute` validates arguments, enforces the context, and never raises.
         return await tool.execute(call, context)
+
+
+def _handoff_from(result: ToolResult) -> HandoffRequest | None:
+    """Recognise the handoff sentinel in a tool result, or None.
+
+    Defensive about the payload's shape rather than trusting it: the sentinel
+    only ever comes from `HandoffToAgentTool` today, but a malformed one must
+    degrade to "no handoff" instead of raising inside the loop. Even a
+    well-formed one is only a REQUEST - see orchestrator.dispatch.
+    """
+    if not result.ok or not result.data:
+        return None
+    payload = result.data.get(HANDOFF_SENTINEL_KEY)
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return HandoffRequest(
+            target_agent=str(payload["target"]),
+            reason=str(payload["reason"]),
+            context_hint=str(payload["context_hint"]),
+        )
+    except (KeyError, ValueError):
+        logger.warning("malformed handoff sentinel ignored")
+        return None

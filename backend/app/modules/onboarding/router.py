@@ -81,10 +81,11 @@ async def chat(
     conversation = [*payload.history, Message(role="user", content=payload.message)]
 
     try:
-        reply, trace = await agent.run(conversation, context)
+        turn = await agent.run(conversation, context)
     except ProviderError as exc:
         raise AIProviderError() from exc
 
+    reply, trace = turn.reply, turn.trace
     updated_history = _redact_passwords(
         [*conversation, *trace, Message(role="assistant", content=reply)]
     )

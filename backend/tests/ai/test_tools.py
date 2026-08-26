@@ -328,6 +328,8 @@ def test_all_insights_tools_are_registered(supabase):
         "compute_spending_stats",
         "detect_anomalies",
         "compare_statement_to_ledger",
+        # Step 15: not an analytical tool, but this agent's one way out.
+        "handoff_to_agent",
     ]
 
 
@@ -371,6 +373,7 @@ def test_all_planning_tools_are_registered(supabase):
         "project_balance",
         "simulate_scenario",
         "savings_goal",
+        "handoff_to_agent",  # Step 15
     ]
 
 
