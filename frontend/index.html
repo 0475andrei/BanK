@@ -471,21 +471,21 @@
     <div class="modal-overlay" id="statement-modal" hidden>
         <div class="modal">
             <div class="modal-header">
-                <h3>Extras de cont</h3>
+                <h3 data-i18n="statement.title">Extras de cont</h3>
                 <button class="modal-close" id="close-statement-modal"><i data-lucide="x"></i></button>
             </div>
             <p class="field-hint" id="statement-account-name" style="margin-bottom: 16px;"></p>
             <div class="auth-error" id="statement-error" hidden></div>
             <form id="statement-form">
-                <label class="field-label" for="statement-period-start">De la</label>
+                <label class="field-label" for="statement-period-start" data-i18n="statement.from_label">De la</label>
                 <input class="field-input" type="date" id="statement-period-start" required>
 
-                <label class="field-label" for="statement-period-end">Până la</label>
+                <label class="field-label" for="statement-period-end" data-i18n="statement.to_label">Până la</label>
                 <input class="field-input" type="date" id="statement-period-end" required>
 
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" id="cancel-statement">Anulează</button>
-                    <button type="submit" class="btn btn-primary" id="statement-submit-btn">Descarcă PDF</button>
+                    <button type="button" class="btn btn-secondary" id="cancel-statement" data-i18n="common.Anulează">Anulează</button>
+                    <button type="submit" class="btn btn-primary" id="statement-submit-btn" data-i18n="statement.download_button">Descarcă PDF</button>
                 </div>
             </form>
         </div>

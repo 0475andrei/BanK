@@ -50,7 +50,9 @@
     "create": "Create",
     "or": "or",
     "reading_file": "Reading the file...",
-    "chat_placeholder": "Ask the AI assistant..."
+    "chat_placeholder": "Ask the AI assistant...",
+    "amount_label": "Amount",
+    "description_label": "Description"
   },
   "dashboard": {
     "title": "BanK Dashboard",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "No other account in the same currency",
     "open_account_button": "Open account",
     "account_name_placeholder": "e.g. Vacation savings",
-    "projection_amount_placeholder": "e.g. 5000"
+    "projection_amount_placeholder": "e.g. 5000",
+    "period_label": "Term",
+    "projection_amount_label": "Estimated deposit amount",
+    "projection_amount_note": "(for estimation only)"
   },
   "cards": {
     "cancel": "Cancel card",
@@ -445,9 +450,19 @@
   },
   "scheduled": {
     "title": "Schedule a transfer",
+    "from_account_label": "From account",
     "start_in_days_label": "Starts in how many days",
     "frequency_label": "Frequency",
     "submit_button": "Schedule"
+  },
+  "statement": {
+    "title": "Account statement",
+    "download_hint": "Download account statement",
+    "from_label": "From",
+    "to_label": "To",
+    "download_button": "Download PDF",
+    "invalid_period": "The start date must be before the end date.",
+    "generation_failed": "The statement couldn't be generated."
   },
   "face_confirm": {
     "title": "Confirm with Face ID",

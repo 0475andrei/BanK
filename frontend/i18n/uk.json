@@ -50,7 +50,9 @@
     "create": "Створити",
     "or": "або",
     "reading_file": "Читання файлу...",
-    "chat_placeholder": "Запитайте AI-асистента..."
+    "chat_placeholder": "Запитайте AI-асистента...",
+    "amount_label": "Сума",
+    "description_label": "Опис"
   },
   "dashboard": {
     "title": "Панель BanK",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "Немає іншого рахунку в тій самій валюті",
     "open_account_button": "Відкрити рахунок",
     "account_name_placeholder": "напр. Заощадження на відпустку",
-    "projection_amount_placeholder": "напр. 5000"
+    "projection_amount_placeholder": "напр. 5000",
+    "period_label": "Строк",
+    "projection_amount_label": "Орієнтовна сума внеску",
+    "projection_amount_note": "(лише для оцінки)"
   },
   "cards": {
     "cancel": "Скасувати картку",
@@ -445,9 +450,19 @@
   },
   "scheduled": {
     "title": "Запланувати переказ",
+    "from_account_label": "З рахунку",
     "start_in_days_label": "Через скільки днів почати",
     "frequency_label": "Періодичність",
     "submit_button": "Запланувати"
+  },
+  "statement": {
+    "title": "Виписка з рахунку",
+    "download_hint": "Завантажити виписку з рахунку",
+    "from_label": "Від",
+    "to_label": "До",
+    "download_button": "Завантажити PDF",
+    "invalid_period": "Дата початку має бути раніше дати завершення.",
+    "generation_failed": "Не вдалося сформувати виписку."
   },
   "face_confirm": {
     "title": "Підтвердити Face ID",

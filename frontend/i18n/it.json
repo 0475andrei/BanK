@@ -50,7 +50,9 @@
     "create": "Crea",
     "or": "o",
     "reading_file": "Lettura del file in corso...",
-    "chat_placeholder": "Chiedi all'assistente IA..."
+    "chat_placeholder": "Chiedi all'assistente IA...",
+    "amount_label": "Importo",
+    "description_label": "Descrizione"
   },
   "dashboard": {
     "title": "Dashboard BanK",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "Nessun altro conto nella stessa valuta",
     "open_account_button": "Apri il conto",
     "account_name_placeholder": "es. Risparmi vacanza",
-    "projection_amount_placeholder": "es. 5000"
+    "projection_amount_placeholder": "es. 5000",
+    "period_label": "Durata",
+    "projection_amount_label": "Importo stimato da depositare",
+    "projection_amount_note": "(solo a scopo di stima)"
   },
   "cards": {
     "cancel": "Annulla carta",
@@ -445,9 +450,19 @@
   },
   "scheduled": {
     "title": "Programma un bonifico",
+    "from_account_label": "Dal conto",
     "start_in_days_label": "Inizia tra quanti giorni",
     "frequency_label": "Frequenza",
     "submit_button": "Programma"
+  },
+  "statement": {
+    "title": "Estratto conto",
+    "download_hint": "Scarica estratto conto",
+    "from_label": "Dal",
+    "to_label": "Al",
+    "download_button": "Scarica PDF",
+    "invalid_period": "La data di inizio deve essere precedente alla data di fine.",
+    "generation_failed": "Non è stato possibile generare l'estratto conto."
   },
   "face_confirm": {
     "title": "Conferma con Face ID",
