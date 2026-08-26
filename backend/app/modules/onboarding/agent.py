@@ -21,6 +21,7 @@ from app.ai.context import Context
 from app.ai.providers.base import ModelProvider
 from app.ai.schemas import Message, ToolCall, ToolResult
 from app.ai.tools.registry import ToolRegistry
+from app.ai.turn import TurnResult
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +116,10 @@ class OnboardingAgent(Agent):
         self._system_prompt = system_prompt
         self._max_iterations = max_iterations
 
-    async def run(self, messages: Sequence[Message], context: Context) -> tuple[str, list[Message]]:
+    async def run(self, messages: Sequence[Message], context: Context) -> TurnResult:
+        """Same loop as ToolLoopAgent, minus handoff: onboarding runs outside
+        the orchestrator entirely (no session, no Context identity yet), so
+        there is no chain for it to be part of and `handoff` is always None."""
         working: list[Message] = [
             Message(role="system", content=self._system_prompt),
             *messages,
@@ -127,7 +131,7 @@ class OnboardingAgent(Agent):
             response = self._provider.complete(working, specs)
 
             if not response.wants_tools:
-                return response.text or "", working[trace_start:]
+                return TurnResult(reply=response.text or "", trace=working[trace_start:])
 
             working.append(response.to_assistant_message())
             for call in response.tool_calls:
@@ -145,7 +149,7 @@ class OnboardingAgent(Agent):
             self.name,
             self._max_iterations,
         )
-        return FALLBACK_REPLY, working[trace_start:]
+        return TurnResult(reply=FALLBACK_REPLY, trace=working[trace_start:])
 
     async def _execute(self, call: ToolCall, context: Context) -> ToolResult:
         tool = self._tools.get(call.name)

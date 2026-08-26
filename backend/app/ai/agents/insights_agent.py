@@ -9,6 +9,13 @@ both strictly literal and usefully interpretive.
 
 Still read-only: it may suggest what the user *could* do, never claim to have
 done it. Write/propose tools arrive in Step 11.
+
+Since Step 15 it also holds `handoff_to_agent`, which is the one thing here
+that is not a read - but it does not make this agent able to act. All it does
+is ask for the rest of the turn to continue on an agent that can (BankingAgent
+for an action, PlanningAgent for a goal). Whether that is permitted at all is
+decided in `Orchestrator.dispatch`, against a table this agent's model cannot
+reach; see ALLOWED_HANDOFF_TARGETS.
 """
 
 from __future__ import annotations
@@ -135,9 +142,40 @@ contabil real - acele rânduri sunt EXTRASE AUTOMAT și NEVERIFICATE, pot
 conține erori de citire. Menționează asta dacă utilizatorul pare să creadă
 că analizezi jurnalul contabil real.
 
+- handoff_to_agent: predă restul acestei conversații altui agent, care
+  continuă în ACEEAȘI tură și îi răspunde utilizatorului. Tu tot nu poți
+  acționa - dar poți duce constatarea ta la cineva care poate.
+
 Poți combina instrumente în aceeași conversație când întrebarea o cere - de
 exemplu „rezumatul lunii" poate însemna atât compute_spending_stats cât și
 categorize_transactions.
+
+CÂND SĂ PREDAI CONVERSAȚIA (handoff_to_agent):
+- Dacă detect_recurring_payments găsește o plată recurentă / un abonament pe
+  care utilizatorul pare să vrea să îl OPREASCĂ („nu mai vreau abonamentul
+  X", „cum scap de plata asta lunară", „anulează-mi cardul pe care se ia
+  X"), cheamă handoff_to_agent cu target_agent="banking". Agentul bancar
+  poate pregăti o propunere de anulare a cardului; tu nu poți.
+- Dacă utilizatorul vrea, pornind de la analiza ta, un PLAN sau o proiecție
+  („cât aș economisi în 6 luni dacă renunț la abonamentele astea?"), cheamă
+  handoff_to_agent cu target_agent="planning".
+- Nu preda pentru orice sugestie. Doar când utilizatorul chiar vrea să se
+  întâmple ceva, iar tu nu ai instrumentul potrivit. Dacă nu e clar ce vrea,
+  întreabă-l întâi, normal, în conversație.
+- Cum completezi argumentele:
+  * target_agent: „banking" sau „planning". Nimic altceva.
+  * reason: pe scurt, de ce e nevoie de celălalt agent („plată recurentă pe
+    care utilizatorul vrea să o oprească").
+  * context_hint: instrucțiunea concretă pentru celălalt agent, ca și cum ar
+    fi mesajul utilizatorului. Numește exact despre ce e vorba - comerciantul,
+    suma și cardul, dacă le știi. De exemplu: „Utilizatorul vrea să scape de
+    abonamentul GymPass, 12000 în unități minore pe lună, plătit pe cardul
+    care se termină în 4321. Propune anularea acelui card."
+- După ce ai chemat handoff_to_agent, NU mai scrie nimic: celălalt agent
+  este cel care îi răspunde utilizatorului de acum înainte.
+- Predarea nu este garantată. Poate fi refuzată (de exemplu când conversația
+  are un extras de cont activ). Dacă vrei să fii sigur că utilizatorul
+  primește ceva util, spune-ți concluzia analitică ÎNAINTE de a preda.
 """
 
 FALLBACK_REPLY = (

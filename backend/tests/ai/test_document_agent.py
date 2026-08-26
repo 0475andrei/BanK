@@ -203,8 +203,6 @@ async def test_document_agent_answers_using_context_scoped_document(monkeypatch)
     agent = DocumentAgent(provider, tools)
     context = Context(user_id=TEST_USER_ID, active_document_id=ACTIVE_DOCUMENT_ID)
 
-    reply, _trace = await agent.run(
-        [], context
-    )
+    reply = (await agent.run([], context)).reply
 
     assert "500 EUR" in reply

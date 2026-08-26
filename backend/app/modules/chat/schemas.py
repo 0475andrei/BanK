@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from app.ai.routing import RoutingDecision
 from app.ai.schemas import Role, ToolCall
@@ -69,8 +69,17 @@ class ChatResponse(BaseModel):
     #: Always returned, so the client knows what to send on the next turn -
     #: history itself now lives server-side (see conversations_service).
     conversation_id: uuid.UUID
-    #: Which agent answered, and why. Optional so the contract stays
-    #: backward-compatible: clients written before routing existed ignore it.
+    #: EVERY agent that ran this turn, in execution order (Step 15). One entry
+    #: for an ordinary turn; two when an agent handed off mid-turn, and the
+    #: second entry's `handoff_from` names the first. The frontend renders this
+    #: as a chain ("-> Analiza -> Bancar"); see renderAgentChain in
+    #: frontend/app.js. Never empty for a successful turn.
+    routing_chain: list[RoutingDecision] = Field(default_factory=list)
+    #: The LAST decision in `routing_chain`, duplicated here so a client
+    #: written before Step 15 keeps working unchanged. The last one rather than
+    #: the first deliberately: it is the agent that produced `reply`, i.e. what
+    #: a single-agent client would have wanted to label the reply with anyway.
+    #: None only when no agent ran at all.
     routing: RoutingDecision | None = None
     #: Set only when this turn's agent called a propose_* tool (see
     #: app/ai/tools/propose_tools.py) - same "optional, additive" pattern as

@@ -17,7 +17,6 @@ from app.ai.agents.planning_agent import PlanningAgent
 from app.ai.context import Context
 from app.ai.orchestrator import Orchestrator
 from app.ai.providers.base import ModelProvider
-from app.ai.routing import RoutingDecision
 from app.ai.schemas import Message
 from app.ai.tools.banking import (
     AddBeneficiaryTool,
@@ -35,6 +34,7 @@ from app.ai.tools.banking import (
     UnfreezeCardTool,
 )
 from app.ai.tools.document_tools import ReadDocumentTool
+from app.ai.tools.handoff_tool import HandoffToAgentTool
 from app.ai.tools.insights import (
     CategorizeTransactionsTool,
     CompareStatementToLedgerTool,
@@ -54,6 +54,7 @@ from app.ai.tools.propose_tools import (
 )
 from app.ai.tools.registry import ToolRegistry
 from app.ai.tools.statement_tools import SummarizeStatementTool
+from app.ai.turn import TurnDispatchResult
 
 if TYPE_CHECKING:
     from app.ai.providers.embedding_base import EmbeddingProvider
@@ -97,12 +98,19 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
             ProposeOpenAccountTool(supabase),
             ProposeCloseAccountTool(supabase),
             ProposeCancelCardTool(supabase),
+            # NO HandoffToAgentTool here, deliberately (Step 15): BankingAgent
+            # is TERMINAL in a handoff chain. It is the agent that produces
+            # proposals - the end of the line - and the one holding every
+            # write-adjacent tool above, so it gets no way to pull another
+            # agent in behind it. See ALLOWED_HANDOFF_TARGETS in
+            # app/ai/orchestrator.py, which also has no "banking" key.
         ]
     )
 
 
 def build_insights_tools(supabase: AsyncClient, provider: ModelProvider) -> ToolRegistry:
-    """The read-only tools the insights agent is allowed to call.
+    """The read-only tools the insights agent is allowed to call, plus the
+    handoff tool (Step 15).
 
     Deliberately a different registry from `build_banking_tools`: an agent's
     reach is defined by what it is handed, so the analytical agent cannot read
@@ -110,6 +118,14 @@ def build_insights_tools(supabase: AsyncClient, provider: ModelProvider) -> Tool
 
     `provider` only feeds CategorizeTransactionsTool's few-shot classifier
     (see categorize_transactions.py) - every other tool here ignores it.
+
+    `handoff_to_agent` is the one thing here that is not a read: it lets an
+    analytical finding continue on an agent that can act on it (the Step 15
+    demo path - a recurring charge becoming a cancel_card proposal). It does
+    not widen this agent's own reach by a single tool. It only ASKS for the
+    turn to continue elsewhere, and where it may continue to is decided by
+    `ALLOWED_HANDOFF_TARGETS` in app/ai/orchestrator.py - banking or planning,
+    never documents - not by anything the model writes into its arguments.
     """
     return ToolRegistry(
         [
@@ -119,6 +135,7 @@ def build_insights_tools(supabase: AsyncClient, provider: ModelProvider) -> Tool
             ComputeSpendingStatsTool(supabase),
             DetectAnomaliesTool(supabase),
             CompareStatementToLedgerTool(supabase),
+            HandoffToAgentTool(),
         ]
     )
 
@@ -129,12 +146,18 @@ def build_planning_tools(supabase: AsyncClient) -> ToolRegistry:
     A third distinct registry, same reason as insights vs banking: the
     goal-oriented agent projects and simulates, it does not need (and is not
     handed) the analytical categorisation/anomaly tools either.
+
+    It does get `handoff_to_agent` (Step 15), for the same reason Insights
+    does: a plan that needs a concrete first step has nowhere to put one.
+    Its allow-list is narrower than Insights' - banking only, never planning
+    back into itself and never documents (see ALLOWED_HANDOFF_TARGETS).
     """
     return ToolRegistry(
         [
             ProjectBalanceTool(supabase),
             SimulateScenarioTool(supabase),
             SavingsGoalTool(supabase),
+            HandoffToAgentTool(),
         ]
     )
 
@@ -165,6 +188,16 @@ def build_document_tools(supabase: AsyncClient) -> ToolRegistry:
     any OTHER kind of tool here - a new read-only, no-handoff,
     aggregate-or-wrapped tool over the same active document/statement is
     the only thing this registry may ever grow.
+
+    STEP 15 MADE "nothing that could hand control to another agent" LITERAL.
+    Cross-agent handoff now exists as an actual tool,
+    `app/ai/tools/handoff_tool.py::HandoffToAgentTool`, and it is NOT here -
+    that omission is the invariant above, not an oversight, and adding it
+    would end DocumentAgent's isolation in one line. The quarantine is closed
+    from the other side too: `Orchestrator.dispatch` rejects any handoff
+    naming "documents" as its target, whichever agent asked (see
+    QUARANTINED_AGENT in app/ai/orchestrator.py), so a document cannot talk
+    its way into this agent from outside either.
     """
     return ToolRegistry([ReadDocumentTool(supabase), SummarizeStatementTool(supabase)])
 
@@ -251,29 +284,24 @@ class AIService:
         history: Sequence[Message],
         user_message: str,
         context: Context,
-    ) -> tuple[str, list[Message], RoutingDecision]:
+    ) -> TurnDispatchResult:
         """Answer `user_message` for the user identified by `context`.
 
         `context` is required and has no default on purpose: forgetting to pass
         an identity must be an error, never a silent fallback to some ambient
         one. Callers build it at the edge (see `app.ai.context`).
 
-        Returns `(reply, history, routing)`. `history` is the caller's history
-        with the new user turn, any tool-call/tool-result trace the agent
-        produced, and the final assistant reply appended, in that order;
-        callers persist it (see `app.modules.chat.conversations_service`) so a
-        reload replays the same transcript the model actually saw. `routing`
-        records which agent answered and why.
+        Returns the whole turn - every agent hop that ran, in order, each with
+        its own reply, trace and routing decision (see `app.ai.turn`). Callers
+        that only want the transcript take `result.new_messages` and append it
+        to the history they passed in; callers that must keep the hops apart,
+        because each one persists its own routing row, walk `result.hops`
+        instead (see `app.modules.chat.router`). Either way a reload replays
+        the same transcript the models actually saw.
 
-        TODO: if this grows past 3 elements, switch to a TurnResult Pydantic
-        model rather than widening the tuple again.
+        Before Step 15 this returned `(reply, history, routing)` and carried a
+        TODO about switching to a model rather than widening that tuple a
+        fourth time. Cross-agent handoff is what made it a fourth time.
         """
         conversation = [*history, Message(role="user", content=user_message)]
-        reply, trace, routing = await self._orchestrator.dispatch(
-            conversation, user_message, context
-        )
-        return (
-            reply,
-            [*conversation, *trace, Message(role="assistant", content=reply)],
-            routing,
-        )
+        return await self._orchestrator.dispatch(conversation, user_message, context)

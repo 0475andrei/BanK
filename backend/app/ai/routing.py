@@ -78,3 +78,13 @@ class RoutingDecision(BaseModel):
     reason: str
     confidence: float = Field(ge=0.0, le=1.0)
     matched_rule: str | None = None
+    #: Set only on a hop that a PREVIOUS agent handed the turn to (Step 15):
+    #: the name of the agent it came from. None means this decision came from
+    #: `Orchestrator.route()` - i.e. it is the first hop of a turn, or the
+    #: whole turn.
+    #:
+    #: No migration needed for this field. `messages.routing_metadata` is
+    #: JSONB, so an extra key just stores; and because it defaults to None,
+    #: every row written before Step 15 reads back as `handoff_from=None`,
+    #: which is exactly what those turns were.
+    handoff_from: str | None = None

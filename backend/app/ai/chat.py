@@ -61,9 +61,16 @@ async def main() -> int:
             return 0
 
         try:
-            reply, history, _routing = await service.handle_message(
-                history, user_input, context
-            )
+            turn = await service.handle_message(history, user_input, context)
+            # One turn may now be several agent hops (see app.ai.turn); the CLI
+            # only shows the final reply, but persists every hop's messages so
+            # the next turn's history is what the models actually saw.
+            reply = turn.final_reply
+            history = [
+                *history,
+                Message(role="user", content=user_input),
+                *turn.new_messages,
+            ]
         except ProviderError as exc:
             # Keep the REPL alive; the history is unchanged so the user can retry.
             print(f"\nmodel error: {exc}\n", file=sys.stderr)

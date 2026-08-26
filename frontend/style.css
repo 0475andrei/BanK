@@ -976,8 +976,27 @@ body {
     transition: opacity 120ms ease, transform 120ms ease;
 }
 
+/* A multi-agent turn (Step 15 cross-agent handoff): "-> Analiza -> Bancar".
+   Slightly less faded than a single-agent tag - a turn that changed hands is
+   worth noticing, where the ordinary one-agent tag is background metadata. */
+.agent-tag-chain {
+    opacity: 0.85;
+}
+
 .agent-tag-tooltip div + div {
     margin-top: 2px;
+}
+
+/* Per-hop heading inside a chain tooltip, so three "Motiv:" rows in a row
+   still say which agent each belongs to. */
+.agent-tag-tooltip-hop {
+    margin-top: 8px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.agent-tag-tooltip-hop:first-child {
+    margin-top: 0;
 }
 
 .agent-tag-tooltip::before {
