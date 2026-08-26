@@ -212,6 +212,20 @@ class InvalidFaceConfirmationError(AppError):
     default_message = "Invalid or expired face confirmation."
 
 
+class FaceAuthMethodRequiredError(AppError):
+    """The proposal being confirmed is a transfer/payment that WOULD have
+    required Face ID (not password) on the direct, non-AI path - see
+    proposals_service._proposal_requires_face and
+    face_auth_service.enforce_face_confirmation. Distinct from
+    FaceConfirmationRequiredError: the caller isn't missing a token, they
+    affirmatively chose the wrong step-up method for this amount/recipient,
+    and must retry with `auth_method: "face"` instead."""
+
+    status_code = 428
+    error_code = "face_auth_method_required"
+    default_message = "This proposal requires Face ID confirmation - password is not enough."
+
+
 class InvalidEnrollmentCodeError(AppError):
     status_code = 400
     error_code = "invalid_enrollment_code"

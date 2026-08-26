@@ -463,6 +463,34 @@
         </div>
     </div>
 
+    <!-- Account statement download modal - opened by openStatementModal() from
+         the "extras de cont" icon on each account card in app.js. Downloads
+         GET /accounts/{id}/statement/pdf as an actual file (see
+         downloadStatement()), not a preview - the endpoint sets
+         Content-Disposition: attachment. -->
+    <div class="modal-overlay" id="statement-modal" hidden>
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Extras de cont</h3>
+                <button class="modal-close" id="close-statement-modal"><i data-lucide="x"></i></button>
+            </div>
+            <p class="field-hint" id="statement-account-name" style="margin-bottom: 16px;"></p>
+            <div class="auth-error" id="statement-error" hidden></div>
+            <form id="statement-form">
+                <label class="field-label" for="statement-period-start">De la</label>
+                <input class="field-input" type="date" id="statement-period-start" required>
+
+                <label class="field-label" for="statement-period-end">Până la</label>
+                <input class="field-input" type="date" id="statement-period-end" required>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-statement">Anulează</button>
+                    <button type="submit" class="btn btn-primary" id="statement-submit-btn">Descarcă PDF</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- New savings / term-deposit account modal -->
     <div class="modal-overlay" id="new-savings-modal" hidden>
         <div class="modal">

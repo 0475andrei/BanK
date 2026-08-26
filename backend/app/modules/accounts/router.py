@@ -1,11 +1,13 @@
 import uuid
+from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from supabase import AsyncClient
 
 from app.core.dependencies import get_current_user
 from app.db.supabase_client import get_supabase
-from app.modules.accounts import service
+from app.modules.accounts import service, statement_service
 from app.modules.accounts.schemas import (
     AccountCreate,
     AccountHolderRead,
@@ -100,6 +102,33 @@ async def get_account(
 ) -> AccountRead:
     account = await service.get_account(supabase, user, account_id)
     return await _to_read_model(supabase, account)
+
+
+@router.get("/{account_id}/statement/pdf")
+async def get_account_statement_pdf(
+    account_id: uuid.UUID,
+    period_start: date | None = Query(default=None),
+    period_end: date | None = Query(default=None),
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> Response:
+    """Downloadable PDF statement for one account - see
+    statement_service.generate_statement_pdf for the balance math and
+    statement_pdf.py for the rendering. Defaults to the last 30 days when
+    no period is given, so a plain "download my statement" click works
+    without the frontend having to compute dates itself."""
+    resolved_end = period_end or date.today()
+    resolved_start = period_start or (resolved_end - timedelta(days=30))
+
+    pdf_bytes = await statement_service.generate_statement_pdf(
+        supabase, user, account_id, period_start=resolved_start, period_end=resolved_end
+    )
+    filename = f"extras-cont-{resolved_start.isoformat()}-{resolved_end.isoformat()}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/{account_id}/close", response_model=AccountRead)

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 
+from app.ai.agents.scope_guardrail import OFF_TOPIC_GUARDRAIL
 from app.ai.agents.tool_loop import ToolLoopAgent
 from app.ai.routing import RoutingRule
 
@@ -119,7 +120,9 @@ INSIGHTS_ROUTING_RULES = (
     ),
 )
 
-SYSTEM_PROMPT = """Ești asistentul analitic al băncii. Rolul tău este să ajuți
+SYSTEM_PROMPT = f"""{OFF_TOPIC_GUARDRAIL}
+
+Ești asistentul analitic al băncii. Rolul tău este să ajuți
 utilizatorul să înțeleagă cum își cheltuie și își gestionează banii — analize,
 categorii, tendințe, tipare de cheltuieli.
 
@@ -143,6 +146,10 @@ REGULI:
   în intervalul cerut — nu este o eroare.
 - Formatează răspunsurile în română, concis dar cu observații utile — nu doar
   tabele.
+- Fii scurt: 3-5 propoziții, nu un eseu. Spune concluzia/cifra direct, apoi
+  cel mult o observație utilă. Nu enumera liste lungi de opțiuni sau
+  întrebări de clarificare decât dacă chiar sunt necesare pentru a continua -
+  dacă utilizatorul vrea detalii sau alternative, le poate cere.
 
 INSTRUMENTE DISPONIBILE:
 - get_transactions_in_range: preia tranzacțiile utilizatorului dintr-un interval

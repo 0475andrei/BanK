@@ -145,12 +145,20 @@ async def get_beneficiary_by_iban(
     return resp.data if resp is not None else None
 
 
-async def list_beneficiaries(supabase: AsyncClient, user: UserRead) -> list[dict]:
+async def list_beneficiaries_for_owner(supabase: AsyncClient, user_id: str) -> list[dict]:
+    """Bare-user_id variant, for callers holding a `Context` rather than a
+    full `UserRead` - the AI tool layer (see app/ai/tools/banking/find_
+    beneficiary.py), same convention as transactions/service.py's `_for_
+    owner` split."""
     resp = (
         await supabase.table("beneficiaries")
         .select("*")
-        .eq("user_id", str(user.id))
+        .eq("user_id", user_id)
         .order("display_name")
         .execute()
     )
     return resp.data
+
+
+async def list_beneficiaries(supabase: AsyncClient, user: UserRead) -> list[dict]:
+    return await list_beneficiaries_for_owner(supabase, str(user.id))

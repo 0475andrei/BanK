@@ -70,6 +70,34 @@ async def _resolve_owned_account(
     return await accounts_service.get_account_for_owner(supabase, context.user_id, resolved_id)
 
 
+async def _insufficient_funds_error(
+    supabase: AsyncClient, tool_name: str, account: dict, amount_minor: int
+) -> ToolResult | None:
+    """Checked BEFORE a proposal is created, not just at execution time - a
+    proposal for an amount the source account can't cover used to sail
+    through step-up confirmation (Face ID/password) and only fail
+    afterwards, with a raw "insufficient funds" error the user had already
+    committed to. Returns a failure ToolResult if the balance is too low,
+    None otherwise (this is a snapshot check, not a lock - the real,
+    authoritative check still runs again at execution time, inside the same
+    RPC transaction that moves the money)."""
+    import uuid
+
+    from app.modules.ledger import service as ledger_service
+
+    balance = await ledger_service.get_balance(supabase, uuid.UUID(account["id"]))
+    if balance >= amount_minor:
+        return None
+    return ToolResult.failure(
+        name=tool_name,
+        error=(
+            f"Fonduri insuficiente în {account['name']}: sold disponibil "
+            f"{_format_amount(balance, account['currency'])}, sumă cerută "
+            f"{_format_amount(amount_minor, account['currency'])}."
+        ),
+    )
+
+
 class ProposeTransferInput(BaseModel):
     from_account_id: str = Field(description="One of the user's own account identifiers.")
     to_account_id: str = Field(description="Another of the user's own account identifiers.")
@@ -108,6 +136,12 @@ class ProposeTransferTool(Tool):
                 "access denied user_id=%s tool=%s", context.user_id, self.name
             )
             raise
+
+        insufficient_funds = await _insufficient_funds_error(
+            self._supabase, self.name, from_account, validated_input.amount_minor
+        )
+        if insufficient_funds is not None:
+            return insufficient_funds
 
         amount_str = _format_amount(validated_input.amount_minor, validated_input.currency)
         summary = (
@@ -186,6 +220,12 @@ class ProposePaymentTool(Tool):
                 "access denied user_id=%s tool=%s", context.user_id, self.name
             )
             raise
+
+        insufficient_funds = await _insufficient_funds_error(
+            self._supabase, self.name, from_account, validated_input.amount_minor
+        )
+        if insufficient_funds is not None:
+            return insufficient_funds
 
         # THE GUARDRAIL: re-resolve the real account holder from the IBAN
         # here, server-side, rather than trusting `beneficiary_name` (model-

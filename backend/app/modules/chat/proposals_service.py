@@ -22,6 +22,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.core.exceptions import (
+    FaceAuthMethodRequiredError,
     InvalidFaceConfirmationError,
     NotFoundError,
     ProposalExpiredError,
@@ -36,7 +37,7 @@ from app.modules.auth import service as auth_service
 from app.modules.cards.service import cancel_card
 from app.modules.face_auth import service as face_auth_service
 from app.modules.payments.schemas import PaymentCreate
-from app.modules.payments.service import create_payment
+from app.modules.payments.service import create_payment, is_first_payment_to_person
 from app.modules.transfers.schemas import TransferCreate
 from app.modules.transfers.service import create_transfer
 from app.modules.users.schemas import UserRead
@@ -115,6 +116,21 @@ async def create_proposal(
     payload: dict[str, Any],
     summary: str,
 ) -> dict:
+    # Supersede any other still-pending proposal in THIS conversation first.
+    # A new propose_* call almost always means the user changed their mind
+    # about a prior one in the same conversation ("de fapt, trimite 500 RON"
+    # after a 50 RON proposal) - leaving the old one confirmable is a real
+    # risk (a stray click, or the model re-surfacing it), not just stale UI.
+    # Scoped to the conversation (not proposal_type), same status either way
+    # would be misleading to leave "pending" once the user has moved on.
+    await (
+        supabase.table("proposals")
+        .update({"status": "rejected", "rejected_at": datetime.now(UTC).isoformat()})
+        .eq("conversation_id", conversation_id)
+        .eq("status", "pending")
+        .execute()
+    )
+
     resp = (
         await supabase.table("proposals")
         .insert(
@@ -184,6 +200,49 @@ async def mark_confirmed(supabase: AsyncClient, proposal: dict, result: dict) ->
     return updated.data[0]
 
 
+async def _proposal_requires_face(supabase: AsyncClient, user: UserRead, proposal: dict) -> bool:
+    """Whether THIS transfer/payment proposal would have required Face ID
+    specifically (not password) on the direct, non-AI path - see
+    face_auth_service.enforce_face_confirmation, which create_transfer/
+    create_payment skip entirely when called with proposal_pre_authorized=
+    True (see _execute below). Without this check, confirm_proposal's own
+    Face-OR-password gate would let a large transfer or a first payment to
+    a new recipient go through on a password alone, silently defeating the
+    mandatory-Face-ID policy for exactly the AI-chat path most people would
+    actually use it from.
+
+    Recomputed from the proposal's own payload (the real amount/recipient,
+    already resolved and stored when the proposal was created - see
+    propose_tools.py), not from anything the caller supplies now."""
+    payload = proposal["payload"]
+    proposal_type = proposal["proposal_type"]
+
+    if proposal_type not in ("transfer", "payment"):
+        return False
+    if face_auth_service.requires_face_confirmation(payload["amount_minor"]):
+        return True
+    if proposal_type != "payment":
+        return False
+
+    # Mirrors payments/service.py::create_payment's own to_account lookup -
+    # is_first_payment_to_person needs the recipient's user_id, which the
+    # proposal payload only carries as an IBAN.
+    resp = (
+        await supabase.table("accounts")
+        .select("user_id")
+        .eq("iban", payload["to_iban"])
+        .maybe_single()
+        .execute()
+    )
+    to_account = resp.data if resp is not None else None
+    if to_account is None:
+        # An invalid/vanished IBAN is a real failure, but not THIS function's
+        # to raise - _execute's own create_payment call will hit the same
+        # lookup and surface IbanNotFoundError properly.
+        return False
+    return await is_first_payment_to_person(supabase, user.id, to_account["user_id"])
+
+
 async def confirm_proposal(
     supabase: AsyncClient,
     user: UserRead,
@@ -193,6 +252,9 @@ async def confirm_proposal(
 ) -> dict:
     proposal = await get_proposal(supabase, user, proposal_id)
     await ensure_pending_and_not_expired(supabase, proposal)
+
+    if auth_method == "password" and await _proposal_requires_face(supabase, user, proposal):
+        raise FaceAuthMethodRequiredError()
 
     # THE critical security gate. Only reached with a still-pending, not-yet-
     # expired proposal; only past this point does anything real execute.

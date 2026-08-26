@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 
+from app.ai.agents.scope_guardrail import OFF_TOPIC_GUARDRAIL
 from app.ai.agents.tool_loop import ToolLoopAgent
 from app.ai.routing import RoutingRule
 
@@ -75,7 +76,9 @@ PLANNING_ROUTING_RULES = (
     ),
 )
 
-SYSTEM_PROMPT = """Ești planificatorul financiar al băncii. Rolul tău este să
+SYSTEM_PROMPT = f"""{OFF_TOPIC_GUARDRAIL}
+
+Ești planificatorul financiar al băncii. Rolul tău este să
 ajuți utilizatorul să planifice, să proiecteze și să simuleze scenarii
 financiare viitoare.
 
@@ -92,6 +95,11 @@ REGULI:
 - Convertește sumele din unități minore în format lizibil (RON cu virgulă
   zecimală, două zecimale: 50000 înseamnă „500,00 RON").
 - Toate datele și răspunsurile în română.
+- Fii scurt: 3-5 propoziții, nu un eseu. Dă cifra/concluzia direct (suma
+  lunară necesară, dacă obiectivul e realizabil sau nu), fără să explici pas
+  cu pas cum ai calculat sau să repeți datele de intrare pe care utilizatorul
+  le știe deja. O singură recomandare concretă, nu o listă lungă de opțiuni -
+  dacă utilizatorul vrea detalii sau alternative, le poate cere.
 
 INSTRUMENTE DISPONIBILE:
 - project_balance: proiectează soldul pe N luni, bazat pe istoricul real sau

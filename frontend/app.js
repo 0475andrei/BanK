@@ -63,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     wireStepUpModal();
     wireAdminDocSignModal();
+    wireStatementModal();
     wireChatAttach();
     wireDocumentAttach();
     wireChatMic();
@@ -641,7 +642,8 @@ async function sendMessage() {
             routing: response.routing || undefined,
         });
         if (response.proposal) {
-            renderProposalCard(response.proposal, aiBubble);
+            supersedeLivePendingProposalCards();
+            livePendingProposalCards.push(renderProposalCard(response.proposal, aiBubble));
         }
         setCurrentConversationId(response.conversation_id);
         void loadConversationHistory();
@@ -673,6 +675,7 @@ async function sendMessage() {
 function startNewConversation() {
     setCurrentConversationId(null);
     clearActiveDocument();
+    livePendingProposalCards = [];
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = '';
     appendChatBubble('ai', chatWelcomeText());
@@ -821,6 +824,7 @@ function renderConversationHistory() {
 async function openConversation(conversationId) {
     setCurrentConversationId(conversationId);
     clearActiveDocument();
+    livePendingProposalCards = [];
     renderConversationHistory();
     showConversationHistoryError();
 
@@ -858,7 +862,15 @@ function beginConversationRename(item, conversation) {
     if (!selectButton || !actions) return;
 
     item.classList.add('editing');
-    selectButton.replaceChildren();
+    // The input goes in as a SIBLING of selectButton, never a child of it -
+    // selectButton is a real <button>, and nesting a focusable <input>
+    // inside a <button> is invalid HTML (interactive content inside
+    // interactive content). Browsers don't auto-correct that when the DOM
+    // is built via createElement/appendChild (only HTML-parsed markup gets
+    // that fix-up), so the live, invalid structure stuck around - every
+    // Space keystroke in the input register as activating the enclosing
+    // button, which called openConversation() and blew away edit mode.
+    selectButton.hidden = true;
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'conversation-history-rename-input';
@@ -867,10 +879,11 @@ function beginConversationRename(item, conversation) {
     input.setAttribute('aria-label', t('chat.history.rename_input_label', 'Nume conversație'));
     input.addEventListener('click', event => event.stopPropagation());
     input.addEventListener('keydown', event => {
+        event.stopPropagation();
         if (event.key === 'Enter') saveConversationRename(conversation, input.value);
         if (event.key === 'Escape') renderConversationHistory();
     });
-    selectButton.appendChild(input);
+    item.insertBefore(input, selectButton);
 
     actions.replaceChildren();
     const saveButton = document.createElement('button');
@@ -951,6 +964,24 @@ function escapeHTML(str) {
  * (Face ID or password), verified server-side.
  * ------------------------------------------------------------------------- */
 
+// Every still-live proposal card rendered THIS page load, in order. When a
+// new one arrives, the backend has already rejected every other pending
+// proposal in this conversation (see proposals_service.create_proposal) -
+// this just reflects that in the UI instead of leaving a stale card with
+// live Confirm/Reject buttons sitting in the chat ("de fapt, trimite 500
+// RON" after a 50 RON proposal used to leave both cards clickable).
+let livePendingProposalCards = [];
+
+function supersedeLivePendingProposalCards() {
+    livePendingProposalCards.forEach(card => {
+        if (card.isConnected && !card.classList.contains('proposal-confirmed')
+            && !card.classList.contains('proposal-rejected')) {
+            markProposalCardResolved(card, 'rejected');
+        }
+    });
+    livePendingProposalCards = [];
+}
+
 /** Simple toast for background feedback that doesn't belong in the chat
  * transcript itself (a proposal being confirmed/rejected). Auto-dismisses. */
 function showToast(message) {
@@ -996,6 +1027,7 @@ function renderProposalCard(proposal, container) {
 
     container.appendChild(card);
     if (window.lucide) lucide.createIcons();
+    return card;
 }
 
 /** Replaces a proposal card's buttons with a static status label - same
@@ -1324,6 +1356,105 @@ let currentAccounts = [];
 let currentCards = [];
 
 const CURRENCY_ICONS = { RON: 'coins', EUR: 'euro', USD: 'dollar-sign' };
+
+/* --- Balance count-up/down animation ---
+ * Every balance display (headline total, account cards, savings pots) is
+ * rebuilt from scratch via innerHTML on each refresh, so there's no DOM node
+ * to tween across renders. Instead we remember the last value we displayed
+ * for each element's key (see previousBalances below) and, right after the
+ * new markup is inserted, replay a short count from that old value up to the
+ * true new one on the freshly created element - the final state is always
+ * correct even if the animation is skipped or interrupted. */
+
+/** accountId (or a fixed key like 'headline') -> last balance_minor shown,
+ * so the next render knows what to count FROM. Persisted to sessionStorage
+ * (not just an in-memory Map) so the count survives an actual browser
+ * reload, not only a same-tab refreshDashboard() call: without this, F5
+ * right after a transfer would show the new balance appearing already-final
+ * with no animation, since a reload wipes all in-memory JS state and there'd
+ * be nothing to count FROM. sessionStorage (not localStorage) so a stale
+ * balance from a previous session/device never leaks in as a bogus "from"
+ * value - it's scoped to this tab and cleared when the tab closes. */
+const BALANCE_STORAGE_KEY = 'bank_previous_balances';
+
+function loadPreviousBalances() {
+    try {
+        const raw = sessionStorage.getItem(BALANCE_STORAGE_KEY);
+        return raw ? new Map(Object.entries(JSON.parse(raw))) : new Map();
+    } catch {
+        return new Map(); // Corrupt/unavailable storage - just start fresh.
+    }
+}
+
+function savePreviousBalances() {
+    try {
+        sessionStorage.setItem(BALANCE_STORAGE_KEY, JSON.stringify(Object.fromEntries(previousBalances)));
+    } catch { /* Storage is optional - worst case a reload skips one animation. */ }
+}
+
+const previousBalances = loadPreviousBalances();
+
+/** el -> in-flight requestAnimationFrame id, so re-rendering mid-animation
+ * (e.g. two refreshes in quick succession) cancels the stale tween instead
+ * of racing it. */
+const balanceAnimations = new WeakMap();
+
+/** Counts `el`'s text from `fromMinor` to `toMinor` over `duration`ms,
+ * formatting each frame with `format` (defaults to plain formatMoney).
+ * Briefly tints the text green/red while it moves, fading back to normal.
+ * Jumps straight to the final value with no animation when there's nothing
+ * to animate, or when the user prefers reduced motion. */
+function animateBalance(el, fromMinor, toMinor, currency, { duration = 700, format } = {}) {
+    if (!el) return;
+    const formatFn = format || ((amount) => formatMoney(amount, currency));
+
+    const pending = balanceAnimations.get(el);
+    if (pending) cancelAnimationFrame(pending);
+
+    if (fromMinor === toMinor || !Number.isFinite(fromMinor) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        el.textContent = formatFn(toMinor);
+        el.classList.remove('balance-flash-up', 'balance-flash-down');
+        return;
+    }
+
+    // The element's text was just set to the FINAL value a moment ago (e.g.
+    // by the innerHTML template that created it) - jump it back to the
+    // starting value synchronously, before the browser gets a chance to
+    // paint, so what's on screen the instant this runs is the count's start,
+    // not a flash of the answer followed by a rewind down to where it
+    // "should" have started.
+    el.textContent = formatFn(fromMinor);
+
+    // Restart the flash even if it's already mid-fade from a previous change.
+    el.classList.remove('balance-flash-up', 'balance-flash-down');
+    void el.offsetWidth;
+    el.classList.add(toMinor > fromMinor ? 'balance-flash-up' : 'balance-flash-down');
+
+    const easeOutCubic = (x) => 1 - (1 - x) ** 3;
+    const start = performance.now();
+
+    const tick = (now) => {
+        const progress = Math.min((now - start) / duration, 1);
+        const current = Math.round(fromMinor + (toMinor - fromMinor) * easeOutCubic(progress));
+        el.textContent = formatFn(current);
+        if (progress < 1) {
+            balanceAnimations.set(el, requestAnimationFrame(tick));
+        } else {
+            balanceAnimations.delete(el);
+            el.classList.remove('balance-flash-up', 'balance-flash-down');
+        }
+    };
+    balanceAnimations.set(el, requestAnimationFrame(tick));
+}
+
+/** Looks up the previous value for `key`, animates `el` from there to
+ * `toMinor`, then remembers `toMinor` as the new baseline for next time. */
+function animateBalanceFor(key, el, toMinor, currency, options) {
+    const fromMinor = previousBalances.has(key) ? previousBalances.get(key) : toMinor;
+    animateBalance(el, fromMinor, toMinor, currency, options);
+    previousBalances.set(key, toMinor);
+    savePreviousBalances();
+}
 
 /** A term deposit can receive money anytime but can't be the SOURCE of a
  * transfer/payment until maturity_date - matches the backend's
@@ -1746,11 +1877,30 @@ function renderAccountsGrid() {
                 <h3>${escapeHTML(acc.name)}</h3>
                 <p>${escapeHTML(acc.currency)}${acc.product_type !== 'checking' ? ` &middot; ${(acc.interest_rate_bps / 100).toFixed(1)}% p.a.` : ''}</p>
             </div>
-            <div class="acc-balance">${formatMoney(acc.balance_minor, acc.currency)}</div>
+            <div class="acc-balance" data-account-id="${escapeHTML(acc.id)}">${formatMoney(acc.balance_minor, acc.currency)}</div>
             ${acc.status === 'closed' ? `<span class="acc-status">${escapeHTML(t('dynamic.account_closed', 'Închis'))}</span>` : ''}
             ${!isSpendable(acc) ? `<span class="acc-status locked">${escapeHTML(t('dynamic.account_locked', 'Blocat'))}</span>` : ''}
+            <button type="button" class="acc-statement-btn" data-account-id="${escapeHTML(acc.id)}"
+                    data-account-name="${escapeHTML(acc.name)}" title="Descarcă extras de cont">
+                <i data-lucide="file-down"></i>
+            </button>
         </div>
     `).join('');
+    grid.querySelectorAll('.acc-statement-btn').forEach((btn) => {
+        btn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            openStatementModal(btn.dataset.accountId, btn.dataset.accountName);
+        });
+    });
+    // Each card starts out showing its true final balance (see the innerHTML
+    // above, for correctness with JS disabled/before this runs); this replays
+    // it as a count from whatever we last showed for that account, so a
+    // balance change from a transfer/payment ticks up or down instead of
+    // silently appearing already-updated on the next refresh.
+    grid.querySelectorAll('.acc-balance').forEach((el) => {
+        const acc = currentAccounts.find((a) => a.id === el.dataset.accountId);
+        if (acc) animateBalanceFor(`account:${acc.id}`, el, acc.balance_minor, acc.currency);
+    });
     if (window.lucide) lucide.createIcons();
 }
 
@@ -1758,17 +1908,107 @@ function renderHeadlineBalance() {
     const el = document.getElementById('total-balance');
     const active = currentAccounts.filter(a => a.status === 'active');
     if (active.length === 0) {
-        el.innerHTML = formatMoney(0, 'RON');
+        animateBalanceFor('headline:RON', el, 0, 'RON');
         return;
     }
     // Accounts can hold different currencies, which can't be summed together -
     // the headline number totals accounts in the first active account's
     // currency only (there's no "home currency" concept in the backend).
+    // The currency is baked into the key itself (not tracked separately) so
+    // a currency switch (e.g. the first active account changed) naturally
+    // looks up a fresh, never-seen key instead of counting from a total that
+    // was in a different currency entirely.
     const primaryCurrency = active[0].currency;
     const total = active
         .filter(a => a.currency === primaryCurrency)
         .reduce((sum, a) => sum + a.balance_minor, 0);
-    el.textContent = formatMoney(total, primaryCurrency);
+    animateBalanceFor(`headline:${primaryCurrency}`, el, total, primaryCurrency);
+}
+
+/* -------------------------------------------------------------------------
+ * Account statement download - the "extras de cont" icon on each account
+ * card (see renderAccountsGrid above) opens a small period picker, then
+ * downloads GET /accounts/{id}/statement/pdf as an actual file. A real
+ * file save, not a preview: fetched as a blob (the API is a different
+ * origin, so a plain <a href> wouldn't reliably carry the session cookie -
+ * same reasoning as previewDocumentPdf), then "clicked" through a hidden,
+ * temporary <a download> to trigger the browser's save dialog.
+ * ------------------------------------------------------------------------- */
+
+let statementAccountId = null;
+
+function openStatementModal(accountId, accountName) {
+    statementAccountId = accountId;
+    const modal = document.getElementById('statement-modal');
+    document.getElementById('statement-error').hidden = true;
+    document.getElementById('statement-account-name').textContent = accountName;
+
+    const today = new Date();
+    const monthAgo = new Date(today);
+    monthAgo.setDate(monthAgo.getDate() - 30);
+    document.getElementById('statement-period-end').value = today.toISOString().slice(0, 10);
+    document.getElementById('statement-period-start').value = monthAgo.toISOString().slice(0, 10);
+
+    modal.hidden = false;
+}
+
+function closeStatementModal() {
+    document.getElementById('statement-modal').hidden = true;
+    statementAccountId = null;
+}
+
+function showStatementError(message) {
+    const errorEl = document.getElementById('statement-error');
+    errorEl.textContent = message;
+    errorEl.hidden = false;
+}
+
+function wireStatementModal() {
+    const modal = document.getElementById('statement-modal');
+    if (!modal) return;
+
+    document.getElementById('close-statement-modal').addEventListener('click', closeStatementModal);
+    document.getElementById('cancel-statement').addEventListener('click', closeStatementModal);
+
+    document.getElementById('statement-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!statementAccountId) return;
+
+        const start = document.getElementById('statement-period-start').value;
+        const end = document.getElementById('statement-period-end').value;
+        if (start > end) {
+            showStatementError('Data de început trebuie să fie înainte de data de sfârșit.');
+            return;
+        }
+
+        const submitBtn = document.getElementById('statement-submit-btn');
+        submitBtn.disabled = true;
+        try {
+            const params = new URLSearchParams({ period_start: start, period_end: end });
+            const res = await fetch(
+                `${API_BASE_URL}/accounts/${statementAccountId}/statement/pdf?${params}`,
+                { credentials: 'include' },
+            );
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.error?.message || 'Extrasul nu a putut fi generat.');
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `extras-cont-${start}-${end}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            closeStatementModal();
+        } catch (err) {
+            showStatementError(err.message || 'Extrasul nu a putut fi generat.');
+        } finally {
+            submitBtn.disabled = false;
+        }
+    });
 }
 
 async function loadTransactions() {
@@ -2108,12 +2348,20 @@ function renderSavingsAccountsList() {
                 <div class="pot-header">
                     <span class="pot-icon"><i data-lucide="${acc.product_type === 'term_deposit' ? 'lock' : 'piggy-bank'}"></i></span>
                     <div class="pot-name">${escapeHTML(acc.name)}</div>
-                    <div class="pot-amounts">${formatMoney(acc.balance_minor, acc.currency)} &middot; ${rate}</div>
+                    <div class="pot-amounts" data-account-id="${escapeHTML(acc.id)}">${formatMoney(acc.balance_minor, acc.currency)} &middot; ${rate}</div>
                 </div>
                 <div class="savings-account-maturity ${locked ? 'locked' : ''}">${maturityLabel}</div>
             </div>
         `;
     }).join('');
+    list.querySelectorAll('.pot-amounts').forEach((el) => {
+        const acc = savingsAccounts.find((a) => a.id === el.dataset.accountId);
+        if (!acc) return;
+        const rate = `${(acc.interest_rate_bps / 100).toFixed(1)}% p.a.`;
+        animateBalanceFor(`savings:${acc.id}`, el, acc.balance_minor, acc.currency, {
+            format: (amount) => `${formatMoney(amount, acc.currency)} · ${rate}`,
+        });
+    });
     if (window.lucide) lucide.createIcons();
 }
 
