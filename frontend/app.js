@@ -642,7 +642,8 @@ async function sendMessage() {
             routing: response.routing || undefined,
         });
         if (response.proposal) {
-            renderProposalCard(response.proposal, aiBubble);
+            supersedeLivePendingProposalCards();
+            livePendingProposalCards.push(renderProposalCard(response.proposal, aiBubble));
         }
         setCurrentConversationId(response.conversation_id);
         void loadConversationHistory();
@@ -674,6 +675,7 @@ async function sendMessage() {
 function startNewConversation() {
     setCurrentConversationId(null);
     clearActiveDocument();
+    livePendingProposalCards = [];
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = '';
     appendChatBubble('ai', chatWelcomeText());
@@ -822,6 +824,7 @@ function renderConversationHistory() {
 async function openConversation(conversationId) {
     setCurrentConversationId(conversationId);
     clearActiveDocument();
+    livePendingProposalCards = [];
     renderConversationHistory();
     showConversationHistoryError();
 
@@ -859,7 +862,15 @@ function beginConversationRename(item, conversation) {
     if (!selectButton || !actions) return;
 
     item.classList.add('editing');
-    selectButton.replaceChildren();
+    // The input goes in as a SIBLING of selectButton, never a child of it -
+    // selectButton is a real <button>, and nesting a focusable <input>
+    // inside a <button> is invalid HTML (interactive content inside
+    // interactive content). Browsers don't auto-correct that when the DOM
+    // is built via createElement/appendChild (only HTML-parsed markup gets
+    // that fix-up), so the live, invalid structure stuck around - every
+    // Space keystroke in the input register as activating the enclosing
+    // button, which called openConversation() and blew away edit mode.
+    selectButton.hidden = true;
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'conversation-history-rename-input';
@@ -868,10 +879,11 @@ function beginConversationRename(item, conversation) {
     input.setAttribute('aria-label', t('chat.history.rename_input_label', 'Nume conversație'));
     input.addEventListener('click', event => event.stopPropagation());
     input.addEventListener('keydown', event => {
+        event.stopPropagation();
         if (event.key === 'Enter') saveConversationRename(conversation, input.value);
         if (event.key === 'Escape') renderConversationHistory();
     });
-    selectButton.appendChild(input);
+    item.insertBefore(input, selectButton);
 
     actions.replaceChildren();
     const saveButton = document.createElement('button');
@@ -952,6 +964,24 @@ function escapeHTML(str) {
  * (Face ID or password), verified server-side.
  * ------------------------------------------------------------------------- */
 
+// Every still-live proposal card rendered THIS page load, in order. When a
+// new one arrives, the backend has already rejected every other pending
+// proposal in this conversation (see proposals_service.create_proposal) -
+// this just reflects that in the UI instead of leaving a stale card with
+// live Confirm/Reject buttons sitting in the chat ("de fapt, trimite 500
+// RON" after a 50 RON proposal used to leave both cards clickable).
+let livePendingProposalCards = [];
+
+function supersedeLivePendingProposalCards() {
+    livePendingProposalCards.forEach(card => {
+        if (card.isConnected && !card.classList.contains('proposal-confirmed')
+            && !card.classList.contains('proposal-rejected')) {
+            markProposalCardResolved(card, 'rejected');
+        }
+    });
+    livePendingProposalCards = [];
+}
+
 /** Simple toast for background feedback that doesn't belong in the chat
  * transcript itself (a proposal being confirmed/rejected). Auto-dismisses. */
 function showToast(message) {
@@ -997,6 +1027,7 @@ function renderProposalCard(proposal, container) {
 
     container.appendChild(card);
     if (window.lucide) lucide.createIcons();
+    return card;
 }
 
 /** Replaces a proposal card's buttons with a static status label - same

@@ -238,6 +238,11 @@ body {
 }
 
 .conversation-history-rename-input {
+    /* A direct sibling of .conversation-history-select now, not nested
+       inside it (see beginConversationRename in app.js) - flex: 1 replaces
+       the flex:1 that button would otherwise have contributed, so the
+       input still fills the row the same way. */
+    flex: 1;
     width: 100%;
     min-width: 0;
     border: 1px solid var(--primary-teal);
