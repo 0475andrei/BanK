@@ -50,7 +50,9 @@
     "create": "Oluştur",
     "or": "veya",
     "reading_file": "Dosya okunuyor...",
-    "chat_placeholder": "Yapay zeka asistanına sor..."
+    "chat_placeholder": "Yapay zeka asistanına sor...",
+    "amount_label": "Tutar",
+    "description_label": "Açıklama"
   },
   "dashboard": {
     "title": "BanK Paneli",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "Aynı para biriminde başka hesap yok",
     "open_account_button": "Hesabı aç",
     "account_name_placeholder": "örn. Tatil birikimi",
-    "projection_amount_placeholder": "örn. 5000"
+    "projection_amount_placeholder": "örn. 5000",
+    "period_label": "Vade",
+    "projection_amount_label": "Tahmini yatırılacak tutar",
+    "projection_amount_note": "(yalnızca tahmin amaçlıdır)"
   },
   "cards": {
     "cancel": "Kartı iptal et",
@@ -402,9 +407,19 @@
   },
   "scheduled": {
     "title": "Transfer zamanla",
+    "from_account_label": "Hesaptan",
     "start_in_days_label": "Kaç gün sonra başlasın",
     "frequency_label": "Sıklık",
     "submit_button": "Zamanla"
+  },
+  "statement": {
+    "title": "Hesap ekstresi",
+    "download_hint": "Hesap ekstresini indir",
+    "from_label": "Başlangıç",
+    "to_label": "Bitiş",
+    "download_button": "PDF indir",
+    "invalid_period": "Başlangıç tarihi bitiş tarihinden önce olmalıdır.",
+    "generation_failed": "Ekstre oluşturulamadı."
   },
   "face_confirm": {
     "title": "Face ID ile onayla",

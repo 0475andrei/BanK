@@ -50,7 +50,9 @@
     "create": "Crear",
     "or": "o",
     "reading_file": "Leyendo el archivo...",
-    "chat_placeholder": "Pregunta al asistente de IA..."
+    "chat_placeholder": "Pregunta al asistente de IA...",
+    "amount_label": "Importe",
+    "description_label": "Descripción"
   },
   "dashboard": {
     "title": "Panel de BanK",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "No hay otra cuenta en la misma moneda",
     "open_account_button": "Abrir cuenta",
     "account_name_placeholder": "p. ej. Ahorros de vacaciones",
-    "projection_amount_placeholder": "p. ej. 5000"
+    "projection_amount_placeholder": "p. ej. 5000",
+    "period_label": "Plazo",
+    "projection_amount_label": "Importe estimado a depositar",
+    "projection_amount_note": "(solo para estimación)"
   },
   "cards": {
     "cancel": "Cancelar tarjeta",
@@ -402,9 +407,19 @@
   },
   "scheduled": {
     "title": "Programar una transferencia",
+    "from_account_label": "Desde la cuenta",
     "start_in_days_label": "Empieza en cuántos días",
     "frequency_label": "Frecuencia",
     "submit_button": "Programar"
+  },
+  "statement": {
+    "title": "Extracto de cuenta",
+    "download_hint": "Descargar extracto de cuenta",
+    "from_label": "Desde",
+    "to_label": "Hasta",
+    "download_button": "Descargar PDF",
+    "invalid_period": "La fecha de inicio debe ser anterior a la fecha de fin.",
+    "generation_failed": "No se pudo generar el extracto."
   },
   "face_confirm": {
     "title": "Confirmar con Face ID",

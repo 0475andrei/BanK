@@ -50,7 +50,9 @@
     "create": "Erstellen",
     "or": "oder",
     "reading_file": "Datei wird gelesen...",
-    "chat_placeholder": "Frag den KI-Assistenten..."
+    "chat_placeholder": "Frag den KI-Assistenten...",
+    "amount_label": "Betrag",
+    "description_label": "Beschreibung"
   },
   "dashboard": {
     "title": "BanK Dashboard",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "Kein weiteres Konto in derselben Währung",
     "open_account_button": "Konto eröffnen",
     "account_name_placeholder": "z. B. Urlaubssparen",
-    "projection_amount_placeholder": "z. B. 5000"
+    "projection_amount_placeholder": "z. B. 5000",
+    "period_label": "Laufzeit",
+    "projection_amount_label": "Geschätzter Einzahlungsbetrag",
+    "projection_amount_note": "(nur zur Schätzung)"
   },
   "cards": {
     "cancel": "Karte kündigen",
@@ -402,9 +407,19 @@
   },
   "scheduled": {
     "title": "Überweisung planen",
+    "from_account_label": "Vom Konto",
     "start_in_days_label": "Beginnt in wie vielen Tagen",
     "frequency_label": "Häufigkeit",
     "submit_button": "Planen"
+  },
+  "statement": {
+    "title": "Kontoauszug",
+    "download_hint": "Kontoauszug herunterladen",
+    "from_label": "Von",
+    "to_label": "Bis",
+    "download_button": "PDF herunterladen",
+    "invalid_period": "Das Startdatum muss vor dem Enddatum liegen.",
+    "generation_failed": "Der Kontoauszug konnte nicht erstellt werden."
   },
   "face_confirm": {
     "title": "Mit Face ID bestätigen",

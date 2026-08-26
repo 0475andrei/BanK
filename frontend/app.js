@@ -1928,7 +1928,7 @@ function renderAccountsGrid() {
             ${acc.status === 'closed' ? `<span class="acc-status">${escapeHTML(t('dynamic.account_closed', 'Închis'))}</span>` : ''}
             ${!isSpendable(acc) ? `<span class="acc-status locked">${escapeHTML(t('dynamic.account_locked', 'Blocat'))}</span>` : ''}
             <button type="button" class="acc-statement-btn" data-account-id="${escapeHTML(acc.id)}"
-                    data-account-name="${escapeHTML(acc.name)}" title="Descarcă extras de cont">
+                    data-account-name="${escapeHTML(acc.name)}" title="${t('statement.download_hint', 'Descarcă extras de cont')}">
                 <i data-lucide="file-down"></i>
             </button>
         </div>
@@ -2024,7 +2024,7 @@ function wireStatementModal() {
         const start = document.getElementById('statement-period-start').value;
         const end = document.getElementById('statement-period-end').value;
         if (start > end) {
-            showStatementError('Data de început trebuie să fie înainte de data de sfârșit.');
+            showStatementError(t('statement.invalid_period', 'Data de început trebuie să fie înainte de data de sfârșit.'));
             return;
         }
 
@@ -2038,7 +2038,7 @@ function wireStatementModal() {
             );
             if (!res.ok) {
                 const body = await res.json().catch(() => ({}));
-                throw new Error(body?.error?.message || 'Extrasul nu a putut fi generat.');
+                throw new Error(body?.error?.message || t('statement.generation_failed', 'Extrasul nu a putut fi generat.'));
             }
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
@@ -2051,7 +2051,7 @@ function wireStatementModal() {
             URL.revokeObjectURL(url);
             closeStatementModal();
         } catch (err) {
-            showStatementError(err.message || 'Extrasul nu a putut fi generat.');
+            showStatementError(err.message || t('statement.generation_failed', 'Extrasul nu a putut fi generat.'));
         } finally {
             submitBtn.disabled = false;
         }

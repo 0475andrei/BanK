@@ -50,7 +50,9 @@
     "create": "Creează",
     "or": "sau",
     "reading_file": "Se citește fișierul...",
-    "chat_placeholder": "Întreabă asistentul AI..."
+    "chat_placeholder": "Întreabă asistentul AI...",
+    "amount_label": "Sumă",
+    "description_label": "Descriere"
   },
   "dashboard": {
     "title": "BanK Dashboard",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "Niciun alt cont în aceeași monedă",
     "open_account_button": "Deschide contul",
     "account_name_placeholder": "ex. Economii vacanță",
-    "projection_amount_placeholder": "ex. 5000"
+    "projection_amount_placeholder": "ex. 5000",
+    "period_label": "Perioadă",
+    "projection_amount_label": "Sumă estimativă de depus",
+    "projection_amount_note": "(doar pentru estimare)"
   },
   "cards": {
     "cancel": "Anulează cardul",
@@ -402,9 +407,19 @@
   },
   "scheduled": {
     "title": "Programează un transfer",
+    "from_account_label": "Din contul",
     "start_in_days_label": "Peste câte zile începe",
     "frequency_label": "Frecvență",
     "submit_button": "Programează"
+  },
+  "statement": {
+    "title": "Extras de cont",
+    "download_hint": "Descarcă extras de cont",
+    "from_label": "De la",
+    "to_label": "Până la",
+    "download_button": "Descarcă PDF",
+    "invalid_period": "Data de început trebuie să fie înainte de data de sfârșit.",
+    "generation_failed": "Extrasul nu a putut fi generat."
   },
   "face_confirm": {
     "title": "Confirmă cu Face ID",

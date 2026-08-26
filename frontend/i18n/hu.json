@@ -50,7 +50,9 @@
     "create": "Létrehozás",
     "or": "vagy",
     "reading_file": "Fájl beolvasása...",
-    "chat_placeholder": "Kérdezd az AI asszisztenst..."
+    "chat_placeholder": "Kérdezd az AI asszisztenst...",
+    "amount_label": "Összeg",
+    "description_label": "Leírás"
   },
   "dashboard": {
     "title": "BanK vezérlőpult",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "Nincs másik számla ugyanabban a pénznemben",
     "open_account_button": "Számla megnyitása",
     "account_name_placeholder": "pl. Nyaralási megtakarítás",
-    "projection_amount_placeholder": "pl. 5000"
+    "projection_amount_placeholder": "pl. 5000",
+    "period_label": "Futamidő",
+    "projection_amount_label": "Becsült befizetendő összeg",
+    "projection_amount_note": "(csak becslés céljából)"
   },
   "cards": {
     "cancel": "Kártya törlése",
@@ -402,9 +407,19 @@
   },
   "scheduled": {
     "title": "Átutalás ütemezése",
+    "from_account_label": "Számláról",
     "start_in_days_label": "Hány nap múlva induljon",
     "frequency_label": "Gyakoriság",
     "submit_button": "Ütemezés"
+  },
+  "statement": {
+    "title": "Számlakivonat",
+    "download_hint": "Számlakivonat letöltése",
+    "from_label": "Ettől",
+    "to_label": "Eddig",
+    "download_button": "PDF letöltése",
+    "invalid_period": "A kezdő dátumnak a záró dátum előtt kell lennie.",
+    "generation_failed": "A számlakivonatot nem sikerült elkészíteni."
   },
   "face_confirm": {
     "title": "Megerősítés Face ID-vel",
