@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-i18n-title="auth.login_title">
 <head>
     <script>try { if (localStorage.getItem('bank_preferred_language') && localStorage.getItem('bank_preferred_language') !== 'ro') document.documentElement.classList.add('i18n-pending'); } catch (_) {}</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Log in - BanK</title>
+    <title data-i18n="auth.login_title">Log in - BanK</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
@@ -23,14 +23,14 @@
             <!-- Recognized-device path: shown only after GET /trusted-devices/check
                  confirms this browser already completed OTP enrollment. -->
             <div id="device-login" hidden>
-                <p class="auth-subtitle">Bine ai revenit, <span id="device-email"></span></p>
+                <p class="auth-subtitle"><span data-i18n="auth.device_welcome_back">Bine ai revenit,</span> <span id="device-email"></span></p>
 
                 <!-- Face-first path: shown when this (already-known) account
                      has Face ID enrolled. Falls back to the password section
                      below after a few failed match attempts, or if the user
                      asks for it directly. -->
                 <div id="device-face-section" hidden>
-                    <p class="field-hint" style="margin-bottom: 16px;">
+                    <p class="field-hint" style="margin-bottom: 16px;" data-i18n="auth.device_face_hint">
                         Acest calculator este recunoscut - confirmă cu Face ID pentru a continua.
                     </p>
                     <div class="auth-error" id="device-face-error" hidden></div>
@@ -40,14 +40,14 @@
                         <canvas id="device-face-canvas" hidden></canvas>
                     </div>
 
-                    <button type="button" class="btn btn-secondary auth-submit" id="device-face-start-btn">Pornește camera</button>
-                    <button type="button" class="btn btn-primary auth-submit" id="device-face-capture-btn" hidden>Confirmă cu Face</button>
+                    <button type="button" class="btn btn-secondary auth-submit" id="device-face-start-btn" data-i18n="auth.start_camera">Pornește camera</button>
+                    <button type="button" class="btn btn-primary auth-submit" id="device-face-capture-btn" hidden data-i18n="auth.confirm_with_face">Confirmă cu Face</button>
 
-                    <p class="auth-switch"><a href="#" id="device-face-use-password-link">Folosește parola în schimb</a></p>
+                    <p class="auth-switch"><a href="#" id="device-face-use-password-link" data-i18n="auth.use_password_instead">Folosește parola în schimb</a></p>
                 </div>
 
                 <div id="device-password-section">
-                    <p class="field-hint" style="margin-bottom: 20px;">
+                    <p class="field-hint" style="margin-bottom: 20px;" data-i18n="auth.device_password_hint">
                         Acest calculator este recunoscut - introdu doar parola pentru a continua.
                     </p>
 
@@ -57,14 +57,14 @@
                         <label class="field-label" for="device-password" data-i18n="common.Password">Password</label>
                         <div class="password-field-wrapper">
                             <input class="field-input" type="password" id="device-password" required autocomplete="current-password">
-                            <button type="button" class="password-toggle-btn" data-target="device-password" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
+                            <button type="button" class="password-toggle-btn" data-target="device-password" tabindex="-1" aria-label="Arată parola" data-i18n-aria-label="profile.show_password"><i data-lucide="eye"></i></button>
                         </div>
 
-                        <button class="btn btn-primary auth-submit" type="submit">Continuă</button>
+                        <button class="btn btn-primary auth-submit" type="submit" data-i18n="auth.continue">Continuă</button>
                     </form>
                 </div>
 
-                <p class="auth-switch"><a href="#" id="not-you-link">Nu ești tu? Autentifică-te cu alt cont</a></p>
+                <p class="auth-switch"><a href="#" id="not-you-link" data-i18n="auth.not_you">Nu ești tu? Autentifică-te cu alt cont</a></p>
                 <p class="auth-switch"><a href="forgot-password.html" data-i18n="auth.forgot_password">Ai uitat parola?</a></p>
             </div>
 
@@ -82,7 +82,7 @@
                     <label class="field-label" for="password" data-i18n="common.Password">Password</label>
                     <div class="password-field-wrapper">
                         <input class="field-input" type="password" id="password" name="password" required autocomplete="current-password">
-                        <button type="button" class="password-toggle-btn" data-target="password" tabindex="-1" aria-label="Arată parola"><i data-lucide="eye"></i></button>
+                        <button type="button" class="password-toggle-btn" data-target="password" tabindex="-1" aria-label="Arată parola" data-i18n-aria-label="profile.show_password"><i data-lucide="eye"></i></button>
                     </div>
 
                     <button class="btn btn-primary auth-submit" type="submit" data-i18n="common.Log in">Log in</button>
@@ -101,7 +101,7 @@
                         <canvas id="face-login-canvas" hidden></canvas>
                     </div>
 
-                    <button type="button" class="btn btn-secondary auth-submit" id="face-login-start-btn">Pornește camera</button>
+                    <button type="button" class="btn btn-secondary auth-submit" id="face-login-start-btn" data-i18n="auth.start_camera">Pornește camera</button>
                     <button type="button" class="btn btn-primary auth-submit" id="face-login-capture-btn" hidden data-i18n="auth.face_login">Login cu Face</button>
                 </div>
 
@@ -205,7 +205,7 @@
                 deviceFaceStartBtn.hidden = true;
                 deviceFaceCaptureBtn.hidden = false;
             } catch {
-                deviceFaceErrorEl.textContent = "Nu s-a putut accesa camera. Verifică permisiunile browserului.";
+                deviceFaceErrorEl.textContent = t("face_confirm.camera_error", "Nu s-a putut accesa camera. Verifică permisiunile browserului.");
                 deviceFaceErrorEl.hidden = false;
             }
         });
@@ -236,11 +236,11 @@
                     const attemptsLeft = DEVICE_FACE_MAX_ATTEMPTS - deviceFaceAttempts;
                     if (attemptsLeft > 0) {
                         deviceFaceErrorEl.textContent =
-                            `${err.message} Mai poți încerca de ${attemptsLeft} ori.`;
+                            t("auth.device_face_attempts_left", "{message} Mai poți încerca de {count} ori.", { message: err.message, count: attemptsLeft });
                         deviceFaceErrorEl.hidden = false;
                     } else {
                         fallBackToDevicePassword(
-                            "Nu am reușit să te recunoaștem prin Face ID. Continuă cu parola."
+                            t("auth.device_face_failed_fallback", "Nu am reușit să te recunoaștem prin Face ID. Continuă cu parola.")
                         );
                     }
                 }
@@ -331,7 +331,7 @@
                 faceStartBtn.hidden = true;
                 faceCaptureBtn.hidden = false;
             } catch {
-                faceErrorEl.textContent = "Nu s-a putut accesa camera. Verifică permisiunile browserului.";
+                faceErrorEl.textContent = t("face_confirm.camera_error", "Nu s-a putut accesa camera. Verifică permisiunile browserului.");
                 faceErrorEl.hidden = false;
             }
         });
@@ -340,7 +340,7 @@
             faceErrorEl.hidden = true;
             const email = document.getElementById("face-login-email").value;
             if (!email) {
-                faceErrorEl.textContent = "Introdu email-ul contului.";
+                faceErrorEl.textContent = t("auth.enter_account_email", "Introdu email-ul contului.");
                 faceErrorEl.hidden = false;
                 return;
             }

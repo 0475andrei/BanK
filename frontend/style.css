@@ -1207,6 +1207,24 @@ body {
     border-color: rgba(255,255,255,0.5);
 }
 
+.chat-mic-btn {
+    align-self: center;
+    width: 40px;
+    height: 40px;
+}
+
+.chat-mic-btn.listening {
+    color: #fff;
+    background: var(--expense-red);
+    border-color: var(--expense-red);
+    animation: mic-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+    50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+}
+
 .card-eye-btn i {
     width: 14px;
     height: 14px;
