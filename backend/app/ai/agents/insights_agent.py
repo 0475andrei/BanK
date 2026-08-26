@@ -33,11 +33,16 @@ logger = logging.getLogger(__name__)
 #: not just "insights".
 #:
 #: OVERLAP WITH BANKING: `cheltui` and `bani` are also BankingAgent keywords
-#: (added in Step 6, before this agent existed). "Cât am cheltuit?" therefore
-#: matches both agents. That is resolved by registration order — AIService
-#: registers this agent FIRST so the more specific analytical intent wins, per
-#: the rule that Insights takes ambiguous analytical phrasing. See
-#: `AIService.__init__`.
+#: (added in Step 6, before this agent existed). `bani` stays a plain
+#: single-stem match here (genuinely transactional-default - see item 5 of
+#: Step 16 Priority 2). `cheltui` does not: since Step 16 Priority 2 item 7,
+#: `insights_spending_analysis` below only claims it alongside one of
+#: `INSIGHTS_ANALYTICAL_MARKERS` - a plain statement of fact ("am cheltuit 50
+#: lei pe cafea") is not itself analytical, and correctly falls through
+#: (registration order still puts this agent before Banking, so the two only
+#: differ when a bare stem match would otherwise have been ambiguous) to
+#: BankingAgent's own unconditional `cheltui`, exactly as it did before this
+#: rule existed. See `AIService.__init__` for the registration order.
 #:
 #: `anul` rather than `an`: prefix matching means `an` would claim every word
 #: starting with those two letters — including names like "Andrei", which would
@@ -54,10 +59,37 @@ logger = logging.getLogger(__name__)
 #: regression: no longer matches "anul" as the very last word of a message,
 #: or followed by punctuation instead of a space - accepted, since the
 #: false-positive it fixes actively broke a real feature.
+#: Analytical/comparative/temporal markers that turn a bare "cheltui" mention
+#: into an analytical question rather than a plain statement of fact (Step 16
+#: Priority 2, item 7). One list covers both cases the task describes -
+#: "unde"/"cati"/"cat"-style analytical questions and "ultima luna"/
+#: "ultimele"-style comparative/temporal ones - since a single marker match
+#: is enough either way.
+INSIGHTS_ANALYTICAL_MARKERS = frozenset(
+    {
+        "unde",
+        "cati",
+        "cate",
+        "cat",
+        "in ce",
+        "cum",
+        "cel mai",
+        "top",
+        "categori",
+        "ultima luna",
+        "ultimele",
+    }
+)
+
 INSIGHTS_ROUTING_RULES = (
     RoutingRule(
         name="insights_spending",
-        keywords=frozenset({"cheltui", "spend", "expense"}),
+        keywords=frozenset({"spend", "expense"}),
+    ),
+    RoutingRule(
+        name="insights_spending_analysis",
+        keywords=frozenset({"cheltui"}),
+        requires_any_of=INSIGHTS_ANALYTICAL_MARKERS,
     ),
     RoutingRule(
         name="insights_analysis",

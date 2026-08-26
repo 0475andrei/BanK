@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from app.ai.agents.planning_agent import PLANNING_FORWARD_MARKERS
 from app.ai.agents.tool_loop import MAX_ITERATIONS as _MAX_ITERATIONS
 from app.ai.agents.tool_loop import ToolLoopAgent
 from app.ai.routing import RoutingRule
@@ -15,6 +16,14 @@ logger = logging.getLogger(__name__)
 #: tranzacție/tranzacții/tranzacțiile. Diacritics are folded before matching, so
 #: only the unaccented spelling is listed here. English is included because the
 #: UI is Romanian but users type both.
+#:
+#: `econom` is deliberately NOT here (Step 16 Priority 2, item 7) - see
+#: `banking_savings_default` below, which claims it under the opposite
+#: condition from PlanningAgent's `planning_savings_goal` rule. `cheltui`
+#: stays here unconditionally: InsightsAgent is registered before Banking
+#: and only claims "cheltui" alongside an analytical marker of its own, so a
+#: bare "cheltui" already falls through to this rule with no change needed
+#: on this side of that collision.
 BANKING_ROUTING_RULES = (
     RoutingRule(
         name="banking_keywords",
@@ -28,7 +37,6 @@ BANKING_ROUTING_RULES = (
                 "tranzac",
                 "iban",
                 "plat",
-                "econom",
                 "extras",
                 "bani",
                 "cheltui",
@@ -39,6 +47,11 @@ BANKING_ROUTING_RULES = (
                 "payment",
             }
         ),
+    ),
+    RoutingRule(
+        name="banking_savings_default",
+        keywords=frozenset({"econom"}),
+        excludes_any_of=PLANNING_FORWARD_MARKERS,
     ),
 )
 

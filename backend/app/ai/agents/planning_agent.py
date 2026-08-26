@@ -20,20 +20,42 @@ logger = logging.getLogger(__name__)
 #: `RoutingRule.matched`). Split into several named rules so a persisted
 #: `RoutingDecision.matched_rule` says WHICH kind of planning intent fired.
 #:
-#: KNOWN COLLISION: `econom` is also a BankingAgent keyword (its "Economii"
-#: account). "Vreau să economisesc 500 lei" therefore matches both agents,
-#: and BankingAgent wins - it is registered first (and is the default), and
-#: `Orchestrator._match_rules` stops at the first agent whose rule claims the
-#: message. That means a savings-goal phrasing built only around "economii"
-#: currently routes to Banking, not Planning. Acceptable for now: it costs a
-#: mis-route on a fairly narrow phrasing, not a broken feature (the other
-#: planning stems below still catch most real goal/projection/scenario
-#: questions), and re-splitting the keyword sets needs a real look at
-#: BankingAgent's rules too - out of scope here. Revisit in Step 16.
+#: COLLISION, RESOLVED (Step 16 Priority 2, item 7): `econom` is also a
+#: BankingAgent keyword (its "Economii" account), and Banking is registered
+#: first - a bare stem match would always reach Banking before Planning is
+#: even checked. `planning_savings_goal` below and BankingAgent's own
+#: `banking_savings_default` rule resolve this together: Planning claims
+#: "econom" only alongside one of `PLANNING_FORWARD_MARKERS` (a forward-
+#: looking, goal-setting phrasing); Banking explicitly backs off "econom"
+#: in exactly that same case, via `excludes_any_of`, so its otherwise-first
+#: registration no longer shadows Planning. A bare "econom" with no such
+#: marker (e.g. past tense - "am economisit 500 lei") still isn't specific
+#: enough to be a goal, and correctly falls through to Banking, unchanged
+#: from before this split.
+PLANNING_FORWARD_MARKERS = frozenset(
+    {
+        "vreau",
+        "ar trebui",
+        "as vrea",
+        "plan",
+        "planific",
+        "viitor",
+        "obiectiv",
+        "tinta",
+        "luna viitoare",
+        "anul viitor",
+    }
+)
+
 PLANNING_ROUTING_RULES = (
     RoutingRule(
         name="planning_goals",
-        keywords=frozenset({"obiectiv", "goal", "econom", "sav", "strangi", "adun"}),
+        keywords=frozenset({"obiectiv", "goal", "sav", "strangi", "adun"}),
+    ),
+    RoutingRule(
+        name="planning_savings_goal",
+        keywords=frozenset({"econom"}),
+        requires_any_of=PLANNING_FORWARD_MARKERS,
     ),
     RoutingRule(
         name="planning_projection",

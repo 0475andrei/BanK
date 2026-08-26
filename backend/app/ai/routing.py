@@ -31,15 +31,34 @@ def normalise(message: str) -> str:
 
 
 class RoutingRule(BaseModel):
-    """A named set of keyword stems that claim a message for an agent."""
+    """A named set of keyword stems that claim a message for an agent.
+
+    `requires_any_of` / `excludes_any_of` (Step 16 Priority 2, item 7) turn a
+    plain stem match into a two-token match for the handful of stems two
+    agents both claim (`econom`, `cheltui`): the stem alone is not enough,
+    it also needs (or must lack) one of a second set of marker words. Empty
+    on both — the default, and every non-collision rule in this codebase —
+    reproduces the original single-stem behaviour exactly.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     name: str
     keywords: frozenset[str]
+    #: If non-empty, this rule only fires when the message ALSO contains at
+    #: least one of these (in addition to a keyword stem) - e.g. Planning
+    #: claims "econom" only alongside a forward-looking marker like "vreau"
+    #: or "plan".
+    requires_any_of: frozenset[str] = frozenset()
+    #: If non-empty, this rule is suppressed when the message contains any of
+    #: these - the mirror image of `requires_any_of`, for the agent giving
+    #: ground on the same collision stem (e.g. Banking backs off "econom"
+    #: when a forward-looking marker makes it Planning's instead).
+    excludes_any_of: frozenset[str] = frozenset()
 
     def matched(self, normalised_message: str) -> frozenset[str]:
-        """Which of this rule's keywords appear in the message. Empty = no match.
+        """Which of this rule's keywords (plus any matched markers) claim the
+        message. Empty = no match.
 
         Keywords are matched as word PREFIXES (`\\bsold` catches sold, soldul,
         soldurile) because Romanian inflects heavily — exact word matching would
@@ -52,11 +71,28 @@ class RoutingRule(BaseModel):
         costing something. Tighten the stems (or add negative keywords) then,
         rather than guessing at the shape of the problem now.
         """
-        return frozenset(
-            keyword
-            for keyword in self.keywords
-            if re.search(rf"\b{re.escape(keyword)}", normalised_message)
-        )
+
+        def _search(candidates: frozenset[str]) -> frozenset[str]:
+            return frozenset(
+                candidate
+                for candidate in candidates
+                if re.search(rf"\b{re.escape(candidate)}", normalised_message)
+            )
+
+        stem_matches = _search(self.keywords)
+        if not stem_matches:
+            return frozenset()
+
+        if self.excludes_any_of and _search(self.excludes_any_of):
+            return frozenset()
+
+        if self.requires_any_of:
+            marker_matches = _search(self.requires_any_of)
+            if not marker_matches:
+                return frozenset()
+            return stem_matches | marker_matches
+
+        return stem_matches
 
 
 class RoutingDecision(BaseModel):
