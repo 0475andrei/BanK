@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from app.ai.context import build_context_for_user
+from app.ai.providers.mock_provider import MockProvider
 from app.ai.schemas import ModelResponse, ToolCall
 from app.ai.tools.insights import (
     CategorizeTransactionsTool,
@@ -113,7 +114,8 @@ async def test_categorize_transactions_persists_category_onto_statement_rows(
     )
 
     context = await build_context_for_user(user, supabase, statement_id=statement["id"])
-    result = await CategorizeTransactionsTool(supabase).execute(
+    provider = MockProvider([ModelResponse(text="not json")])
+    result = await CategorizeTransactionsTool(supabase, provider).execute(
         _call("categorize_transactions", start_date=_iso(10), end_date=_iso(0)), context
     )
 

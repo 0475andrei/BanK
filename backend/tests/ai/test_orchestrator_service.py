@@ -181,7 +181,7 @@ def _two_agent_orchestrator(classifier_script: list[ModelResponse] | None = None
         MockProvider(classifier_script) if classifier_script is not None else None
     )
     orchestrator = Orchestrator(provider=classifier)
-    orchestrator.register(InsightsAgent(provider, build_insights_tools(FakeSupabase())))
+    orchestrator.register(InsightsAgent(provider, build_insights_tools(FakeSupabase(), provider)))
     orchestrator.register(
         BankingAgent(provider, build_banking_tools(FakeSupabase())), default=True
     )
@@ -307,7 +307,7 @@ def test_insights_agent_gets_only_its_own_tools():
     `handoff_to_agent` (Step 15) does not change that. It reads nothing and
     writes nothing - it asks for the turn to continue on an agent that CAN act,
     and whether that is permitted is decided in the orchestrator, not here."""
-    tools = build_insights_tools(FakeSupabase())
+    tools = build_insights_tools(FakeSupabase(), MockProvider([ModelResponse(text="ok")]))
 
     assert tools.names() == [
         "get_transactions_in_range",
@@ -345,7 +345,7 @@ def _three_agent_orchestrator(classifier_script: list[ModelResponse] | None = No
         MockProvider(classifier_script) if classifier_script is not None else None
     )
     orchestrator = Orchestrator(provider=classifier)
-    orchestrator.register(InsightsAgent(provider, build_insights_tools(FakeSupabase())))
+    orchestrator.register(InsightsAgent(provider, build_insights_tools(FakeSupabase(), provider)))
     orchestrator.register(
         BankingAgent(provider, build_banking_tools(FakeSupabase())), default=True
     )

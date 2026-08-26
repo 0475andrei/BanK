@@ -108,13 +108,16 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
     )
 
 
-def build_insights_tools(supabase: AsyncClient) -> ToolRegistry:
+def build_insights_tools(supabase: AsyncClient, provider: ModelProvider) -> ToolRegistry:
     """The read-only tools the insights agent is allowed to call, plus the
     handoff tool (Step 15).
 
     Deliberately a different registry from `build_banking_tools`: an agent's
     reach is defined by what it is handed, so the analytical agent cannot read
     card numbers and the banking agent cannot run an unbounded date sweep.
+
+    `provider` only feeds CategorizeTransactionsTool's few-shot classifier
+    (see categorize_transactions.py) - every other tool here ignores it.
 
     `handoff_to_agent` is the one thing here that is not a read: it lets an
     analytical finding continue on an agent that can act on it (the Step 15
@@ -127,7 +130,7 @@ def build_insights_tools(supabase: AsyncClient) -> ToolRegistry:
     return ToolRegistry(
         [
             GetTransactionsInRangeTool(supabase),
-            CategorizeTransactionsTool(supabase),
+            CategorizeTransactionsTool(supabase, provider),
             DetectRecurringPaymentsTool(supabase),
             ComputeSpendingStatsTool(supabase),
             DetectAnomaliesTool(supabase),
@@ -263,7 +266,7 @@ class AIService:
         before Docs/Banking — costs nothing.
         """
         orchestrator = Orchestrator(provider=provider)
-        orchestrator.register(InsightsAgent(provider, build_insights_tools(supabase)))
+        orchestrator.register(InsightsAgent(provider, build_insights_tools(supabase, provider)))
         orchestrator.register(DocumentAgent(provider, build_document_tools(supabase)))
         orchestrator.register(DocsAgent(provider, build_docs_tools(supabase, embedding_provider)))
         orchestrator.register(

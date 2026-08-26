@@ -127,6 +127,19 @@ class _RecordingAgent(ToolLoopAgent):
         return TurnResult(reply=self._reply, trace=[])
 
 
+def _insights_tools(supabase: FakeSupabase | None = None) -> ToolRegistry:
+    """The real insights registry, including `handoff_to_agent`.
+
+    `build_insights_tools` takes a provider for the categorisation classifier
+    (see categorize_transactions.py). Nothing in this file categorises
+    anything, so it gets its own throwaway model rather than sharing - and
+    eating responses from - the agent's scripted one.
+    """
+    return build_insights_tools(
+        supabase or FakeSupabase(), MockProvider([ModelResponse(text="{}")], repeat_last=True)
+    )
+
+
 def _insights_orchestrator(
     insights_script: list[ModelResponse],
     banking_script: list[ModelResponse],
@@ -137,7 +150,7 @@ def _insights_orchestrator(
     db = supabase or FakeSupabase()
     orchestrator = Orchestrator()
     orchestrator.register(
-        InsightsAgent(MockProvider(insights_script, repeat_last=True), build_insights_tools(db))
+        InsightsAgent(MockProvider(insights_script, repeat_last=True), _insights_tools(db))
     )
     orchestrator.register(
         BankingAgent(MockProvider(banking_script, repeat_last=True), build_banking_tools(db)),
@@ -266,7 +279,7 @@ async def test_tool_loop_stops_at_the_handoff_and_reports_it(context):
             ModelResponse(text="this must never be reached"),
         ]
     )
-    agent = InsightsAgent(provider, build_insights_tools(FakeSupabase()))
+    agent = InsightsAgent(provider, _insights_tools())
 
     result = await agent.run([Message(role="user", content="abonamente?")], context)
 
@@ -281,7 +294,7 @@ async def test_tool_loop_strips_the_sentinel_out_of_the_trace(context):
     into a later prompt and teach the model to imitate the shape rather than
     call the tool."""
     provider = MockProvider([ModelResponse(tool_calls=[handoff_call("banking")])])
-    agent = InsightsAgent(provider, build_insights_tools(FakeSupabase()))
+    agent = InsightsAgent(provider, _insights_tools())
 
     result = await agent.run([Message(role="user", content="abonamente?")], context)
 
@@ -299,7 +312,7 @@ async def test_a_failed_handoff_tool_call_is_not_a_handoff(context):
     provider = MockProvider(
         [ModelResponse(tool_calls=[bad_call]), ModelResponse(text="scuze, reformulez")]
     )
-    agent = InsightsAgent(provider, build_insights_tools(FakeSupabase()))
+    agent = InsightsAgent(provider, _insights_tools())
 
     result = await agent.run([Message(role="user", content="abonamente?")], context)
 
@@ -330,7 +343,7 @@ def test_document_agent_cannot_hand_off_because_it_has_no_such_tool():
 
 
 def test_insights_and_planning_are_the_only_agents_that_can_hand_off():
-    assert build_insights_tools(FakeSupabase()).get("handoff_to_agent") is not None
+    assert _insights_tools().get("handoff_to_agent") is not None
     assert build_planning_tools(FakeSupabase()).get("handoff_to_agent") is not None
     assert set(ALLOWED_HANDOFF_TARGETS) == {"insights", "planning"}
 
@@ -685,7 +698,7 @@ async def test_a_refused_handoff_never_leaves_the_user_with_an_empty_reply(conte
     # A REAL InsightsAgent, whose loop stops at the sentinel with reply="".
     orchestrator.register(
         InsightsAgent(
-            MockProvider(handoff_script("documents")), build_insights_tools(FakeSupabase())
+            MockProvider(handoff_script("documents")), _insights_tools()
         )
     )
     orchestrator.register(_RecordingAgent("banking"))
@@ -706,7 +719,7 @@ async def test_an_honoured_handoff_leaves_the_source_reply_alone(context):
     orchestrator = Orchestrator()
     orchestrator.register(
         InsightsAgent(
-            MockProvider(handoff_script("banking")), build_insights_tools(FakeSupabase())
+            MockProvider(handoff_script("banking")), _insights_tools()
         )
     )
     orchestrator.register(_RecordingAgent("banking", reply="raspunsul bancar"))
