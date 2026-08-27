@@ -891,15 +891,24 @@ function buildMessageSpeakButton(text) {
             // its default voice anyway (observed: an English voice trying to
             // sound out unfamiliar text ends up spelling it out letter by
             // letter). That's worse than no audio, and no amount of JS can
-            // conjure a voice the OS/browser was never given - installing
-            // it (or configuring Azure Speech server-side - see
-            // fetchSpeechAudio above) are the only real fixes, so this says
-            // so instead of quietly producing gibberish.
+            // conjure a voice the OS/browser was never given, so this says
+            // so instead of quietly producing gibberish - pointing at
+            // whichever free fix actually applies. Chromium-based Edge (not
+            // Chrome itself) ships its own online neural voices for dozens
+            // of languages with no separate install, so it's worth trying
+            // before "add a voice in Windows" - but only on a browser that
+            // isn't already Edge, where that suggestion would be useless.
             finish();
-            showToast(t(
-                'chat.speak_voice_unavailable',
-                'Acest browser nu are o voce instalată pentru limba mesajului.'
-            ));
+            const isEdge = /\bEdg\//.test(navigator.userAgent);
+            showToast(isEdge
+                ? t(
+                    'chat.speak_voice_unavailable_add_language',
+                    'Acest browser nu are o voce instalată pentru limba mesajului. Adaugă limba din Setări Windows > Vorbire.'
+                )
+                : t(
+                    'chat.speak_voice_unavailable_try_edge',
+                    'Acest browser nu are o voce instalată pentru limba mesajului. Încearcă Microsoft Edge, care include voci multilingve, sau adaugă limba din Setări Windows > Vorbire.'
+                ));
             return;
         }
         const utterance = new SpeechSynthesisUtterance(text);
