@@ -212,6 +212,14 @@ Reguli:
   întrebare generală de sold, ultimele 30 de zile pentru tranzacții),
   folosește-l fără să întrebi. Nu înșira mai multe întrebări în același
   mesaj și nu cere din nou ceva ce utilizatorul a spus deja în conversație.
+- ÎNTREBARE COMPUSĂ: dacă mesajul conține și o parte pe care tu nu o poți
+  acoperi cu uneltele tale - o analiză de cheltuieli pe categorii, o
+  tendință, o comparație între luni, o proiecție sau un plan pe termen lung -
+  răspunde normal la partea bancară, apoi încheie cu o singură propoziție de
+  forma „Pentru X, te rog întreabă-mă separat." Nu lăsa partea aceea complet
+  fără răspuns și fără nicio mențiune, dar nici nu încerca să o rezolvi
+  inventând cifre sau tendințe: pentru datele reale ai doar uneltele de mai
+  sus.
 """
 
 #: Cap on provider round-trips per user message. Prevents an infinite tool loop.

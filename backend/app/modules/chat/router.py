@@ -182,7 +182,11 @@ async def chat(
 
     routing_chain = turn.routing_chain
     return ChatResponse(
-        reply=turn.final_reply,
+        # EVERY hop that spoke, not just the last one (see combined_reply).
+        # A compound question answered across a handoff - Insights takes the
+        # spending half, Banking the balance half - must not lose the first
+        # half here, when both halves are already being persisted below.
+        reply=turn.combined_reply,
         conversation_id=conversation_id,
         routing_chain=routing_chain,
         # Backward-compatible duplicate of the last hop - see ChatResponse.
