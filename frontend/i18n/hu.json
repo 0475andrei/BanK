@@ -50,7 +50,9 @@
     "create": "Létrehozás",
     "or": "vagy",
     "reading_file": "Fájl beolvasása...",
-    "chat_placeholder": "Kérdezd az AI asszisztenst..."
+    "chat_placeholder": "Kérdezd az AI asszisztenst...",
+    "amount_label": "Összeg",
+    "description_label": "Leírás"
   },
   "dashboard": {
     "title": "BanK vezérlőpult",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "Nincs másik számla ugyanabban a pénznemben",
     "open_account_button": "Számla megnyitása",
     "account_name_placeholder": "pl. Nyaralási megtakarítás",
-    "projection_amount_placeholder": "pl. 5000"
+    "projection_amount_placeholder": "pl. 5000",
+    "period_label": "Futamidő",
+    "projection_amount_label": "Becsült befizetendő összeg",
+    "projection_amount_note": "(csak becslés céljából)"
   },
   "cards": {
     "cancel": "Kártya törlése",
@@ -322,6 +327,7 @@
     "history": {
       "rename_title": "Beszélgetés átnevezése",
       "delete_title": "Beszélgetés törlése",
+      "delete_button": "Törlés",
       "rename_input_label": "Beszélgetés neve",
       "save_name": "Név mentése",
       "cancel_rename": "Mégse",
@@ -341,6 +347,12 @@
       "reject_error": "Hiba történt az elutasítás során.",
       "confirm_success": "A műveletet megerősítettük és sikeresen végrehajtottuk!",
       "auth_failed": "Sikertelen hitelesítés."
+    },
+    "agent_tooltip": {
+      "agent_label": "Ügynök",
+      "reason_label": "Ok",
+      "rule_label": "Szabály",
+      "confidence_label": "Megbízhatóság"
     }
   },
   "dynamic": {
@@ -387,7 +399,44 @@
     "category_education": "Oktatás",
     "category_home": "Otthon és berendezés",
     "category_insurance": "Biztosítás",
-    "category_transfers": "Átutalások"
+    "category_transfers": "Átutalások",
+    "proposal_transfer": "{amount} átutalása erről: {from}, erre: {to}",
+    "proposal_payment": "{amount} kifizetése neki: {name}",
+    "proposal_open_account": "{product} számla nyitása „{name}” {currency} pénznemben",
+    "proposal_close_account": "„{name}” számla zárása",
+    "proposal_cancel_card": "•••• {last4} kártya végleges visszavonása",
+    "proposal_sign_document": "„{filename}” dokumentum elektronikus aláírása",
+    "product_checking": "folyószámla",
+    "product_savings": "megtakarítási",
+    "product_term_deposit": "lekötött betét",
+    "agent_banking": "Banki",
+    "agent_insights": "Elemzés",
+    "agent_planning": "Tervezés",
+    "agent_documents": "Dokumentumok",
+    "agent_docs": "Súgó"
+  },
+  "esign": {
+    "sign_button": "Elektronikus aláírás",
+    "sign_button_short": "Aláírás",
+    "list_empty": "Jelenleg nincs aláírandó dokumentumod.",
+    "preview_button": "Előnézet",
+    "signed_badge": "Aláírva",
+    "preview_failed": "A dokumentum előnézete nem sikerült.",
+    "sign_request_error": "Hiba történt az aláírási kérés létrehozásakor.",
+    "sign_intent": "Elolvastam és elfogadom a(z) „{filename}” dokumentum tartalmát.",
+    "sign_intent_official": "Elolvastam és elfogadom a(z) „{filename}” hivatalos dokumentum tartalmát.",
+    "sending_code": "Aláírási kód küldése...",
+    "code_sent": "Kód elküldve ehhez: „{filename}”. Nézd meg a Teamsben.",
+    "code_send_error": "A kódot nem sikerült elküldeni.",
+    "face_reason": "Hivatalos dokumentum aláírása - Face ID azonosítás",
+    "sign_success": "A dokumentumot sikeresen aláírtad!",
+    "sign_error": "Az aláírás nem sikerült."
+  },
+  "face_id": {
+    "status_check_error": "Nem sikerült ellenőrizni a Face ID állapotát. Próbáld újra.",
+    "enrollment_required_generic": "Ehhez a művelethez aktivált Face ID szükséges. Átirányítunk az aktiváláshoz.",
+    "enrollment_required_payment": "Ehhez a fizetéshez Face ID szükséges, mert ez az első fizetésed ennek a személynek, vagy meghaladja a biztonsági küszöböt.",
+    "enrollment_required_card_reveal": "Aktiváld a Face ID-t, hogy lásd a kártya teljes számát és a CVV kódot."
   },
   "errors": {
     "generic": "Hiba történt. Kérjük, próbáld újra."
@@ -401,9 +450,19 @@
   },
   "scheduled": {
     "title": "Átutalás ütemezése",
+    "from_account_label": "Számláról",
     "start_in_days_label": "Hány nap múlva induljon",
     "frequency_label": "Gyakoriság",
     "submit_button": "Ütemezés"
+  },
+  "statement": {
+    "title": "Számlakivonat",
+    "download_hint": "Számlakivonat letöltése",
+    "from_label": "Ettől",
+    "to_label": "Eddig",
+    "download_button": "PDF letöltése",
+    "invalid_period": "A kezdő dátumnak a záró dátum előtt kell lennie.",
+    "generation_failed": "A számlakivonatot nem sikerült elkészíteni."
   },
   "face_confirm": {
     "title": "Megerősítés Face ID-vel",

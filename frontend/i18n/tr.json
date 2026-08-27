@@ -50,7 +50,9 @@
     "create": "Oluştur",
     "or": "veya",
     "reading_file": "Dosya okunuyor...",
-    "chat_placeholder": "Yapay zeka asistanına sor..."
+    "chat_placeholder": "Yapay zeka asistanına sor...",
+    "amount_label": "Tutar",
+    "description_label": "Açıklama"
   },
   "dashboard": {
     "title": "BanK Paneli",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "Aynı para biriminde başka hesap yok",
     "open_account_button": "Hesabı aç",
     "account_name_placeholder": "örn. Tatil birikimi",
-    "projection_amount_placeholder": "örn. 5000"
+    "projection_amount_placeholder": "örn. 5000",
+    "period_label": "Vade",
+    "projection_amount_label": "Tahmini yatırılacak tutar",
+    "projection_amount_note": "(yalnızca tahmin amaçlıdır)"
   },
   "cards": {
     "cancel": "Kartı iptal et",
@@ -322,6 +327,7 @@
     "history": {
       "rename_title": "Görüşmeyi yeniden adlandır",
       "delete_title": "Görüşmeyi sil",
+      "delete_button": "Sil",
       "rename_input_label": "Görüşme adı",
       "save_name": "Adı kaydet",
       "cancel_rename": "Vazgeç",
@@ -341,6 +347,12 @@
       "reject_error": "İptal sırasında hata oluştu.",
       "confirm_success": "İşlem onaylandı ve başarıyla gerçekleştirildi!",
       "auth_failed": "Kimlik doğrulama başarısız oldu."
+    },
+    "agent_tooltip": {
+      "agent_label": "Aracı",
+      "reason_label": "Neden",
+      "rule_label": "Kural",
+      "confidence_label": "Güven"
     }
   },
   "dynamic": {
@@ -387,7 +399,44 @@
     "category_education": "Eğitim",
     "category_home": "Ev ve Dekorasyon",
     "category_insurance": "Sigorta",
-    "category_transfers": "Transferler"
+    "category_transfers": "Transferler",
+    "proposal_transfer": "{from} hesabından {to} hesabına {amount} transferi",
+    "proposal_payment": "{name} kişisine {amount} ödeme",
+    "proposal_open_account": "{currency} cinsinden {product} «{name}» hesabı açma",
+    "proposal_close_account": "«{name}» hesabını kapatma",
+    "proposal_cancel_card": "•••• {last4} kartının kalıcı olarak iptali",
+    "proposal_sign_document": "«{filename}» belgesinin elektronik imzalanması",
+    "product_checking": "vadesiz",
+    "product_savings": "tasarruf",
+    "product_term_deposit": "vadeli mevduat",
+    "agent_banking": "Bankacılık",
+    "agent_insights": "Analiz",
+    "agent_planning": "Planlama",
+    "agent_documents": "Belgeler",
+    "agent_docs": "Yardım"
+  },
+  "esign": {
+    "sign_button": "Elektronik olarak imzala",
+    "sign_button_short": "İmzala",
+    "list_empty": "Şu anda imzalanacak belgen yok.",
+    "preview_button": "Önizle",
+    "signed_badge": "İmzalandı",
+    "preview_failed": "Belge önizlemesi başarısız oldu.",
+    "sign_request_error": "İmza talebi oluşturulurken hata oluştu.",
+    "sign_intent": "«{filename}» belgesinin içeriğini okudum ve kabul ediyorum.",
+    "sign_intent_official": "«{filename}» resmi belgesinin içeriğini okudum ve kabul ediyorum.",
+    "sending_code": "İmza kodu gönderiliyor...",
+    "code_sent": "«{filename}» için kod gönderildi. Teams'i kontrol et.",
+    "code_send_error": "Kod gönderilemedi.",
+    "face_reason": "Resmi belge imzalama - Face ID doğrulaması",
+    "sign_success": "Belge başarıyla imzalandı!",
+    "sign_error": "İmzalama başarısız oldu."
+  },
+  "face_id": {
+    "status_check_error": "Face ID durumu kontrol edilemedi. Tekrar dene.",
+    "enrollment_required_generic": "Bu işlem için Face ID'nin etkin olması gerekiyor. Etkinleştirme sayfasına yönlendiriliyorsun.",
+    "enrollment_required_payment": "Bu ödeme, bu kişiye ilk ödemen olduğu veya güvenlik eşiğini aştığı için Face ID gerektiriyor.",
+    "enrollment_required_card_reveal": "Kartın tam numarasını ve CVV'sini görmek için Face ID'yi etkinleştir."
   },
   "errors": {
     "generic": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
@@ -401,9 +450,19 @@
   },
   "scheduled": {
     "title": "Transfer zamanla",
+    "from_account_label": "Hesaptan",
     "start_in_days_label": "Kaç gün sonra başlasın",
     "frequency_label": "Sıklık",
     "submit_button": "Zamanla"
+  },
+  "statement": {
+    "title": "Hesap ekstresi",
+    "download_hint": "Hesap ekstresini indir",
+    "from_label": "Başlangıç",
+    "to_label": "Bitiş",
+    "download_button": "PDF indir",
+    "invalid_period": "Başlangıç tarihi bitiş tarihinden önce olmalıdır.",
+    "generation_failed": "Ekstre oluşturulamadı."
   },
   "face_confirm": {
     "title": "Face ID ile onayla",

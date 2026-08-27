@@ -50,7 +50,9 @@
     "create": "Erstellen",
     "or": "oder",
     "reading_file": "Datei wird gelesen...",
-    "chat_placeholder": "Frag den KI-Assistenten..."
+    "chat_placeholder": "Frag den KI-Assistenten...",
+    "amount_label": "Betrag",
+    "description_label": "Beschreibung"
   },
   "dashboard": {
     "title": "BanK Dashboard",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "Kein weiteres Konto in derselben Währung",
     "open_account_button": "Konto eröffnen",
     "account_name_placeholder": "z. B. Urlaubssparen",
-    "projection_amount_placeholder": "z. B. 5000"
+    "projection_amount_placeholder": "z. B. 5000",
+    "period_label": "Laufzeit",
+    "projection_amount_label": "Geschätzter Einzahlungsbetrag",
+    "projection_amount_note": "(nur zur Schätzung)"
   },
   "cards": {
     "cancel": "Karte kündigen",
@@ -322,6 +327,7 @@
     "history": {
       "rename_title": "Unterhaltung umbenennen",
       "delete_title": "Unterhaltung löschen",
+      "delete_button": "Löschen",
       "rename_input_label": "Name der Unterhaltung",
       "save_name": "Namen speichern",
       "cancel_rename": "Abbrechen",
@@ -341,6 +347,12 @@
       "reject_error": "Fehler beim Abbrechen.",
       "confirm_success": "Die Aktion wurde bestätigt und erfolgreich ausgeführt!",
       "auth_failed": "Authentifizierung fehlgeschlagen."
+    },
+    "agent_tooltip": {
+      "agent_label": "Agent",
+      "reason_label": "Grund",
+      "rule_label": "Regel",
+      "confidence_label": "Vertrauen"
     }
   },
   "dynamic": {
@@ -387,7 +399,44 @@
     "category_education": "Bildung",
     "category_home": "Wohnen & Einrichtung",
     "category_insurance": "Versicherungen",
-    "category_transfers": "Überweisungen"
+    "category_transfers": "Überweisungen",
+    "proposal_transfer": "Überweisung von {amount} von {from} nach {to}",
+    "proposal_payment": "Zahlung von {amount} an {name}",
+    "proposal_open_account": "Eröffnung eines {product}-Kontos „{name}“ in {currency}",
+    "proposal_close_account": "Konto „{name}“ schließen",
+    "proposal_cancel_card": "Endgültige Kündigung der Karte •••• {last4}",
+    "proposal_sign_document": "Elektronische Signatur des Dokuments „{filename}“",
+    "product_checking": "Giro",
+    "product_savings": "Spar",
+    "product_term_deposit": "Festgeld",
+    "agent_banking": "Banking",
+    "agent_insights": "Analyse",
+    "agent_planning": "Planung",
+    "agent_documents": "Dokumente",
+    "agent_docs": "Hilfe"
+  },
+  "esign": {
+    "sign_button": "Elektronisch signieren",
+    "sign_button_short": "Signieren",
+    "list_empty": "Du hast derzeit keine Dokumente zu signieren.",
+    "preview_button": "Vorschau",
+    "signed_badge": "Signiert",
+    "preview_failed": "Dokumentvorschau fehlgeschlagen.",
+    "sign_request_error": "Fehler beim Erstellen der Signaturanfrage.",
+    "sign_intent": "Ich habe den Inhalt des Dokuments „{filename}“ gelesen und stimme zu.",
+    "sign_intent_official": "Ich habe den Inhalt des offiziellen Dokuments „{filename}“ gelesen und stimme zu.",
+    "sending_code": "Signaturcode wird gesendet...",
+    "code_sent": "Code gesendet für „{filename}“. Prüfe Teams.",
+    "code_send_error": "Der Code konnte nicht gesendet werden.",
+    "face_reason": "Signatur eines offiziellen Dokuments - Face-ID-Verifizierung",
+    "sign_success": "Das Dokument wurde erfolgreich signiert!",
+    "sign_error": "Signatur fehlgeschlagen."
+  },
+  "face_id": {
+    "status_check_error": "Face-ID-Status konnte nicht geprüft werden. Versuche es erneut.",
+    "enrollment_required_generic": "Diese Aktion erfordert aktiviertes Face ID. Du wirst zur Einrichtung weitergeleitet.",
+    "enrollment_required_payment": "Diese Zahlung erfordert Face ID, da es deine erste Zahlung an diese Person ist oder die Sicherheitsschwelle überschreitet.",
+    "enrollment_required_card_reveal": "Aktiviere Face ID, um die vollständige Kartennummer und den CVV zu sehen."
   },
   "errors": {
     "generic": "Es ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut."
@@ -401,9 +450,19 @@
   },
   "scheduled": {
     "title": "Überweisung planen",
+    "from_account_label": "Vom Konto",
     "start_in_days_label": "Beginnt in wie vielen Tagen",
     "frequency_label": "Häufigkeit",
     "submit_button": "Planen"
+  },
+  "statement": {
+    "title": "Kontoauszug",
+    "download_hint": "Kontoauszug herunterladen",
+    "from_label": "Von",
+    "to_label": "Bis",
+    "download_button": "PDF herunterladen",
+    "invalid_period": "Das Startdatum muss vor dem Enddatum liegen.",
+    "generation_failed": "Der Kontoauszug konnte nicht erstellt werden."
   },
   "face_confirm": {
     "title": "Mit Face ID bestätigen",

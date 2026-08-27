@@ -166,6 +166,7 @@ async def chat(
         conversation_id=str(conversation_id),
         active_document_id=active_document_id,
         statement_id=active_statement_id,
+        language=payload.language,
     )
 
     history = await conversations_service.load_messages(supabase, conversation_id)

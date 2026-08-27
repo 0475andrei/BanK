@@ -34,6 +34,13 @@ class ChatRequest(BaseModel):
     #: app/ai/context.py's Context.statement_id docstring for the implicit
     #: fallback (last statement uploaded in this conversation stays active).
     statement_id: uuid.UUID | None = None
+    #: The caller's active UI language (see frontend/language.js's LANGUAGES
+    #: map), read straight off `document.documentElement.lang` client-side.
+    #: Threaded onto `Context.language` (see app/ai/context.py) so the
+    #: agent's reply follows it - never validated against a fixed list here,
+    #: since an unrecognized code degrades harmlessly to Romanian (see
+    #: app/ai/language_directive.py) rather than being worth a 422.
+    language: str = "ro"
 
 
 class ProposalRead(BaseModel):

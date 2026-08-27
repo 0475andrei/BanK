@@ -109,6 +109,19 @@ def test_build_context_threads_statement_id_through():
     assert context.statement_id == "stmt-1111"
 
 
+def test_context_language_defaults_to_romanian_and_is_settable():
+    empty = Context(user_id="u1")
+    assert empty.language == "ro"
+
+    french = Context(user_id="u1", language="fr")
+    assert french.language == "fr"
+
+
+def test_build_context_threads_language_through():
+    context = build_context("user-from-auth", ["acc-a"], language="fr")
+    assert context.language == "fr"
+
+
 def test_dev_and_build_context_produce_the_same_shape():
     """The dev identity is swappable for a real one with no shape change."""
     dev = dev_context()

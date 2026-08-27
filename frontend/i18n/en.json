@@ -50,7 +50,9 @@
     "create": "Create",
     "or": "or",
     "reading_file": "Reading the file...",
-    "chat_placeholder": "Ask the AI assistant..."
+    "chat_placeholder": "Ask the AI assistant...",
+    "amount_label": "Amount",
+    "description_label": "Description"
   },
   "dashboard": {
     "title": "BanK Dashboard",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "No other account in the same currency",
     "open_account_button": "Open account",
     "account_name_placeholder": "e.g. Vacation savings",
-    "projection_amount_placeholder": "e.g. 5000"
+    "projection_amount_placeholder": "e.g. 5000",
+    "period_label": "Term",
+    "projection_amount_label": "Estimated deposit amount",
+    "projection_amount_note": "(for estimation only)"
   },
   "cards": {
     "cancel": "Cancel card",
@@ -322,6 +327,7 @@
     "history": {
       "rename_title": "Rename conversation",
       "delete_title": "Delete conversation",
+      "delete_button": "Delete",
       "rename_input_label": "Conversation name",
       "save_name": "Save name",
       "cancel_rename": "Cancel",
@@ -341,6 +347,12 @@
       "reject_error": "Error cancelling.",
       "confirm_success": "The action was confirmed and completed successfully!",
       "auth_failed": "Authentication failed."
+    },
+    "agent_tooltip": {
+      "agent_label": "Agent",
+      "reason_label": "Reason",
+      "rule_label": "Rule",
+      "confidence_label": "Confidence"
     }
   },
   "dynamic": {
@@ -387,7 +399,44 @@
     "category_education": "Education",
     "category_home": "Home & Furnishings",
     "category_insurance": "Insurance",
-    "category_transfers": "Transfers"
+    "category_transfers": "Transfers",
+    "proposal_transfer": "Transfer of {amount} from {from} to {to}",
+    "proposal_payment": "Payment of {amount} to {name}",
+    "proposal_open_account": "Open {product} account \"{name}\" in {currency}",
+    "proposal_close_account": "Close account \"{name}\"",
+    "proposal_cancel_card": "Permanently cancel card •••• {last4}",
+    "proposal_sign_document": "Electronically sign document \"{filename}\"",
+    "product_checking": "checking",
+    "product_savings": "savings",
+    "product_term_deposit": "term deposit",
+    "agent_banking": "Banking",
+    "agent_insights": "Insights",
+    "agent_planning": "Planning",
+    "agent_documents": "Documents",
+    "agent_docs": "Help"
+  },
+  "esign": {
+    "sign_button": "Sign electronically",
+    "sign_button_short": "Sign",
+    "list_empty": "You have no documents to sign right now.",
+    "preview_button": "Preview",
+    "signed_badge": "Signed",
+    "preview_failed": "Document preview failed.",
+    "sign_request_error": "Error creating the signature request.",
+    "sign_intent": "I have read and agree to the content of the document \"{filename}\".",
+    "sign_intent_official": "I have read and agree to the content of the official document \"{filename}\".",
+    "sending_code": "Sending signing code...",
+    "code_sent": "Code sent for \"{filename}\". Check Teams.",
+    "code_send_error": "The code could not be sent.",
+    "face_reason": "Signing an official document - Face ID verification",
+    "sign_success": "The document was signed successfully!",
+    "sign_error": "Signing failed."
+  },
+  "face_id": {
+    "status_check_error": "Couldn't check Face ID status. Try again.",
+    "enrollment_required_generic": "This action requires Face ID to be enabled. We're redirecting you to set it up.",
+    "enrollment_required_payment": "This payment requires Face ID because it's your first payment to this person or it exceeds the safety threshold.",
+    "enrollment_required_card_reveal": "Enable Face ID to see the full card number and CVV."
   },
   "errors": {
     "generic": "Something went wrong. Please try again."
@@ -401,9 +450,19 @@
   },
   "scheduled": {
     "title": "Schedule a transfer",
+    "from_account_label": "From account",
     "start_in_days_label": "Starts in how many days",
     "frequency_label": "Frequency",
     "submit_button": "Schedule"
+  },
+  "statement": {
+    "title": "Account statement",
+    "download_hint": "Download account statement",
+    "from_label": "From",
+    "to_label": "To",
+    "download_button": "Download PDF",
+    "invalid_period": "The start date must be before the end date.",
+    "generation_failed": "The statement couldn't be generated."
   },
   "face_confirm": {
     "title": "Confirm with Face ID",
