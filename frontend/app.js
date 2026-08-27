@@ -589,8 +589,14 @@ function appendChatBubble(role, text, options = {}) {
     if (role === 'ai' && options.bubbleClass !== 'typing') {
         const actions = document.createElement('div');
         actions.className = 'message-actions';
-        actions.appendChild(buildMessageCopyButton(text));
-        actions.appendChild(buildMessageSpeakButton(text));
+        // `bubble`, not `text`: the languagechange handler above rewrites
+        // the welcome bubble's textContent in place when the chat is still
+        // showing only that message, so a plain closure over `text` would
+        // keep copying/reading the language it was FIRST created in - read
+        // it fresh off the element at click time instead, so both buttons
+        // always act on whatever is actually on screen.
+        actions.appendChild(buildMessageCopyButton(bubble));
+        actions.appendChild(buildMessageSpeakButton(bubble));
         content.appendChild(actions);
     }
 
@@ -603,10 +609,11 @@ function appendChatBubble(role, text, options = {}) {
 }
 
 /** Small copy-to-clipboard control appended under a real AI reply (see
- * appendChatBubble above). Copies the plain-text message - never
- * options.html - since that's the only form guaranteed to be the actual
- * reply and not markup wrapping it (e.g. the typing indicator's dots). */
-function buildMessageCopyButton(text) {
+ * appendChatBubble above). Copies the bubble's plain text, read fresh at
+ * click time (see the comment where this is called) - never options.html,
+ * since that's the only form guaranteed to be the actual reply and not
+ * markup wrapping it (e.g. the typing indicator's dots). */
+function buildMessageCopyButton(bubble) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'message-copy-btn';
@@ -619,7 +626,7 @@ function buildMessageCopyButton(text) {
         // than restarting the timer and leaving it stuck on "copied".
         if (button.classList.contains('is-copied')) return;
         try {
-            await navigator.clipboard.writeText(text);
+            await navigator.clipboard.writeText(bubble.textContent);
         } catch {
             // Clipboard API can be unavailable (e.g. insecure context) - not
             // critical, and there's nothing to confirm if it didn't copy.
@@ -807,10 +814,11 @@ function stopMessageSpeech() {
 }
 
 /** Small read-aloud control appended under a real AI reply, next to the
- * copy button (see appendChatBubble above). Speaks the same plain-text
- * message the copy button copies, detecting its language (see
- * detectMessageLanguage) so it's read back in the right one rather than
- * assuming the conversation's UI language always matches.
+ * copy button (see appendChatBubble above). Speaks the bubble's plain
+ * text, read fresh at click time (see the comment where this is called) -
+ * detecting its language (see detectMessageLanguage) so it's read back in
+ * the right one rather than assuming the conversation's UI language
+ * always matches.
  *
  * Prefers the backend's Azure Speech endpoint (app/modules/speech) - one
  * configured multilingual neural voice, fluent in whatever language is
@@ -818,7 +826,7 @@ function stopMessageSpeech() {
  * pickVoiceForLocale) only when that service is unset or unreachable,
  * since browser/OS voice coverage for anything beyond English is
  * inconsistent at best. */
-function buildMessageSpeakButton(text) {
+function buildMessageSpeakButton(bubble) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'message-speak-btn';
@@ -855,6 +863,12 @@ function buildMessageSpeakButton(text) {
         // and the guard right after the await sees it was cancelled.
         activeSpeech = { button, reset, stop: () => {} };
 
+        // Read now, not at button-creation time: the languagechange handler
+        // in initDashboard rewrites the welcome bubble's textContent in
+        // place when the user switches language mid-chat, and a stale
+        // closure would keep reading whatever language the bubble started
+        // in instead of what's actually on screen.
+        const text = bubble.textContent;
         const locale = SPEECH_LOCALES[detectMessageLanguage(text)] || 'ro-RO';
         const audioUrl = await fetchSpeechAudio(text, locale);
 
