@@ -1159,6 +1159,46 @@ body {
     border-bottom-right-radius: 4px;
 }
 
+/* Copy-to-clipboard, appended under every real AI reply (see
+   appendChatBubble in app.js - skipped for the transient typing bubble).
+   align-self keeps it a compact left-anchored control rather than
+   stretching full-width like .message-content's other flex children. */
+.message-copy-btn {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    padding: 4px 6px;
+    background: transparent;
+    border: none;
+    border-radius: var(--border-radius-sm);
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.message-copy-btn:hover,
+.message-copy-btn:focus-visible {
+    color: var(--text-main);
+    background-color: var(--overlay-06);
+    outline: none;
+}
+
+.message-copy-btn .icon {
+    width: 13px;
+    height: 13px;
+    stroke-width: 2;
+}
+
+/* Quick, subtle confirmation: the icon swaps to a checkmark and tints
+   income-green for a moment (see the setTimeout in app.js), then both
+   revert - no layout shift, no popup. */
+.message-copy-btn.is-copied {
+    color: var(--income-green);
+}
+
 /* Assistant is thinking: same bubble, a quiet label over three pulsing dots. */
 .typing-label {
     font-size: 12px;

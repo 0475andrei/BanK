@@ -322,6 +322,7 @@
     "voice_input_label": "Dictează mesajul",
     "voice_input_not_supported": "Dictarea vocală nu este suportată de acest browser.",
     "voice_input_error": "Dictarea vocală a eșuat. Încearcă din nou sau scrie mesajul.",
+    "copy_message": "Copiază mesajul",
     "iban_read_from_file": "IBAN citit din fișierul atașat: {iban}",
     "iban_not_found_in_file": "Nu am găsit un IBAN clar în fișier - te rog scrie-l manual.",
     "panel_heading": "Asistent AI BanK",

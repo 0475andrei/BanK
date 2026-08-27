@@ -322,6 +322,7 @@
     "voice_input_label": "Dicta tu mensaje",
     "voice_input_not_supported": "Este navegador no admite la entrada de voz.",
     "voice_input_error": "La entrada de voz falló. Inténtalo de nuevo o escribe tu mensaje.",
+    "copy_message": "Copiar mensaje",
     "iban_read_from_file": "IBAN leído del archivo adjunto: {iban}",
     "iban_not_found_in_file": "No se encontró un IBAN claro en el archivo - escríbelo manualmente.",
     "panel_heading": "Asistente de IA de BanK",

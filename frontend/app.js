@@ -583,12 +583,55 @@ function appendChatBubble(role, text, options = {}) {
         bubble.textContent = text;
     }
     content.appendChild(bubble);
+
+    // Skipped for the typing placeholder: it has no real text yet and is
+    // removed the moment the actual reply arrives (see sendMessage above).
+    if (role === 'ai' && options.bubbleClass !== 'typing') {
+        content.appendChild(buildMessageCopyButton(text));
+    }
+
     wrapper.appendChild(content);
 
     chatMessages.appendChild(wrapper);
     if (window.lucide) lucide.createIcons();
     chatMessages.scrollTop = chatMessages.scrollHeight;
     return wrapper;
+}
+
+/** Small copy-to-clipboard control appended under a real AI reply (see
+ * appendChatBubble above). Copies the plain-text message - never
+ * options.html - since that's the only form guaranteed to be the actual
+ * reply and not markup wrapping it (e.g. the typing indicator's dots). */
+function buildMessageCopyButton(text) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'message-copy-btn';
+    button.setAttribute('aria-label', 'Copiază mesajul');
+    button.setAttribute('data-i18n-aria-label', 'chat.copy_message');
+    button.innerHTML = '<i data-lucide="copy" class="icon"></i>';
+
+    button.addEventListener('click', async () => {
+        // Ignore repeat clicks while the checkmark is still showing, rather
+        // than restarting the timer and leaving it stuck on "copied".
+        if (button.classList.contains('is-copied')) return;
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            // Clipboard API can be unavailable (e.g. insecure context) - not
+            // critical, and there's nothing to confirm if it didn't copy.
+            return;
+        }
+        button.classList.add('is-copied');
+        button.innerHTML = '<i data-lucide="check" class="icon"></i>';
+        if (window.lucide) lucide.createIcons();
+        setTimeout(() => {
+            button.classList.remove('is-copied');
+            button.innerHTML = '<i data-lucide="copy" class="icon"></i>';
+            if (window.lucide) lucide.createIcons();
+        }, 1500);
+    });
+
+    return button;
 }
 
 function chatErrorMessage(err) {
