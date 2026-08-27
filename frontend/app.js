@@ -638,12 +638,127 @@ function buildMessageCopyButton(text) {
     return button;
 }
 
-// BCP-47 locale for each language.js code, so SpeechSynthesisUtterance picks
-// a matching voice instead of whatever the browser's default happens to be.
+// BCP-47 locale for each language.js code (its LANGUAGES keys), so a
+// detected language maps to a real SpeechSynthesisUtterance.lang.
 const SPEECH_LOCALES = {
     ro: 'ro-RO', en: 'en-US', uk: 'uk-UA', hu: 'hu-HU', tr: 'tr-TR',
     it: 'it-IT', es: 'es-ES', fr: 'fr-FR', de: 'de-DE',
 };
+
+/* --- Per-message language detection ---
+ * document.documentElement.lang (the conversation's UI language) used to be
+ * read aloud unconditionally, which is usually right but not always - a
+ * reply can quote something back in a different language, and more
+ * fundamentally, without an explicit voice selection (see pickVoiceForLocale
+ * below) the browser would silently keep using its default English voice
+ * regardless of what .lang said, which is what made Romanian replies come
+ * out spelled letter-by-letter in an English accent. Detecting per message
+ * fixes the request literally and also gives pickVoiceForLocale a real
+ * target to search for.
+ *
+ * A handful of hand-picked signals per language.js LANGUAGES entry - not a
+ * general-purpose classifier, but this is a closed set of 9 languages and
+ * ordinary chat-length sentences carry plenty of distinguishing characters
+ * or function words, so simple scoring is enough. Ukrainian is handled
+ * separately (Cyrillic is unambiguous); the rest score on Latin-script
+ * diacritics (weighted by how unique they are to that language within this
+ * set) plus a few very common short words. */
+// `\b` only recognizes plain ASCII [A-Za-z0-9_] as "word" characters, so it
+// mismatches at a boundary right next to a diacritic - e.g. `\bși\b` never
+// matches " și " at all, because it needs a word/non-word transition and
+// treats a leading space AND a leading ș as equally "non-word". Building the
+// word list into one lookaround-based regex with \p{L} (any Unicode letter)
+// avoids that - required for "și"/"és" and any future word starting or
+// ending on an accented letter.
+function wordBoundaryPattern(words) {
+    return new RegExp(`(?<![\\p{L}\\p{N}_])(?:${words.join('|')})(?![\\p{L}\\p{N}_])`, 'giu');
+}
+
+// strong: unique enough within this set of 9 to almost guarantee the
+// language on its own. weak: real letters of that language, but shared with
+// at least one other (ö/ü across de/hu/tr, à/è/ù across fr/it, ...) - still
+// useful as a tie-breaker alongside word matches, just outweighed by a
+// single strong hit or a couple of word matches.
+const LATIN_LANGUAGE_SIGNALS = {
+    ro: {
+        strong: /[ăâîșț]/gi, weak: null,
+        words: wordBoundaryPattern(['și', 'este', 'sunt', 'pentru', 'soldul', 'contul', 'cardul', 'mulțumesc']),
+    },
+    hu: {
+        strong: /[őű]/gi, weak: /[áéíóöúü]/gi,
+        words: wordBoundaryPattern(['és', 'hogy', 'nem', 'vagy', 'számla', 'egyenleg', 'köszönöm']),
+    },
+    tr: {
+        strong: /[ığĞİ]/gi, weak: /[şöü]/gi,
+        words: wordBoundaryPattern(['ve', 'için', 'değil', 'hesap', 'bakiye', 'işlem', 'teşekkür']),
+    },
+    de: {
+        strong: /[ß]/gi, weak: /[äöü]/gi,
+        words: wordBoundaryPattern(['und', 'nicht', 'ich', 'der', 'die', 'das', 'konto', 'danke']),
+    },
+    fr: {
+        strong: /[œ]/gi, weak: /[çêëîïûù]/gi,
+        words: wordBoundaryPattern(['et', 'vous', 'pour', 'compte', 'solde', 'bonjour', 'merci']),
+    },
+    es: {
+        strong: /[ñ¿¡]/gi, weak: /[áéíóú]/gi,
+        words: wordBoundaryPattern(['y', 'para', 'cuenta', 'saldo', 'gracias', 'hola']),
+    },
+    it: {
+        strong: null, weak: /[àìòù]/gi,
+        words: wordBoundaryPattern(['e', 'per', 'conto', 'saldo', 'grazie', 'ciao']),
+    },
+    en: {
+        strong: null, weak: null,
+        words: wordBoundaryPattern(['the', 'and', 'your', 'account', 'balance', 'thanks', 'hello']),
+    },
+};
+
+function detectMessageLanguage(text) {
+    if (/[Ѐ-ӿ]/.test(text)) return 'uk'; // Cyrillic - unique in this set.
+
+    let best = null;
+    let bestScore = 0;
+    for (const [language, signal] of Object.entries(LATIN_LANGUAGE_SIGNALS)) {
+        const score = (signal.strong ? (text.match(signal.strong) || []).length * 3 : 0)
+            + (signal.weak ? (text.match(signal.weak) || []).length : 0)
+            + (text.match(signal.words) || []).length * 3;
+        if (score > bestScore) { bestScore = score; best = language; }
+    }
+    // No distinguishing character or word found (e.g. a very short reply) -
+    // trust the conversation's own language rather than defaulting to
+    // English, since that's what the reply was actually asked for in.
+    return bestScore > 0 ? best : (SPEECH_LOCALES[document.documentElement.lang] ? document.documentElement.lang : 'ro');
+}
+
+// speechSynthesis.getVoices() can return [] until the browser finishes
+// loading its voice list, which happens asynchronously - caching it and
+// refreshing on 'voiceschanged' (rather than calling getVoices() fresh right
+// before speaking) avoids a race where the very first read-aloud click finds
+// no voices yet and silently falls back to the system default.
+let cachedVoices = [];
+function refreshVoiceCache() { cachedVoices = window.speechSynthesis.getVoices(); }
+if (window.speechSynthesis) {
+    refreshVoiceCache();
+    window.speechSynthesis.addEventListener('voiceschanged', refreshVoiceCache);
+}
+
+/** Finds an installed voice for a BCP-47 locale (e.g. "ro-RO"), falling
+ * back to any voice for the bare language ("ro"). Without this, setting
+ * only utterance.lang is not enough in every browser/OS combination - some
+ * silently keep using the default voice for an unsupported lang instead of
+ * failing loudly, which is what produced the wrong-accent/letter-by-letter
+ * reading this replaces. Returns null (not a fallback voice) when nothing
+ * matches, since forcing an unrelated voice tends to read worse than
+ * leaving voice unset and letting the engine's own default apply. */
+function pickVoiceForLocale(locale) {
+    if (!cachedVoices.length) refreshVoiceCache();
+    const language = locale.split('-')[0].toLowerCase();
+    return cachedVoices.find((voice) => voice.lang.toLowerCase() === locale.toLowerCase())
+        || cachedVoices.find((voice) => voice.lang.toLowerCase().startsWith(`${language}-`))
+        || cachedVoices.find((voice) => voice.lang.toLowerCase() === language)
+        || null;
+}
 
 // Only one message reads aloud at a time - starting another stops whichever
 // is currently playing (and resets its button) rather than overlapping.
@@ -663,10 +778,10 @@ function stopMessageSpeech() {
 
 /** Small read-aloud control appended under a real AI reply, next to the copy
  * button (see appendChatBubble above). Speaks the same plain-text message
- * the copy button copies, in whatever language the reply was generated in -
- * sendMessage requests that language as document.documentElement.lang,
- * which language.js keeps in sync with the language selector, so it's also
- * the right language to read the reply back in. */
+ * the copy button copies, detecting that message's own language (see
+ * detectMessageLanguage) and speaking it with a matching installed voice
+ * (see pickVoiceForLocale) rather than assuming the conversation's UI
+ * language and the browser's default voice are both right. */
 function buildMessageSpeakButton(text) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -692,8 +807,11 @@ function buildMessageSpeakButton(text) {
         }
         stopMessageSpeech();
 
+        const locale = SPEECH_LOCALES[detectMessageLanguage(text)] || 'ro-RO';
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = SPEECH_LOCALES[document.documentElement.lang] || document.documentElement.lang || 'ro-RO';
+        utterance.lang = locale;
+        const voice = pickVoiceForLocale(locale);
+        if (voice) utterance.voice = voice;
         utterance.onend = utterance.onerror = () => {
             if (activeSpeech && activeSpeech.button === button) activeSpeech = null;
             reset();
