@@ -2,6 +2,7 @@
 <html lang="en" data-i18n-title="auth.login_title">
 <head>
     <script>try { if (localStorage.getItem('bank_preferred_language') && localStorage.getItem('bank_preferred_language') !== 'ro') document.documentElement.classList.add('i18n-pending'); } catch (_) {}</script>
+    <script>try { if (localStorage.getItem('bank_theme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (_) {}</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="auth.login_title">Log in - BanK</title>
@@ -117,6 +118,7 @@
 
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="language.js"></script>
+    <script src="theme.js"></script>
     <script src="api.js"></script>
     <script>
         if (window.lucide) lucide.createIcons();

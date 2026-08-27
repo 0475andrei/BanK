@@ -10,7 +10,7 @@ WORKDIR /usr/share/nginx/html
 # stray files in this directory never end up published by the web server.
 COPY index.html login.html register.html forgot-password.html enroll-device.html ./
 COPY admin.html ./
-COPY api.js app.js language.js style.css ./
+COPY api.js app.js language.js theme.js style.css ./
 COPY admin.js admin.css ./
 COPY i18n ./i18n
 COPY static ./static

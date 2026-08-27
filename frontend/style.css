@@ -1,5 +1,5 @@
 :root {
-    /* Color Palette */
+    /* Color Palette (dark theme - default) */
     --bg-dark: #0B0F17;
     --bg-surface: #1A2235;
     --bg-surface-hover: #232d46;
@@ -10,7 +10,44 @@
     --text-muted: #94A3B8;
     --income-green: #10B981;
     --expense-red: #EF4444;
+    --frozen-blue: #7dd3fc;
+    --warning-amber: #f59e0b;
     --border-color: rgba(255, 255, 255, 0.08);
+
+    /* The AI avatar's gradient (below) needs to stay vivid in both themes -
+       unlike --primary-teal, which gets darkened for the light theme so it
+       stays readable as text/borders on white. Kept out of the light-theme
+       override block on purpose: same value in both themes. */
+    --avatar-gradient-start: #2DD4BF;
+    --avatar-gradient-end: #3b82f6;
+
+    /* Text color for the handful of buttons/bubbles filled solid with
+       --primary-teal (Generează card virtual, the send button, the user's
+       own chat bubble, the active onboarding tab). Black reads fine on the
+       vivid mint teal above, but --primary-teal darkens quite a bit for the
+       light theme (contrast as *text* on white, see below) and black on
+       that darker teal looks muddy - white is the better pairing there. */
+    --on-teal-text: #000;
+
+    /* Neutral tint used for subtle fills/hovers on top of a surface (a
+       fraction of --text-main, in effect). Flipped to a dark tint in the
+       light theme below so hover/fill states stay visible on white. */
+    --overlay-02: rgba(255, 255, 255, 0.02);
+    --overlay-03: rgba(255, 255, 255, 0.03);
+    --overlay-04: rgba(255, 255, 255, 0.04);
+    --overlay-05: rgba(255, 255, 255, 0.05);
+    --overlay-06: rgba(255, 255, 255, 0.06);
+    --overlay-08: rgba(255, 255, 255, 0.08);
+    --overlay-1: rgba(255, 255, 255, 0.1);
+    --overlay-2: rgba(255, 255, 255, 0.2);
+    --overlay-5: rgba(255, 255, 255, 0.5);
+
+    /* Translucent variants of --bg-dark/--bg-surface, for glass-effect
+       panels layered over backdrop-filter: blur(). Kept as separate
+       properties (rather than computed from the opaque ones) since CSS
+       can't derive an rgba() from a hex custom property. */
+    --header-bg: rgba(11, 15, 23, 0.8);
+    --surface-translucent: rgba(26, 34, 53, 0.95);
 
     /* Spacing & Layout */
     --border-radius: 16px;
@@ -18,6 +55,44 @@
     --sidebar-width: 260px;
     --header-height: 70px;
     --transition: all 0.3s ease;
+}
+
+/* --- Light theme ---
+   Applied by setting data-theme="light" on <html> (see theme.js). Every
+   color above is a custom property, so this block is the only place the
+   light palette needs to live - the rest of the stylesheet just reacts. */
+[data-theme="light"] {
+    --bg-dark: #F1F5F9;
+    --bg-surface: #FFFFFF;
+    --bg-surface-hover: #EEF2F6;
+    /* Darker than the dark-theme teal/blue/green/red so text set in these
+       colors (transaction amounts, links, status labels - not just fills)
+       stays readable on a white background. */
+    --primary-teal: #0F766E;
+    --primary-teal-hover: #0D9488;
+    --secondary-blue: #2563EB;
+    --text-main: #0F172A;
+    --text-muted: #55647A;
+    --income-green: #059669;
+    --expense-red: #DC2626;
+    --frozen-blue: #0369A1;
+    --warning-amber: #B45309;
+    --border-color: #E2E8F0;
+
+    --overlay-02: rgba(15, 23, 42, 0.02);
+    --overlay-03: rgba(15, 23, 42, 0.03);
+    --overlay-04: rgba(15, 23, 42, 0.04);
+    --overlay-05: rgba(15, 23, 42, 0.05);
+    --overlay-06: rgba(15, 23, 42, 0.06);
+    --overlay-08: rgba(15, 23, 42, 0.08);
+    --overlay-1: rgba(15, 23, 42, 0.1);
+    --overlay-2: rgba(15, 23, 42, 0.2);
+    --overlay-5: rgba(15, 23, 42, 0.5);
+
+    --header-bg: rgba(241, 245, 249, 0.8);
+    --surface-translucent: rgba(255, 255, 255, 0.95);
+
+    --on-teal-text: #fff;
 }
 
 * {
@@ -164,7 +239,7 @@ body {
 
 .conversation-history-item:hover,
 .conversation-history-item:focus-within {
-    background-color: rgba(255, 255, 255, 0.03);
+    background-color: var(--overlay-03);
 }
 
 .conversation-history-item.active {
@@ -228,7 +303,7 @@ body {
 }
 
 .conversation-history-action:hover {
-    background-color: rgba(255, 255, 255, 0.08);
+    background-color: var(--overlay-08);
     color: var(--text-main);
 }
 
@@ -284,7 +359,7 @@ body {
 
 .nav-item:hover {
     color: var(--text-main);
-    background-color: rgba(255, 255, 255, 0.03);
+    background-color: var(--overlay-03);
 }
 
 .nav-item.active {
@@ -314,7 +389,7 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 0 40px;
-    background-color: rgba(11, 15, 23, 0.8);
+    background-color: var(--header-bg);
     backdrop-filter: blur(10px);
     /* backdrop-filter creates its own stacking context, which otherwise traps
        the profile-panel dropdown's z-index below .views-container's content
@@ -408,7 +483,7 @@ body {
     transition: var(--transition);
 }
 
-.profile-menu-item:hover { background-color: rgba(255, 255, 255, 0.06); }
+.profile-menu-item:hover { background-color: var(--overlay-06); }
 
 .profile-menu-item .icon { width: 18px; height: 18px; color: var(--text-muted); stroke-width: 2; }
 
@@ -615,13 +690,13 @@ body {
     padding: 12px;
     border-radius: var(--border-radius-sm);
     border: 1px solid var(--border-color);
-    background-color: rgba(255, 255, 255, 0.03);
+    background-color: var(--overlay-03);
     cursor: pointer;
     transition: var(--transition);
 }
 
 .emoji-option:hover {
-    background-color: rgba(255, 255, 255, 0.08);
+    background-color: var(--overlay-08);
 }
 
 .emoji-option.selected {
@@ -652,7 +727,7 @@ body {
 
 .btn-primary {
     background: linear-gradient(135deg, var(--primary-teal) 0%, #0d9488 100%);
-    color: #000;
+    color: var(--on-teal-text);
     box-shadow: 0 4px 15px rgba(45, 212, 191, 0.3);
 }
 
@@ -662,13 +737,13 @@ body {
 }
 
 .btn-secondary {
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: var(--overlay-05);
     color: var(--text-main);
     border: 1px solid var(--border-color);
 }
 
 .btn-secondary:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--overlay-1);
 }
 
 .btn-danger {
@@ -783,7 +858,7 @@ body {
     line-height: 1;
     border-radius: 6px;
 }
-.acc-statement-btn:hover { color: var(--primary-teal); background-color: rgba(255, 255, 255, 0.06); }
+.acc-statement-btn:hover { color: var(--primary-teal); background-color: var(--overlay-06); }
 .acc-statement-btn svg { width: 18px; height: 18px; }
 
 .account-card:hover {
@@ -800,7 +875,7 @@ body {
     justify-content: center;
     font-size: 20px;
     margin-bottom: 16px;
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: var(--overlay-05);
 }
 
 .acc-info h3 {
@@ -855,7 +930,7 @@ body {
     align-items: center;
     justify-content: center;
     font-size: 18px;
-    background-color: rgba(255,255,255,0.05);
+    background-color: var(--overlay-05);
     margin-right: 16px;
 }
 
@@ -932,7 +1007,7 @@ body {
     align-items: center;
     padding: 20px;
     border-bottom: 1px solid var(--border-color);
-    background-color: rgba(26, 34, 53, 0.95);
+    background-color: var(--surface-translucent);
 }
 
 .chat-header .ai-avatar {
@@ -940,12 +1015,17 @@ body {
     height: 48px;
     flex-shrink: 0;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary-teal), #3b82f6);
+    background: linear-gradient(135deg, var(--avatar-gradient-start), var(--avatar-gradient-end));
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 24px;
     margin-right: 16px;
+    /* Always a saturated teal/blue fill regardless of theme, so the icon
+       needs to stay a fixed light color for contrast rather than following
+       --text-main (which turns dark navy in the light theme and would go
+       muddy against the teal end of the gradient). */
+    color: #fff;
 }
 
 .ai-info h2 { font-size: 18px; }
@@ -974,12 +1054,13 @@ body {
     height: 32px;
     flex-shrink: 0;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary-teal), #3b82f6);
+    background: linear-gradient(135deg, var(--avatar-gradient-start), var(--avatar-gradient-end));
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 14px;
     margin-right: 12px;
+    color: #fff;
 }
 .message.user .avatar { margin-right: 0; margin-left: 12px; }
 
@@ -1001,7 +1082,7 @@ body {
     margin-bottom: 4px;
     padding: 2px 8px;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--overlay-05);
     cursor: help;
 }
 
@@ -1081,13 +1162,13 @@ body {
 }
 
 .message.ai .bubble {
-    background-color: rgba(255,255,255,0.05);
+    background-color: var(--overlay-05);
     border-bottom-left-radius: 4px;
 }
 
 .message.user .bubble {
     background-color: var(--primary-teal);
-    color: #000;
+    color: var(--on-teal-text);
     border-bottom-right-radius: 4px;
 }
 
@@ -1143,7 +1224,7 @@ body {
 .chart-placeholder { margin-bottom: 12px; }
 .progress-bar-bg {
     height: 8px;
-    background-color: rgba(255,255,255,0.1);
+    background-color: var(--overlay-1);
     border-radius: 4px;
     overflow: hidden;
 }
@@ -1177,7 +1258,7 @@ body {
     justify-content: space-between;
     font-size: 13px;
     padding: 4px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid var(--overlay-06);
 }
 .proposal-field span:first-child { color: var(--text-muted); }
 .proposal-field span:last-child { font-weight: 500; text-align: right; }
@@ -1219,7 +1300,7 @@ body {
 
 .chat-input {
     flex: 1;
-    background-color: rgba(255,255,255,0.05);
+    background-color: var(--overlay-05);
     border: 1px solid var(--border-color);
     padding: 14px 20px;
     border-radius: 24px;
@@ -1233,7 +1314,7 @@ body {
     height: 48px;
     border-radius: 50%;
     background-color: var(--primary-teal);
-    color: #000;
+    color: var(--on-teal-text);
     border: none;
     font-size: 18px;
     cursor: pointer;
@@ -1254,6 +1335,13 @@ body {
     padding-bottom: 20px;
 }
 
+/* Unlike most components, this card doesn't just re-theme its existing
+   colors - it gets a genuinely different look per theme (dark gradient vs.
+   a light pastel one below), so its children (card number, labels, status
+   badge, the limit/cancel buttons) can keep reading the page's ordinary
+   --text-main/--text-muted/accent variables and stay well-contrasted
+   without any card-specific overrides: those variables are already tuned
+   for whichever background - dark or light - the active theme puts here. */
 .credit-card {
     min-width: 340px;
     height: 210px;
@@ -1265,6 +1353,7 @@ body {
     position: relative;
     overflow: hidden;
     box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    color: var(--text-main);
 }
 
 .credit-card.virtual {
@@ -1282,6 +1371,26 @@ body {
 .credit-card.physical {
     background: linear-gradient(135deg, #334155 0%, #1e293b 100%);
     border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Light theme: a real card here would still be dark in real life (like the
+   language-selector trigger, this one keeps its own identity rather than
+   inverting to look like a form field), but a flat reuse of the dark
+   gradient reads as a jarring black cutout on an otherwise white page. A
+   pale, glassy tint keeps the same "card" identity while sitting naturally
+   on light surfaces. */
+[data-theme="light"] .credit-card.virtual {
+    background: linear-gradient(135deg, #F0FDFA 0%, #99F6E4 100%);
+    border: 1px solid var(--primary-teal);
+}
+
+[data-theme="light"] .credit-card.virtual::after {
+    background: radial-gradient(circle at top right, rgba(13, 148, 136, 0.16) 0%, transparent 60%);
+}
+
+[data-theme="light"] .credit-card.physical {
+    background: linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%);
+    border: 1px solid rgba(15, 23, 42, 0.12);
 }
 
 .card-header {
@@ -1335,6 +1444,9 @@ body {
     letter-spacing: 1px;
 }
 
+/* Reused far beyond the credit-card eye toggle it's named after - also the
+   chat attach/mic buttons and the copy-IBAN/referral buttons, all sitting on
+   a regular (theme-aware) surface, so its fill uses the overlay vars here. */
 .card-eye-btn {
     align-self: center;
     display: inline-flex;
@@ -1342,8 +1454,8 @@ body {
     justify-content: center;
     width: 28px;
     height: 28px;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.2);
+    background: var(--overlay-08);
+    border: 1px solid var(--overlay-2);
     color: var(--text-muted);
     border-radius: 50%;
     cursor: pointer;
@@ -1351,8 +1463,8 @@ body {
 }
 
 .card-eye-btn:hover {
-    color: #fff;
-    border-color: rgba(255,255,255,0.5);
+    color: var(--text-main);
+    border-color: var(--overlay-5);
 }
 
 .chat-mic-btn {
@@ -1402,7 +1514,7 @@ body {
 
 .password-toggle-btn:hover {
     color: var(--text-main);
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--overlay-08);
 }
 
 .password-toggle-btn i {
@@ -1438,7 +1550,7 @@ body {
 
 .progress-bg {
     height: 10px;
-    background-color: rgba(255,255,255,0.05);
+    background-color: var(--overlay-05);
     border-radius: 5px;
     overflow: hidden;
 }
@@ -1654,7 +1766,7 @@ body {
     flex-direction: column;
     align-items: flex-start;
     gap: 6px;
-    background-color: rgba(255, 255, 255, 0.03);
+    background-color: var(--overlay-03);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-sm);
     padding: 16px;
@@ -1731,7 +1843,7 @@ body {
     padding: 0 12px;
     border: 1px solid rgba(148, 163, 184, 0.22);
     border-radius: 999px;
-    background: linear-gradient(135deg, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.96));
+    background: var(--bg-surface);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 14px rgba(0, 0, 0, 0.18);
     color: var(--text-main);
     font: inherit;
@@ -1766,7 +1878,7 @@ body {
 .language-selector-trigger:hover,
 .language-selector-trigger:focus-visible {
     border-color: rgba(45, 212, 191, 0.72);
-    background: linear-gradient(135deg, rgba(35, 63, 72, 0.96), rgba(15, 38, 43, 0.96));
+    background: var(--bg-surface-hover);
     outline: none;
 }
 
@@ -1779,7 +1891,7 @@ body {
     padding: 6px;
     border: 1px solid rgba(148, 163, 184, 0.2);
     border-radius: 14px;
-    background: #111c2b;
+    background: var(--bg-surface);
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
 }
 
@@ -1814,6 +1926,45 @@ body {
     z-index: 1000;
 }
 
+/* Dark/light switch injected by theme.js - see the file for why it lives
+   there rather than in markup (mirrors how language.js self-injects the
+   selector above). Styled like the icon buttons in .user-actions on the
+   dashboard/admin header, fixed top-left on the auth pages (which have no
+   header) so it never collides with the language selector's own fixed
+   position on the right. */
+.theme-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.theme-toggle-btn:hover,
+.theme-toggle-btn:focus-visible {
+    color: var(--text-main);
+    background-color: var(--overlay-06);
+    border-color: var(--primary-teal);
+    outline: none;
+}
+
+.theme-toggle-btn svg { display: block; }
+
+.auth-body .theme-toggle-btn {
+    position: fixed;
+    top: 20px;
+    left: 24px;
+    z-index: 1000;
+    background: var(--bg-surface);
+}
+
 /* Returning visitors never see the old language before their cached bundle
    is applied. Romanian is the source language and remains visible. */
 html.i18n-pending body { visibility: hidden; }
@@ -1824,6 +1975,7 @@ html.i18n-pending body { visibility: hidden; }
 
 @media (max-width: 640px) {
     .auth-body .language-selector { top: 12px; right: 12px; }
+    .auth-body .theme-toggle-btn { top: 12px; left: 12px; }
     .top-header { padding: 0 16px; }
     .search-bar { width: min(220px, 38vw); }
     .user-actions { gap: 8px; }
@@ -1857,7 +2009,7 @@ html.i18n-pending body { visibility: hidden; }
 .onboarding-mode-switch {
     display: flex;
     gap: 8px;
-    background-color: rgba(255, 255, 255, 0.03);
+    background-color: var(--overlay-03);
     border: 1px solid var(--border-color);
     border-radius: 999px;
     padding: 4px;
@@ -1881,7 +2033,7 @@ html.i18n-pending body { visibility: hidden; }
 
 .mode-tab.active {
     background-color: var(--primary-teal);
-    color: #000;
+    color: var(--on-teal-text);
 }
 
 .comodul-chat-container { height: 480px; }
@@ -1936,7 +2088,7 @@ html.i18n-pending body { visibility: hidden; }
     display: flex;
     align-items: center;
     gap: 10px;
-    background-color: rgba(255,255,255,0.04);
+    background-color: var(--overlay-04);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius-sm);
     padding: 10px 14px;
@@ -1981,7 +2133,7 @@ html.i18n-pending body { visibility: hidden; }
 .contact-subscription-badge {
     display: inline-block;
     background-color: rgba(245, 158, 11, 0.12);
-    color: #f59e0b;
+    color: var(--warning-amber);
     font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
@@ -2203,7 +2355,7 @@ html.i18n-pending body { visibility: hidden; }
     display: flex;
     align-items: center;
     gap: 12px;
-    background-color: rgba(255, 255, 255, 0.02);
+    background-color: var(--overlay-02);
     border: 1px dashed var(--border-color);
     border-radius: var(--border-radius-sm);
     padding: 14px 16px;
@@ -2448,7 +2600,7 @@ html.i18n-pending body { visibility: hidden; }
     align-items: center;
     justify-content: center;
     background: rgba(245, 158, 11, 0.15);
-    color: #f59e0b;
+    color: var(--warning-amber);
     animation: price-increase-icon-pulse 2s ease-out 0.35s 2;
 }
 
@@ -2492,7 +2644,7 @@ html.i18n-pending body { visibility: hidden; }
 }
 
 .price-increase-new {
-    color: #f59e0b;
+    color: var(--warning-amber);
     font-weight: 700;
     font-size: 20px;
 }
@@ -2502,7 +2654,7 @@ html.i18n-pending body { visibility: hidden; }
     align-items: center;
     gap: 6px;
     background-color: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
+    color: var(--expense-red);
     font-size: 12px;
     font-weight: 600;
     padding: 6px 14px;
@@ -2555,7 +2707,7 @@ html.i18n-pending body { visibility: hidden; }
 }
 .human-in-the-loop-card.proposal-rejected {
     border-color: var(--border-color);
-    background: rgba(255,255,255,0.03);
+    background: var(--overlay-03);
     opacity: 0.7;
 }
 .proposal-status-label {
@@ -2738,7 +2890,7 @@ html.i18n-pending body { visibility: hidden; }
     border-radius: var(--border-radius-sm);
 }
 
-.logout-btn:hover { color: var(--text-main); background-color: rgba(255,255,255,0.05); }
+.logout-btn:hover { color: var(--text-main); background-color: var(--overlay-05); }
 
 /* Card status + freeze/unfreeze action merged into one self-updating toggle:
    it shows the current state and, on click, becomes the other state. */
@@ -2769,7 +2921,7 @@ html.i18n-pending body { visibility: hidden; }
 
 .status-toggle-btn.frozen {
     background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(129, 140, 248, 0.16));
-    color: #7dd3fc;
+    color: var(--frozen-blue);
 }
 
 .status-toggle-btn.frozen:hover {
