@@ -884,13 +884,40 @@ function buildMessageSpeakButton(text) {
             finish();
             return;
         }
+        const voice = pickVoiceForLocale(locale);
+        if (!voice) {
+            // No installed voice for this language at all - setting only
+            // utterance.lang does NOT reliably stop the engine from grabbing
+            // its default voice anyway (observed: an English voice trying to
+            // sound out unfamiliar text ends up spelling it out letter by
+            // letter). That's worse than no audio, and no amount of JS can
+            // conjure a voice the OS/browser was never given - installing
+            // it (or configuring Azure Speech server-side - see
+            // fetchSpeechAudio above) are the only real fixes, so this says
+            // so instead of quietly producing gibberish.
+            finish();
+            showToast(t(
+                'chat.speak_voice_unavailable',
+                'Acest browser nu are o voce instalată pentru limba mesajului.'
+            ));
+            return;
+        }
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = locale;
-        const voice = pickVoiceForLocale(locale);
-        if (voice) utterance.voice = voice;
         utterance.onend = utterance.onerror = finish;
         activeSpeech.stop = () => window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(utterance);
+        try {
+            // Belt-and-braces: pickVoiceForLocale only ever returns a voice
+            // speechSynthesis.getVoices() itself just handed back, but a
+            // synchronous throw here (a browser quirk, a voice list that
+            // changed underneath us) would otherwise leave the button
+            // stuck showing "speaking" forever, with activeSpeech pointing
+            // at an utterance that was never actually started.
+            utterance.voice = voice;
+            window.speechSynthesis.speak(utterance);
+        } catch {
+            finish();
+        }
     });
 
     return button;

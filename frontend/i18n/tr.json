@@ -324,6 +324,7 @@
     "voice_input_error": "Sesli giriş başarısız oldu. Tekrar dene veya mesajını yaz.",
     "copy_message": "Mesajı kopyala",
     "speak_message": "Mesajı sesli oku",
+    "speak_voice_unavailable": "Bu tarayıcıda mesajın dili için yüklü bir ses yok.",
     "iban_read_from_file": "Ekli dosyadan okunan IBAN: {iban}",
     "iban_not_found_in_file": "Dosyada net bir IBAN bulunamadı - lütfen manuel olarak yazın.",
     "panel_heading": "BanK Yapay Zekâ Asistanı",

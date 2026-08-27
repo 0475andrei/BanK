@@ -324,6 +324,7 @@
     "voice_input_error": "A hangbevitel sikertelen volt. Próbáld újra, vagy írd be az üzenetet.",
     "copy_message": "Üzenet másolása",
     "speak_message": "Üzenet felolvasása",
+    "speak_voice_unavailable": "Ez a böngésző nem rendelkezik telepített hanggal az üzenet nyelvéhez.",
     "iban_read_from_file": "IBAN a csatolt fájlból beolvasva: {iban}",
     "iban_not_found_in_file": "Nem találtunk egyértelmű IBAN-t a fájlban - kérjük, írd be kézzel.",
     "panel_heading": "BanK MI-asszisztens",

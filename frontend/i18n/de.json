@@ -324,6 +324,7 @@
     "voice_input_error": "Spracheingabe fehlgeschlagen. Bitte versuche es erneut oder tippe deine Nachricht.",
     "copy_message": "Nachricht kopieren",
     "speak_message": "Nachricht vorlesen",
+    "speak_voice_unavailable": "Dieser Browser hat keine installierte Stimme für die Sprache der Nachricht.",
     "iban_read_from_file": "IBAN aus der angehängten Datei gelesen: {iban}",
     "iban_not_found_in_file": "In der Datei wurde keine eindeutige IBAN gefunden - bitte gib sie manuell ein.",
     "panel_heading": "BanK KI-Assistent",

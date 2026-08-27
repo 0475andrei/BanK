@@ -324,6 +324,7 @@
     "voice_input_error": "La entrada de voz falló. Inténtalo de nuevo o escribe tu mensaje.",
     "copy_message": "Copiar mensaje",
     "speak_message": "Escuchar mensaje",
+    "speak_voice_unavailable": "Este navegador no tiene una voz instalada para el idioma del mensaje.",
     "iban_read_from_file": "IBAN leído del archivo adjunto: {iban}",
     "iban_not_found_in_file": "No se encontró un IBAN claro en el archivo - escríbelo manualmente.",
     "panel_heading": "Asistente de IA de BanK",

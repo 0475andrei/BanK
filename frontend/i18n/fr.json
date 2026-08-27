@@ -324,6 +324,7 @@
     "voice_input_error": "La saisie vocale a échoué. Réessayez ou écrivez votre message.",
     "copy_message": "Copier le message",
     "speak_message": "Écouter le message",
+    "speak_voice_unavailable": "Ce navigateur n'a pas de voix installée pour la langue du message.",
     "iban_read_from_file": "IBAN lu dans le fichier joint : {iban}",
     "iban_not_found_in_file": "Aucun IBAN clair n'a été trouvé dans le fichier - veuillez le saisir manuellement.",
     "panel_heading": "Assistant IA BanK",
