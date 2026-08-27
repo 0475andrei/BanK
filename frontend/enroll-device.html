@@ -2,6 +2,7 @@
 <html lang="en" data-i18n-title="enrollment.title">
 <head>
     <script>try { if (localStorage.getItem('bank_preferred_language') && localStorage.getItem('bank_preferred_language') !== 'ro') document.documentElement.classList.add('i18n-pending'); } catch (_) {}</script>
+    <script>try { if (localStorage.getItem('bank_theme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (_) {}</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="enrollment.title">Verifică dispozitivul - BanK</title>
@@ -42,6 +43,7 @@
 
     <script src="api.js"></script>
     <script src="language.js"></script>
+    <script src="theme.js"></script>
     <script>
         const errorEl = document.getElementById('enroll-error');
 

@@ -1584,7 +1584,7 @@ async function initDashboard() {
     wireAddBeneficiaryForm();
     wireScheduledTransfersModal();
     wireHeaderSearch();
-    startNotificationPolling();
+    startNotificationStream();
 
     await loadAccountProducts();
     await refreshDashboard();
@@ -3891,49 +3891,74 @@ function showNotificationPopup(notification) {
     });
 }
 
-//: The newest notification id already shown a pop-up for - null until the
-//: first poll, so the user's entire pre-existing inbox never pops up all at
-//: once on login; only notifications created after that point do.
-let latestSeenNotificationId = null;
-const NOTIFICATION_POLL_MS = 20000;
-
-/** Checks for new notifications and pops one up per new arrival, oldest
- * first (so a "you got paid twice" burst reads in the order it happened).
- * This is the "something checks when the request is done" half of the
- * feature - a payment landing, a scheduled transfer pausing, etc. all go
- * through notifications_service.create_notification on the backend, so
- * polling this one endpoint covers every event source at once rather than
- * needing a bespoke check per action. */
-async function pollNotifications() {
-    let notifications;
-    try {
-        notifications = await apiFetch('/notifications');
-    } catch {
-        return; // Try again next tick; a transient failure isn't worth surfacing.
+/** Asks the browser, once, for permission to show OS-level notification
+ * banners - the ones that appear from the system's own notification area
+ * (top-right on Windows/Mac), outside the page entirely. A no-op if the
+ * user already answered (either way) or the browser doesn't support the
+ * API at all; never re-prompts a "denied" answer, since only the user can
+ * change that, from their browser's own site settings. */
+function ensureBrowserNotificationPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+        Notification.requestPermission();
     }
-    if (notifications.length === 0) return;
-
-    if (latestSeenNotificationId === null) {
-        latestSeenNotificationId = notifications[0].id;
-        refreshNotificationsBadge();
-        return;
-    }
-
-    const lastIndex = notifications.findIndex(n => n.id === latestSeenNotificationId);
-    // -1 means the previously-newest one is no longer in the first page
-    // (unlikely at DEFAULT_LIMIT=20, but degrade to "nothing new" rather
-    // than replaying the whole page as if it were all fresh).
-    const freshOnes = lastIndex === -1 ? [] : notifications.slice(0, lastIndex);
-    if (freshOnes.length === 0) return;
-
-    latestSeenNotificationId = notifications[0].id;
-    freshOnes.slice().reverse().forEach(showNotificationPopup);
-    refreshNotificationsBadge();
 }
 
-function startNotificationPolling() {
-    pollNotifications();
-    setInterval(pollNotifications, NOTIFICATION_POLL_MS);
+/** The OS-level counterpart to showNotificationPopup - fired alongside it,
+ * not instead of it, so a user who has the tab open still gets the richer
+ * in-page card. Skipped while the tab is actually the focused, visible one:
+ * the in-page pop-up already covers that case, and a native banner on top
+ * of it would just be a redundant second alert for the same event. `tag`
+ * set to the notification's id so the OS collapses/replaces rather than
+ * stacking if this ever fires twice for the same one. */
+function showBrowserPushNotification(notification) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (document.visibilityState === 'visible' && document.hasFocus()) return;
+    new Notification(notification.title, {
+        body: notification.body,
+        icon: 'static/bank-mark.jpg',
+        tag: notification.id,
+    });
+}
+
+//: The live connection to GET /notifications/stream (see notifications/
+//: router.py) - kept at module scope only so a future re-init doesn't leak
+//: a second one; nothing else reads it.
+let notificationEventSource = null;
+
+/** Opens the real-time notification stream: a new notification (payment
+ * landing, scheduled transfer pausing, etc. - anything that calls
+ * notifications_service.create_notification on the backend) arrives here
+ * within milliseconds of being created, no polling interval to wait out.
+ * EventSource reconnects on its own (built into the browser) if the
+ * connection drops, so there is no reconnect/backoff logic to write here. */
+function startNotificationStream() {
+    refreshNotificationsBadge();
+    ensureBrowserNotificationPermission();
+
+    notificationEventSource = new EventSource(`${API_BASE_URL}/notifications/stream`, {
+        withCredentials: true,
+    });
+    // Anything created during a dropped connection is missed by definition
+    // (the bus has no replay buffer - see bus.py's module docstring) - the
+    // badge re-sync on every (re)connect is what catches that up, even
+    // though the pop-up/OS-banner moment for it is gone. The bell's own
+    // history list is still the authoritative record either way.
+    notificationEventSource.onopen = refreshNotificationsBadge;
+    notificationEventSource.onmessage = (event) => {
+        let notification;
+        try {
+            notification = JSON.parse(event.data);
+        } catch {
+            return; // A malformed event is dropped, not a reason to tear down the stream.
+        }
+        showNotificationPopup(notification);
+        showBrowserPushNotification(notification);
+        refreshNotificationsBadge();
+    };
+    // No explicit onerror handling beyond that: EventSource reconnects on
+    // its own (built into the browser), and onopen above re-syncs state
+    // once it does - there is nothing else to recover here.
 }
 
 /* --- Referral code (panel section 2) --- */
