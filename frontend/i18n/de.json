@@ -437,6 +437,7 @@
     "sign_success": "Das Dokument wurde erfolgreich signiert!",
     "sign_error": "Signatur fehlgeschlagen."
   },
+  
   "face_id": {
     "status_check_error": "Face-ID-Status konnte nicht geprüft werden. Versuche es erneut.",
     "enrollment_required_generic": "Diese Aktion erfordert aktiviertes Face ID. Du wirst zur Einrichtung weitergeleitet.",
