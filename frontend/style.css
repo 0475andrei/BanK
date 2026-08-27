@@ -21,6 +21,14 @@
     --avatar-gradient-start: #2DD4BF;
     --avatar-gradient-end: #3b82f6;
 
+    /* Text color for the handful of buttons/bubbles filled solid with
+       --primary-teal (Generează card virtual, the send button, the user's
+       own chat bubble, the active onboarding tab). Black reads fine on the
+       vivid mint teal above, but --primary-teal darkens quite a bit for the
+       light theme (contrast as *text* on white, see below) and black on
+       that darker teal looks muddy - white is the better pairing there. */
+    --on-teal-text: #000;
+
     /* Neutral tint used for subtle fills/hovers on top of a surface (a
        fraction of --text-main, in effect). Flipped to a dark tint in the
        light theme below so hover/fill states stay visible on white. */
@@ -83,6 +91,8 @@
 
     --header-bg: rgba(241, 245, 249, 0.8);
     --surface-translucent: rgba(255, 255, 255, 0.95);
+
+    --on-teal-text: #fff;
 }
 
 * {
@@ -704,7 +714,7 @@ body {
 
 .btn-primary {
     background: linear-gradient(135deg, var(--primary-teal) 0%, #0d9488 100%);
-    color: #000;
+    color: var(--on-teal-text);
     box-shadow: 0 4px 15px rgba(45, 212, 191, 0.3);
 }
 
@@ -1145,7 +1155,7 @@ body {
 
 .message.user .bubble {
     background-color: var(--primary-teal);
-    color: #000;
+    color: var(--on-teal-text);
     border-bottom-right-radius: 4px;
 }
 
@@ -1291,7 +1301,7 @@ body {
     height: 48px;
     border-radius: 50%;
     background-color: var(--primary-teal);
-    color: #000;
+    color: var(--on-teal-text);
     border: none;
     font-size: 18px;
     cursor: pointer;
@@ -1312,37 +1322,14 @@ body {
     padding-bottom: 20px;
 }
 
-/* This card's own dark gradient look is fixed in both themes (like a real
-   bank card - see .virtual/.physical below), but its children (card number,
-   labels, status badge, the limit/cancel buttons) all read the page's
-   color custom properties for their text. Left alone, the light theme's
-   on-white values - dark navy text, darkened green/red/teal accents - would
-   render nearly unreadable against this permanently-dark surface. Re-pinning
-   every color property to its dark-theme value here, once, fixes all of
-   them at once instead of overriding each child selector individually. */
+/* Unlike most components, this card doesn't just re-theme its existing
+   colors - it gets a genuinely different look per theme (dark gradient vs.
+   a light pastel one below), so its children (card number, labels, status
+   badge, the limit/cancel buttons) can keep reading the page's ordinary
+   --text-main/--text-muted/accent variables and stay well-contrasted
+   without any card-specific overrides: those variables are already tuned
+   for whichever background - dark or light - the active theme puts here. */
 .credit-card {
-    --bg-surface: #1A2235;
-    --bg-surface-hover: #232d46;
-    --text-main: #F8FAFC;
-    --text-muted: #94A3B8;
-    --primary-teal: #2DD4BF;
-    --primary-teal-hover: #1ebba6;
-    --secondary-blue: #3b82f6;
-    --income-green: #10B981;
-    --expense-red: #EF4444;
-    --frozen-blue: #7dd3fc;
-    --warning-amber: #f59e0b;
-    --border-color: rgba(255, 255, 255, 0.08);
-    --overlay-02: rgba(255, 255, 255, 0.02);
-    --overlay-03: rgba(255, 255, 255, 0.03);
-    --overlay-04: rgba(255, 255, 255, 0.04);
-    --overlay-05: rgba(255, 255, 255, 0.05);
-    --overlay-06: rgba(255, 255, 255, 0.06);
-    --overlay-08: rgba(255, 255, 255, 0.08);
-    --overlay-1: rgba(255, 255, 255, 0.1);
-    --overlay-2: rgba(255, 255, 255, 0.2);
-    --overlay-5: rgba(255, 255, 255, 0.5);
-
     min-width: 340px;
     height: 210px;
     border-radius: 20px;
@@ -1371,6 +1358,26 @@ body {
 .credit-card.physical {
     background: linear-gradient(135deg, #334155 0%, #1e293b 100%);
     border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Light theme: a real card here would still be dark in real life (like the
+   language-selector trigger, this one keeps its own identity rather than
+   inverting to look like a form field), but a flat reuse of the dark
+   gradient reads as a jarring black cutout on an otherwise white page. A
+   pale, glassy tint keeps the same "card" identity while sitting naturally
+   on light surfaces. */
+[data-theme="light"] .credit-card.virtual {
+    background: linear-gradient(135deg, #F0FDFA 0%, #99F6E4 100%);
+    border: 1px solid var(--primary-teal);
+}
+
+[data-theme="light"] .credit-card.virtual::after {
+    background: radial-gradient(circle at top right, rgba(13, 148, 136, 0.16) 0%, transparent 60%);
+}
+
+[data-theme="light"] .credit-card.physical {
+    background: linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%);
+    border: 1px solid rgba(15, 23, 42, 0.12);
 }
 
 .card-header {
@@ -2013,7 +2020,7 @@ html.i18n-pending body { visibility: hidden; }
 
 .mode-tab.active {
     background-color: var(--primary-teal);
-    color: #000;
+    color: var(--on-teal-text);
 }
 
 .comodul-chat-container { height: 480px; }
