@@ -142,14 +142,21 @@ class Settings(BaseSettings):
     # above (Project Settings > Keys and Endpoint on the Speech - or
     # multi-service Foundry - resource).
     # ------------------------------------------------------------------
-    # Full resource endpoint, e.g. https://<resource>.cognitiveservices.azure.com
-    # Either this or AZURE_SPEECH_REGION is required; this one wins if both
-    # are set (see require_azure_speech below).
-    AZURE_SPEECH_ENDPOINT: str | None = None
-    # Falls back to constructing the standard regional endpoint
-    # (https://<region>.tts.speech.microsoft.com) when AZURE_SPEECH_ENDPOINT
-    # is unset - e.g. "westeurope", not a full URL.
+    # A region (e.g. "westeurope", not a full URL) is what the Speech REST
+    # synthesize call actually wants: unlike most Cognitive Services APIs,
+    # it 404s against a resource's own custom-domain endpoint
+    # (https://<resource>.cognitiveservices.azure.com) and needs the
+    # standard regional one (https://<region>.tts.speech.microsoft.com)
+    # instead - confirmed against a real Azure AI Foundry Speech resource,
+    # which has both a custom domain and a region and only the region
+    # worked. So REGION wins when both are set (see require_azure_speech
+    # below) - the reverse of AZURE_OPENAI_ENDPOINT's precedent above,
+    # where the custom domain is exactly what's wanted, and the reverse of
+    # what this field used to prefer.
     AZURE_SPEECH_REGION: str | None = None
+    # Full resource endpoint - only used when AZURE_SPEECH_REGION is unset,
+    # e.g. https://<resource>.cognitiveservices.azure.com
+    AZURE_SPEECH_ENDPOINT: str | None = None
     AZURE_SPEECH_KEY: str | None = None
     # A "Multilingual" neural voice (Azure names these explicitly, e.g.
     # "...MultilingualNeural") is what makes one AZURE_SPEECH_VOICE able to
@@ -285,13 +292,18 @@ class Settings(BaseSettings):
     def require_azure_speech(self) -> "AzureSpeechConfig":
         """Validated Azure Speech config, or raise with an actionable message.
 
-        AZURE_SPEECH_ENDPOINT wins when both it and AZURE_SPEECH_REGION are
-        set; REGION only exists to build the standard regional endpoint for
-        a deployment that names a region instead of a full resource URL.
+        AZURE_SPEECH_REGION wins when both it and AZURE_SPEECH_ENDPOINT are
+        set, building the standard regional endpoint - confirmed against a
+        real resource that the synthesize call 404s on its own custom-domain
+        endpoint but works on the regional one (see AZURE_SPEECH_REGION's
+        docstring above). AZURE_SPEECH_ENDPOINT is the fallback for a
+        deployment that only has a custom domain to give.
         """
-        endpoint = self.AZURE_SPEECH_ENDPOINT
-        if not endpoint and self.AZURE_SPEECH_REGION:
-            endpoint = f"https://{self.AZURE_SPEECH_REGION.strip()}.tts.speech.microsoft.com"
+        endpoint = (
+            f"https://{self.AZURE_SPEECH_REGION.strip()}.tts.speech.microsoft.com"
+            if self.AZURE_SPEECH_REGION
+            else self.AZURE_SPEECH_ENDPOINT
+        )
         missing = [
             name
             for name, value in (
