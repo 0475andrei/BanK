@@ -255,6 +255,7 @@ async def create_payment(
             f"Ai primit {payload.amount_minor / 100:.2f} {currency} de la "
             f"{user.first_name} {user.last_name} în contul \"{to_account['name']}\"."
         ),
+        category="money_received",
     )
 
     if payload.save_beneficiary:
