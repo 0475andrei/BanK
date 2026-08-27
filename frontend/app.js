@@ -10,6 +10,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     navItems.forEach(item => {
         item.addEventListener('click', async () => {
+            // A read-aloud in progress belongs to the chat message it was
+            // started from - leaving that view behind it (to any other tab,
+            // including switching straight back into chat) shouldn't leave
+            // it talking over whatever's shown next.
+            stopMessageSpeech();
+
             // Remove active class from all nav items
             navItems.forEach(nav => nav.classList.remove('active'));
             // Add active class to clicked item
@@ -70,6 +76,12 @@ document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
 
     window.addEventListener('languagechange', () => {
+        // Whatever was playing was read in the language just switched away
+        // from - let the next click start it fresh (now correctly, in
+        // whatever the bubble displays post-switch - see
+        // buildMessageSpeakButton) rather than keep talking over the
+        // language change.
+        stopMessageSpeech();
         const messages = document.getElementById('chat-messages');
         const hasOnlyWelcome = messages?.querySelectorAll('.message').length === 1;
         if (hasOnlyWelcome) {
@@ -3964,6 +3976,7 @@ function wireProfilePanel(user) {
 
     document.querySelectorAll('.back-to-dashboard-btn').forEach(btn => {
         btn.addEventListener('click', () => {
+            stopMessageSpeech();
             document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
             document.getElementById('view-dashboard').classList.add('active');
             document.querySelector('.nav-item[data-view="dashboard"]').classList.add('active');
@@ -3981,6 +3994,7 @@ function wireProfilePanel(user) {
  * so this deactivates the sidebar explicitly rather than reusing its click
  * handler. */
 function goToProfileView(target) {
+    stopMessageSpeech();
     document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
     document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
     document.getElementById(`view-${target}`).classList.add('active');
