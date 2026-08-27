@@ -197,18 +197,23 @@ def test_routing_picks_banking_for_transactional_question(context):
 
 def test_routing_picks_insights_for_analytical_question(context):
     """`cheltui` and `bani` belong to BOTH agents; insights is registered first
-    so the analytical reading wins."""
+    so the analytical reading wins. "Unde" is also one of
+    INSIGHTS_ANALYTICAL_MARKERS (Step 16 Priority 2, item 7), so this is
+    `insights_spending_analysis`'s two-token rule, not the old bare-stem
+    `insights_spending`."""
     decision = _two_agent_orchestrator().route("unde am cheltuit banii?", context)
 
     assert decision.agent_name == "insights"
-    assert decision.matched_rule == "insights_spending"
+    assert decision.matched_rule == "insights_spending_analysis"
 
 
 def test_routing_picks_insights_for_spending_keyword(context):
+    """"Cât" is also an analytical marker, so this is `insights_spending_
+    analysis` too."""
     decision = _two_agent_orchestrator().route("cât am cheltuit pe mâncare?", context)
 
     assert decision.agent_name == "insights"
-    assert decision.matched_rule == "insights_spending"
+    assert decision.matched_rule == "insights_spending_analysis"
 
 
 def test_routing_picks_insights_for_english_analytical(context):
@@ -281,6 +286,7 @@ def test_insights_agent_has_own_routing_rules():
     assert InsightsAgent.routing_rules is not BankingAgent.routing_rules
     assert {rule.name for rule in InsightsAgent.routing_rules} == {
         "insights_spending",
+        "insights_spending_analysis",
         "insights_analysis",
         "insights_categories",
         "insights_time_slice",
@@ -391,23 +397,32 @@ def test_routing_still_picks_banking_for_balance(context):
 
 
 def test_routing_still_picks_insights_for_spending(context):
+    """"Unde" is one of INSIGHTS_ANALYTICAL_MARKERS (Step 16 Priority 2, item
+    7), so this still matches `insights_spending_analysis`'s two-token rule,
+    not the old bare-stem `insights_spending`."""
     decision = _three_agent_orchestrator().route("unde am cheltuit banii?", context)
 
     assert decision.agent_name == "insights"
-    assert decision.matched_rule == "insights_spending"
+    assert decision.matched_rule == "insights_spending_analysis"
 
 
 def test_routing_economii_collision_goes_to_banking(context):
-    """DOCUMENTED COLLISION: `econom` belongs to both Banking ("Economii"
-    account) and Planning (savings goals). Banking is registered first among
-    the two, so a bare "economii" phrasing goes to Banking - see
-    PlanningAgent's KNOWN COLLISION note. Pinned here so a future rule change
-    shows up as a deliberate decision, same as the existing `luna`/insights
-    and `an`/Andrei regression tests above."""
-    decision = _three_agent_orchestrator().route("arată-mi contul de economii", context)
+    """RESOLVED COLLISION (Step 16 Priority 2, item 7): `econom` belongs to
+    both Banking ("Economii" account) and Planning (savings goals) - a bare
+    "economii" phrasing, with none of PLANNING_FORWARD_MARKERS present,
+    deliberately still lands on Banking via `banking_savings_default`'s
+    `excludes_any_of` gate, not `planning_savings_goal`'s `requires_any_of`
+    one. Phrased without "cont" (also a bare Banking stem, via "contul") so
+    this pins the `econom` collision specifically, not a coincidental match
+    on something else. Pinned here so a future rule change shows up as a
+    deliberate decision, same as the existing `luna`/insights and `an`/
+    Andrei regression tests above. See test_econom_with_a_forward_marker_
+    routes_to_planning in test_orchestrator_routing.py for the case that
+    DOES reach Planning."""
+    decision = _three_agent_orchestrator().route("sunt econom din fire", context)
 
     assert decision.agent_name == "banking"
-    assert decision.matched_rule == "banking_keywords"
+    assert decision.matched_rule == "banking_savings_default"
 
 
 def test_planning_agent_registered_with_orchestrator():
@@ -423,6 +438,7 @@ def test_planning_agent_has_own_routing_rules():
     assert PlanningAgent.routing_rules is not InsightsAgent.routing_rules
     assert {rule.name for rule in PlanningAgent.routing_rules} == {
         "planning_goals",
+        "planning_savings_goal",
         "planning_projection",
         "planning_scenario",
         "planning_timeline",

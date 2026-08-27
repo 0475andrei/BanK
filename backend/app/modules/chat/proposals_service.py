@@ -21,18 +21,19 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from supabase import AsyncClient
-
 from app.core.exceptions import (
     FaceAuthMethodRequiredError,
+    InvalidFaceConfirmationError,
     NotFoundError,
     ProposalExpiredError,
     ProposalNotPendingError,
+    ProposalRateLimitedError,
     UnauthorizedError,
     ValidationError,
 )
 from app.core.security import verify_password
 from app.modules.accounts.service import close_account, open_account
+from app.modules.auth import service as auth_service
 from app.modules.cards.service import cancel_card
 from app.modules.face_auth import service as face_auth_service
 from app.modules.payments.schemas import PaymentCreate
@@ -40,11 +41,70 @@ from app.modules.payments.service import create_payment, is_first_payment_to_per
 from app.modules.transfers.schemas import TransferCreate
 from app.modules.transfers.service import create_transfer
 from app.modules.users.schemas import UserRead
+from supabase import AsyncClient
 
 #: A pending proposal past this age is treated as expired at the next
 #: confirm/reject attempt (lazy expiry - no background job, same pattern as
 #: auth/service.py's password-reset codes).
 PROPOSAL_EXPIRY_MINUTES = 10
+
+#: Confirm-attempt rate limiting (Step 16, item 5). Same threshold and
+#: window as auth/service.py's login lockout, deliberately - "matching
+#: lockout duration to the existing login lockout" was the brief, and there
+#: is no reason for a different number here.
+CONFIRM_MAX_FAILED_ATTEMPTS = auth_service.LOGIN_MAX_FAILED_ATTEMPTS
+CONFIRM_LOCKOUT_WINDOW_MINUTES = auth_service.LOGIN_LOCKOUT_WINDOW_MINUTES
+
+
+def _confirm_attempt_key(user_id: str, proposal_id: str) -> str:
+    """Reuses `login_attempts.email` (VARCHAR(320), no format constraint) as
+    a namespaced key instead of a new table - "do not introduce a new
+    storage backend" ruled out a sibling table too, since that would need a
+    migration. The "confirm:" prefix keeps a rate-limit row unmistakable
+    from a real login email at a glance, and nothing in this codebase ever
+    queries `login_attempts` for a bare, unprefixed email match against
+    THIS key shape, so the two uses cannot collide."""
+    return f"confirm:{user_id}:{proposal_id}"
+
+
+async def _count_recent_failed_confirm_attempts(
+    supabase: AsyncClient, user_id: str, proposal_id: str
+) -> int:
+    window_start = datetime.now(UTC) - timedelta(minutes=CONFIRM_LOCKOUT_WINDOW_MINUTES)
+    resp = (
+        await supabase.table("login_attempts")
+        .select("id", count="exact")
+        .eq("email", _confirm_attempt_key(user_id, proposal_id))
+        .eq("success", False)
+        .gte("created_at", window_start.isoformat())
+        .execute()
+    )
+    return resp.count or 0
+
+
+async def _record_failed_confirm_attempt(
+    supabase: AsyncClient, user_id: str, proposal_id: str
+) -> None:
+    await (
+        supabase.table("login_attempts")
+        .insert({"email": _confirm_attempt_key(user_id, proposal_id), "success": False})
+        .execute()
+    )
+
+
+async def _clear_confirm_attempts(supabase: AsyncClient, user_id: str, proposal_id: str) -> None:
+    """A successful confirm resets the count. Unlike login (whose window just
+    slides - there is no single "session" a success could close), a
+    proposal is single-use: once confirmed it can never be confirmed again
+    (see the status gate above), so a stale failure count sitting under this
+    key afterwards protects nothing and would only need to age out on its
+    own instead."""
+    await (
+        supabase.table("login_attempts")
+        .delete()
+        .eq("email", _confirm_attempt_key(user_id, proposal_id))
+        .execute()
+    )
 
 
 async def create_proposal(
@@ -198,10 +258,25 @@ async def confirm_proposal(
 
     # THE critical security gate. Only reached with a still-pending, not-yet-
     # expired proposal; only past this point does anything real execute.
+    #
+    # Rate-limited BEFORE the credential is looked at, same as login - the
+    # 10-minute proposal expiry above bounds the window on its own, but
+    # without this a single pending proposal could still absorb hundreds of
+    # wrong-password guesses per second within it.
+    if (
+        await _count_recent_failed_confirm_attempts(supabase, str(user.id), proposal["id"])
+        >= CONFIRM_MAX_FAILED_ATTEMPTS
+    ):
+        raise ProposalRateLimitedError()
+
     if auth_method == "face":
         if not await face_auth_service.has_face_enrolled(supabase, user):
             raise ValidationError("Autentificarea facială nu este activată pe acest cont.")
-        await face_auth_service.consume_face_confirmation_token(supabase, user, credential)
+        try:
+            await face_auth_service.consume_face_confirmation_token(supabase, user, credential)
+        except InvalidFaceConfirmationError:
+            await _record_failed_confirm_attempt(supabase, str(user.id), proposal["id"])
+            raise
     elif auth_method == "password":
         resp = (
             await supabase.table("users")
@@ -212,10 +287,12 @@ async def confirm_proposal(
         )
         password_hash = resp.data["password_hash"] if resp is not None and resp.data else None
         if password_hash is None or not verify_password(credential, password_hash):
+            await _record_failed_confirm_attempt(supabase, str(user.id), proposal["id"])
             raise UnauthorizedError("Parolă incorectă.")
     else:
         raise ValidationError("Metodă de autentificare necunoscută.")
 
+    await _clear_confirm_attempts(supabase, str(user.id), proposal["id"])
     result = await _execute(supabase, user, proposal, auth_method)
     return await mark_confirmed(supabase, proposal, result)
 

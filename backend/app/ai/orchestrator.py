@@ -26,6 +26,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from app.ai.agents.base import Agent
+from app.ai.agents.scope_guardrail import OFF_TOPIC_DECLINE_MESSAGE, is_out_of_scope
 from app.ai.context import Context
 from app.ai.routing import RoutingDecision, normalise
 from app.ai.schemas import Message
@@ -93,6 +94,15 @@ HANDOFF_REFUSED_REPLY = (
 #: Named as a constant rather than a bare string so the checks enforcing it
 #: are greppable.
 QUARANTINED_AGENT = "documents"
+
+#: `RoutingDecision.agent_name` used for a turn the scope guardrail declined.
+#: Not a real registered agent - `Orchestrator._agents` never has this key,
+#: so it can never collide with an actual routing outcome, and a persisted
+#: row with this name is unambiguous in an audit trail ("the guardrail
+#: answered", not "banking answered"). The frontend's agentTagLabel() falls
+#: back to a capitalised display of any unrecognised name, so this needs no
+#: UI-side registration to render sensibly (see frontend/app.js).
+SCOPE_GUARDRAIL_AGENT_NAME = "guardrail"
 
 
 class Orchestrator:
@@ -279,6 +289,18 @@ class Orchestrator:
         `TurnDispatchResult`). A turn with no handoff is a one-hop chain - the
         same shape, not a special case.
 
+        SCOPE GUARDRAIL (checked first, before `route()`): a message that is
+        OBVIOUSLY outside the banking/finance domain (see
+        app/ai/agents/scope_guardrail.py) is declined right here, in Romanian,
+        with no agent selected and no tool called - `route()` is not even
+        invoked for it. It still comes back as a normal one-hop
+        `TurnDispatchResult`, so it persists and displays exactly like any
+        other turn, just tagged with `SCOPE_GUARDRAIL_AGENT_NAME` instead of a
+        real agent. Skipped entirely when a document or statement is active:
+        DocumentAgent already enforces its own tighter, document-scoped
+        refusal in that case (see is_out_of_scope's docstring), and this
+        check does not second-guess it.
+
         HANDOFF INVARIANTS, all enforced below and all deliberate:
 
         * `route()` runs EXACTLY ONCE, for the first hop. It is never re-run on
@@ -296,6 +318,17 @@ class Orchestrator:
           not written one - never an error shown to the user, who asked a
           perfectly reasonable question and is owed an answer either way.
         """
+        if self._blocked_by_scope_guardrail(user_message, context):
+            logger.info("scope guardrail declined an out-of-scope message")
+            decision = RoutingDecision(
+                agent_name=SCOPE_GUARDRAIL_AGENT_NAME,
+                reason="off_topic_scope_guardrail",
+                confidence=1.0,
+            )
+            return TurnDispatchResult(
+                hops=[TurnResult(reply=OFF_TOPIC_DECLINE_MESSAGE, trace=[], routing=decision)]
+            )
+
         decision = self.route(user_message, context)
         agent = self._agents[decision.agent_name]
 
@@ -364,6 +397,19 @@ class Orchestrator:
             last.reply = HANDOFF_REFUSED_REPLY
 
         return TurnDispatchResult(hops=hops)
+
+    def _blocked_by_scope_guardrail(self, message: str, context: Context) -> bool:
+        """Whether `dispatch` should decline `message` without routing it.
+
+        Deliberately mirrors `route()`'s own document/statement-first check
+        rather than calling `route()` to find out: this must run BEFORE
+        `route()`, not after, and `route()` is not idempotent to call twice
+        against the "route() runs EXACTLY ONCE" invariant documented on
+        `dispatch`.
+        """
+        if context.active_document_id is not None or context.statement_id is not None:
+            return False
+        return is_out_of_scope(message)
 
     def _handoff_allowed(
         self, source: str, target: str, visited: set[str], context: Context

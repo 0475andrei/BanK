@@ -15,6 +15,16 @@ router = APIRouter()
 # guard against someone pointing an unrelated multi-MB file at OCR.
 _MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 
+#: The real PNG file signature (ISO/IEC 15948). Checked in addition to the
+#: client-supplied Content-Type header, which is trivially spoofable - same
+#: defence-in-depth as documents/extractor.py::validate_pdf_magic_bytes.
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def _validate_png_magic_bytes(content: bytes) -> None:
+    if not content.startswith(_PNG_MAGIC):
+        raise ValidationError("Fișierul nu corespunde tipului declarat.")
+
 
 @router.post("/extract", response_model=IdOcrResult)
 async def extract(file: UploadFile = File(...)) -> IdOcrResult:
@@ -26,6 +36,7 @@ async def extract(file: UploadFile = File(...)) -> IdOcrResult:
         raise ValidationError("Uploaded file is empty.")
     if len(contents) > _MAX_UPLOAD_BYTES:
         raise ValidationError("Image is too large (max 8 MB).")
+    _validate_png_magic_bytes(contents)
 
     try:
         fields = await extract_id_fields(contents)

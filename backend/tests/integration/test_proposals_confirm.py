@@ -308,6 +308,132 @@ async def test_reject_someone_elses_proposal_returns_404(
     assert resp.status_code == 404, resp.text
 
 
+# ---------------------------------------------------------------------------
+# Confirm-attempt rate limiting (Step 16, item 5) - see
+# proposals_service.CONFIRM_MAX_FAILED_ATTEMPTS. Keyed on (proposal_id,
+# user_id), so unlike login lockout these attempts never span two proposals.
+# ---------------------------------------------------------------------------
+
+
+async def test_confirm_allows_a_correct_attempt_under_the_cap_and_clears_it(
+    authed_client, supabase, conversation_factory
+):
+    """Wrong guesses below the 5-attempt cap don't poison a later correct
+    one - and a successful confirm leaves nothing behind under its key."""
+    client, user = authed_client
+    from_account = await _open_account(client, "Cont Curent")
+    to_account = await _open_account(client, "Economii")
+    conversation = await conversation_factory(user)
+    proposal = await _seed(supabase, user, conversation, from_account, to_account)
+
+    for _ in range(4):
+        resp = await client.post(
+            f"/api/v1/chat/proposals/{proposal['id']}/confirm",
+            json={"auth_method": "password", "credential": "wrong-password"},
+        )
+        assert resp.status_code == 401, resp.text
+
+    resp = await client.post(
+        f"/api/v1/chat/proposals/{proposal['id']}/confirm",
+        json={"auth_method": "password", "credential": "password123"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    from app.modules.chat.proposals_service import _confirm_attempt_key
+
+    key_resp = (
+        await supabase.table("login_attempts")
+        .select("id")
+        .eq("email", _confirm_attempt_key(str(user.id), proposal["id"]))
+        .execute()
+    )
+    assert key_resp.data == []
+
+
+async def test_confirm_locks_out_on_the_sixth_attempt_after_five_failures(
+    authed_client, supabase, conversation_factory
+):
+    """The cap blocks the NEXT attempt outright, before the credential is
+    even looked at - so a correct password on the 6th call is rejected with
+    429 exactly like a wrong one would be. That is the point: at 5 already-
+    failed attempts, nothing about the 6th call is trusted enough to
+    evaluate."""
+    client, user = authed_client
+    from_account = await _open_account(client, "Cont Curent")
+    to_account = await _open_account(client, "Economii")
+    conversation = await conversation_factory(user)
+    proposal = await _seed(supabase, user, conversation, from_account, to_account)
+
+    for _ in range(5):
+        resp = await client.post(
+            f"/api/v1/chat/proposals/{proposal['id']}/confirm",
+            json={"auth_method": "password", "credential": "wrong-password"},
+        )
+        assert resp.status_code == 401, resp.text
+
+    resp = await client.post(
+        f"/api/v1/chat/proposals/{proposal['id']}/confirm",
+        json={"auth_method": "password", "credential": "password123"},
+    )
+    assert resp.status_code == 429, resp.text
+    assert resp.json()["error"]["code"] == "proposal_rate_limited"
+
+    row = await _row(supabase, proposal["id"], select="status")
+    assert row["status"] == "pending"
+
+
+async def test_confirm_rate_limit_never_trips_a_fresh_proposals_first_attempt(
+    authed_client, supabase, conversation_factory
+):
+    client, user = authed_client
+    from_account = await _open_account(client, "Cont Curent")
+    to_account = await _open_account(client, "Economii")
+    conversation = await conversation_factory(user)
+    proposal = await _seed(supabase, user, conversation, from_account, to_account)
+
+    resp = await client.post(
+        f"/api/v1/chat/proposals/{proposal['id']}/confirm",
+        json={"auth_method": "password", "credential": "password123"},
+    )
+    assert resp.status_code == 200, resp.text
+
+
+async def test_expired_proposal_error_takes_precedence_over_the_rate_limit(
+    authed_client, supabase, conversation_factory
+):
+    """The status/expiry gate runs BEFORE the rate-limit check in
+    confirm_proposal, so an expired proposal always reports 'expired', never
+    'rate limited', regardless of how many failed attempts it accumulated
+    while it was still pending."""
+    client, user = authed_client
+    from_account = await _open_account(client, "Cont Curent")
+    to_account = await _open_account(client, "Economii")
+    conversation = await conversation_factory(user)
+    proposal = await _seed(supabase, user, conversation, from_account, to_account)
+
+    for _ in range(5):
+        resp = await client.post(
+            f"/api/v1/chat/proposals/{proposal['id']}/confirm",
+            json={"auth_method": "password", "credential": "wrong-password"},
+        )
+        assert resp.status_code == 401, resp.text
+
+    long_ago = (datetime.now(UTC) - timedelta(minutes=30)).isoformat()
+    await (
+        supabase.table("proposals")
+        .update({"created_at": long_ago})
+        .eq("id", proposal["id"])
+        .execute()
+    )
+
+    resp = await client.post(
+        f"/api/v1/chat/proposals/{proposal['id']}/confirm",
+        json={"auth_method": "password", "credential": "password123"},
+    )
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["error"]["code"] == "proposal_expired"
+
+
 async def test_credential_never_in_proposal_payload_or_result(
     authed_client, supabase, conversation_factory
 ):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from app.ai.agents.planning_agent import PLANNING_FORWARD_MARKERS
 from app.ai.agents.scope_guardrail import OFF_TOPIC_GUARDRAIL
 from app.ai.agents.tool_loop import MAX_ITERATIONS as _MAX_ITERATIONS
 from app.ai.agents.tool_loop import ToolLoopAgent
@@ -16,6 +17,14 @@ logger = logging.getLogger(__name__)
 #: tranzacție/tranzacții/tranzacțiile. Diacritics are folded before matching, so
 #: only the unaccented spelling is listed here. English is included because the
 #: UI is Romanian but users type both.
+#:
+#: `econom` is deliberately NOT here (Step 16 Priority 2, item 7) - see
+#: `banking_savings_default` below, which claims it under the opposite
+#: condition from PlanningAgent's `planning_savings_goal` rule. `cheltui`
+#: stays here unconditionally: InsightsAgent is registered before Banking
+#: and only claims "cheltui" alongside an analytical marker of its own, so a
+#: bare "cheltui" already falls through to this rule with no change needed
+#: on this side of that collision.
 BANKING_ROUTING_RULES = (
     RoutingRule(
         name="banking_keywords",
@@ -29,7 +38,6 @@ BANKING_ROUTING_RULES = (
                 "tranzac",
                 "iban",
                 "plat",
-                "econom",
                 "extras",
                 "bani",
                 "cheltui",
@@ -40,6 +48,11 @@ BANKING_ROUTING_RULES = (
                 "payment",
             }
         ),
+    ),
+    RoutingRule(
+        name="banking_savings_default",
+        keywords=frozenset({"econom"}),
+        excludes_any_of=PLANNING_FORWARD_MARKERS,
     ),
 )
 
@@ -190,7 +203,15 @@ Reguli:
 - Dacă o unealtă întoarce o listă goală, spune clar că nu există nimic de arătat —
   nu este o eroare.
 - Dacă o unealtă raportează o eroare, spune simplu ce nu ai putut face.
-- Fii scurt și factual.
+- Fii scurt și factual: răspunde sau pregătește propunerea direct, fără să
+  repeți cererea utilizatorului sau să adaugi avertismente nesolicitate.
+- Pune CEL MULT o întrebare de clarificare într-un mesaj, și doar când chiar
+  blochează continuarea (de ex. nu se știe ce cont, card sau beneficiar e
+  vizat, iar contul implicit sau find_beneficiary_by_name nu rezolvă
+  ambiguitatea). Dacă există un implicit rezonabil (contul principal pentru o
+  întrebare generală de sold, ultimele 30 de zile pentru tranzacții),
+  folosește-l fără să întrebi. Nu înșira mai multe întrebări în același
+  mesaj și nu cere din nou ceva ce utilizatorul a spus deja în conversație.
 """
 
 #: Cap on provider round-trips per user message. Prevents an infinite tool loop.

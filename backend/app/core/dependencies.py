@@ -48,27 +48,41 @@ async def get_current_user(
         raise UnauthorizedError()
 
     token_hash = hash_session_token(token)
-    resp = (
+    # Two round-trips, deliberately, instead of a `user:users(...)` embed in
+    # the same select: under contention the embed intermittently comes back
+    # with `user: null` for a session row that plainly has a valid
+    # `user_id` (PostgREST/PgBouncer transaction-pooling artifact, not a
+    # data problem) - which this code used to treat as "no session" and
+    # answer with a spurious 401. Splitting the query removes the embed, so
+    # there is nothing left to come back null for a real session.
+    session_resp = (
         await supabase.table("sessions")
-        .select(f"expires_at, user:users({_USER_COLUMNS})")
+        .select("user_id, expires_at")
         .eq("token_hash", token_hash)
         .maybe_single()
         .execute()
     )
 
-    if resp is None or resp.data is None:
+    if session_resp is None or session_resp.data is None:
         raise UnauthorizedError()
 
-    session_row = resp.data
+    session_row = session_resp.data
     expires_at = datetime.fromisoformat(session_row["expires_at"])
     if expires_at <= datetime.now(UTC):
         raise UnauthorizedError("Session has expired.")
 
-    user_row = session_row.get("user")
-    if user_row is None:
+    user_resp = (
+        await supabase.table("users")
+        .select(_USER_COLUMNS)
+        .eq("id", session_row["user_id"])
+        .maybe_single()
+        .execute()
+    )
+
+    if user_resp is None or user_resp.data is None:
         raise UnauthorizedError()
 
-    user = UserRead.model_validate(user_row)
+    user = UserRead.model_validate(user_resp.data)
 
     # Checked here, on the read side, rather than only at login: blocking has
     # to take effect for sessions that already exist, not just future ones.
