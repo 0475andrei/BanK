@@ -26,6 +26,24 @@ async def test_onboarding_chat_returns_reply_and_history(client, scripted_provid
     assert body["history"][0]["content"] == "Salut"
 
 
+async def test_onboarding_chat_language_field_reaches_comoduls_system_prompt(
+    client, scripted_provider
+):
+    """Comodul is the pre-auth equivalent of the main chat - the register
+    page's language switcher threads onto Context.language the same way
+    (see test_chat_language_field_reaches_the_agents_system_prompt)."""
+    provider = scripted_provider(ModelResponse(text="ok"))
+
+    resp = await client.post(
+        "/api/v1/onboarding/chat", json={"message": "Salut", "language": "en"}
+    )
+
+    assert resp.status_code == 200, resp.text
+    system_message = provider.calls[0][0]
+    assert system_message.role == "system"
+    assert "engleză" in system_message.content
+
+
 async def test_onboarding_chat_continues_from_client_held_history(client, scripted_provider):
     scripted_provider(ModelResponse(text="Perfect, mulțumesc!"))
 

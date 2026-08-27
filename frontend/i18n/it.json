@@ -50,7 +50,9 @@
     "create": "Crea",
     "or": "o",
     "reading_file": "Lettura del file in corso...",
-    "chat_placeholder": "Chiedi all'assistente IA..."
+    "chat_placeholder": "Chiedi all'assistente IA...",
+    "amount_label": "Importo",
+    "description_label": "Descrizione"
   },
   "dashboard": {
     "title": "Dashboard BanK",
@@ -88,7 +90,10 @@
     "no_other_account_same_currency": "Nessun altro conto nella stessa valuta",
     "open_account_button": "Apri il conto",
     "account_name_placeholder": "es. Risparmi vacanza",
-    "projection_amount_placeholder": "es. 5000"
+    "projection_amount_placeholder": "es. 5000",
+    "period_label": "Durata",
+    "projection_amount_label": "Importo stimato da depositare",
+    "projection_amount_note": "(solo a scopo di stima)"
   },
   "cards": {
     "cancel": "Annulla carta",
@@ -322,6 +327,7 @@
     "history": {
       "rename_title": "Rinomina conversazione",
       "delete_title": "Elimina conversazione",
+      "delete_button": "Elimina",
       "rename_input_label": "Nome della conversazione",
       "save_name": "Salva nome",
       "cancel_rename": "Annulla",
@@ -341,6 +347,12 @@
       "reject_error": "Errore durante l'annullamento.",
       "confirm_success": "L'azione è stata confermata ed eseguita con successo!",
       "auth_failed": "Autenticazione non riuscita."
+    },
+    "agent_tooltip": {
+      "agent_label": "Agente",
+      "reason_label": "Motivo",
+      "rule_label": "Regola",
+      "confidence_label": "Affidabilità"
     }
   },
   "dynamic": {
@@ -387,7 +399,44 @@
     "category_education": "Istruzione",
     "category_home": "Casa e arredamento",
     "category_insurance": "Assicurazioni",
-    "category_transfers": "Trasferimenti"
+    "category_transfers": "Trasferimenti",
+    "proposal_transfer": "Bonifico di {amount} da {from} a {to}",
+    "proposal_payment": "Pagamento di {amount} a {name}",
+    "proposal_open_account": "Apertura conto {product} «{name}» in {currency}",
+    "proposal_close_account": "Chiusura del conto «{name}»",
+    "proposal_cancel_card": "Annullamento definitivo della carta •••• {last4}",
+    "proposal_sign_document": "Firma elettronica del documento «{filename}»",
+    "product_checking": "corrente",
+    "product_savings": "di risparmio",
+    "product_term_deposit": "deposito vincolato",
+    "agent_banking": "Bancario",
+    "agent_insights": "Analisi",
+    "agent_planning": "Pianificazione",
+    "agent_documents": "Documenti",
+    "agent_docs": "Aiuto"
+  },
+  "esign": {
+    "sign_button": "Firma elettronicamente",
+    "sign_button_short": "Firma",
+    "list_empty": "Al momento non hai documenti da firmare.",
+    "preview_button": "Anteprima",
+    "signed_badge": "Firmato",
+    "preview_failed": "Anteprima del documento non riuscita.",
+    "sign_request_error": "Errore nella creazione della richiesta di firma.",
+    "sign_intent": "Ho letto e accetto il contenuto del documento «{filename}».",
+    "sign_intent_official": "Ho letto e accetto il contenuto del documento ufficiale «{filename}».",
+    "sending_code": "Invio del codice di firma...",
+    "code_sent": "Codice inviato per «{filename}». Controlla Teams.",
+    "code_send_error": "Impossibile inviare il codice.",
+    "face_reason": "Firma di un documento ufficiale - verifica Face ID",
+    "sign_success": "Il documento è stato firmato con successo!",
+    "sign_error": "Firma non riuscita."
+  },
+  "face_id": {
+    "status_check_error": "Impossibile verificare lo stato di Face ID. Riprova.",
+    "enrollment_required_generic": "Questa azione richiede Face ID attivo. Ti reindirizziamo all'attivazione.",
+    "enrollment_required_payment": "Questo pagamento richiede Face ID perché è il tuo primo pagamento a questa persona o supera la soglia di sicurezza.",
+    "enrollment_required_card_reveal": "Attiva Face ID per vedere il numero completo e il CVV della carta."
   },
   "errors": {
     "generic": "Qualcosa è andato storto. Riprova."
@@ -401,9 +450,19 @@
   },
   "scheduled": {
     "title": "Programma un bonifico",
+    "from_account_label": "Dal conto",
     "start_in_days_label": "Inizia tra quanti giorni",
     "frequency_label": "Frequenza",
     "submit_button": "Programma"
+  },
+  "statement": {
+    "title": "Estratto conto",
+    "download_hint": "Scarica estratto conto",
+    "from_label": "Dal",
+    "to_label": "Al",
+    "download_button": "Scarica PDF",
+    "invalid_period": "La data di inizio deve essere precedente alla data di fine.",
+    "generation_failed": "Non è stato possibile generare l'estratto conto."
   },
   "face_confirm": {
     "title": "Conferma con Face ID",

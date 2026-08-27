@@ -470,7 +470,11 @@
             try {
                 const response = await apiFetch("/onboarding/chat", {
                     method: "POST",
-                    body: JSON.stringify({ message, history: comodulHistory }),
+                    body: JSON.stringify({
+                        message,
+                        history: comodulHistory,
+                        language: document.documentElement.lang || "ro",
+                    }),
                 });
                 typingBubble.remove();
                 appendComodulBubble("ai", response.reply);

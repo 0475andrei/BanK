@@ -19,6 +19,7 @@ from typing import ClassVar
 
 from app.ai.agents.base import Agent
 from app.ai.context import Context
+from app.ai.language_directive import language_directive
 from app.ai.providers.base import ModelProvider
 from app.ai.schemas import Message, ToolCall, ToolResult
 from app.ai.tools.handoff_tool import HANDOFF_SENTINEL_KEY, HANDOFF_TRACE_MARKER
@@ -65,7 +66,10 @@ class ToolLoopAgent(Agent):
         # appended after the system prompt + caller's messages is the trace this
         # call hands back, so the caller can persist it.
         working: list[Message] = [
-            Message(role="system", content=self._system_prompt),
+            Message(
+                role="system",
+                content=self._system_prompt + language_directive(context.language),
+            ),
             *messages,
         ]
         trace_start = len(working)

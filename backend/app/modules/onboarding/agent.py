@@ -18,6 +18,7 @@ from collections.abc import Sequence
 
 from app.ai.agents.base import Agent
 from app.ai.context import Context
+from app.ai.language_directive import language_directive
 from app.ai.providers.base import ModelProvider
 from app.ai.schemas import Message, ToolCall, ToolResult
 from app.ai.tools.registry import ToolRegistry
@@ -121,7 +122,10 @@ class OnboardingAgent(Agent):
         the orchestrator entirely (no session, no Context identity yet), so
         there is no chain for it to be part of and `handoff` is always None."""
         working: list[Message] = [
-            Message(role="system", content=self._system_prompt),
+            Message(
+                role="system",
+                content=self._system_prompt + language_directive(context.language),
+            ),
             *messages,
         ]
         trace_start = len(working)
