@@ -18,10 +18,12 @@ up in the `proposals` row - it is used once, in memory, and discarded.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 from app.core.exceptions import (
+    CurrencyMismatchError,
     FaceAuthMethodRequiredError,
     InvalidFaceConfirmationError,
     NotFoundError,
@@ -32,14 +34,14 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.security import verify_password
-from app.modules.accounts.service import close_account, open_account
+from app.modules.accounts.service import close_account, get_account, open_account
 from app.modules.auth import service as auth_service
 from app.modules.cards.service import cancel_card
 from app.modules.face_auth import service as face_auth_service
 from app.modules.payments.schemas import PaymentCreate
 from app.modules.payments.service import create_payment, is_first_payment_to_person
 from app.modules.transfers.schemas import TransferCreate
-from app.modules.transfers.service import create_transfer
+from app.modules.transfers.service import create_fx_transfer, create_transfer
 from app.modules.users.schemas import UserRead
 from supabase import AsyncClient
 
@@ -128,7 +130,15 @@ async def create_proposal(
     proposal_type: str,
     payload: dict[str, Any],
     summary: str,
+    conversion: dict[str, Any] | None = None,
 ) -> dict:
+    """`conversion` carries the six columns added by
+    0023_proposal_currency_conversion.sql, and ONLY a cross-currency transfer
+    passes it. When it is None the insert below is byte-identical to the one
+    this function has always sent - so every existing proposal type, and every
+    same-currency transfer, is unaffected and keeps working whether or not
+    0023 has been applied yet.
+    """
     # Supersede any other still-pending proposal in THIS conversation first.
     # A new propose_* call almost always means the user changed their mind
     # about a prior one in the same conversation ("de fapt, trimite 500 RON"
@@ -144,19 +154,17 @@ async def create_proposal(
         .execute()
     )
 
-    resp = (
-        await supabase.table("proposals")
-        .insert(
-            {
-                "user_id": user_id,
-                "conversation_id": conversation_id,
-                "proposal_type": proposal_type,
-                "payload": payload,
-                "summary": summary,
-            }
-        )
-        .execute()
-    )
+    row: dict[str, Any] = {
+        "user_id": user_id,
+        "conversation_id": conversation_id,
+        "proposal_type": proposal_type,
+        "payload": payload,
+        "summary": summary,
+    }
+    if conversion is not None:
+        row.update(conversion)
+
+    resp = await supabase.table("proposals").insert(row).execute()
     return resp.data[0]
 
 
@@ -266,6 +274,11 @@ async def confirm_proposal(
     proposal = await get_proposal(supabase, user, proposal_id)
     await ensure_pending_and_not_expired(supabase, proposal)
 
+    # BEFORE the credential is looked at: a proposal that cannot possibly
+    # execute should not cost the user a Face ID scan first. See
+    # `_assert_still_executable`.
+    await _assert_still_executable(supabase, user, proposal)
+
     if auth_method == "password" and await _proposal_requires_face(supabase, user, proposal):
         failed_so_far = await _count_recent_failed_confirm_attempts(
             supabase, str(user.id), proposal["id"]
@@ -328,6 +341,139 @@ async def reject_proposal(supabase: AsyncClient, user: UserRead, proposal_id: st
     return updated.data[0]
 
 
+def _locked_conversion(proposal: dict) -> dict[str, Any] | None:
+    """The FX numbers locked onto this proposal when it was created, or None.
+
+    None for every same-currency transfer, for every other proposal type, and
+    for any row predating 0023_proposal_currency_conversion.sql - `.get`
+    rather than `[...]` so a proposal read back before that migration is
+    applied behaves exactly as it did before, instead of raising KeyError.
+
+    `converted_amount_minor` is the single flag: the migration's
+    `proposals_currency_conversion_complete` CHECK guarantees the other five
+    are present whenever it is. The values are re-read here, never
+    recomputed - see `_execute`.
+    """
+    amount = proposal.get("converted_amount_minor")
+    if amount is None:
+        return None
+    return {
+        "original_currency": proposal["original_currency"],
+        "original_amount_minor": int(proposal["original_amount_minor"]),
+        "converted_currency": proposal["converted_currency"],
+        "converted_amount_minor": int(amount),
+        # NUMERIC arrives from PostgREST as a string (or, on some driver
+        # versions, a float). Decimal(str(...)) is exact for the former and
+        # the closest available reading of the latter; never Decimal(float).
+        "exchange_rate": Decimal(str(proposal["exchange_rate"])),
+        "exchange_rate_date": date.fromisoformat(str(proposal["exchange_rate_date"])),
+    }
+
+
+async def _assert_still_executable(
+    supabase: AsyncClient, user: UserRead, proposal: dict
+) -> None:
+    """Re-check a pending proposal against the accounts as they are NOW.
+
+    A proposal's payload is a snapshot taken when the AI built it, and
+    `_execute` below hands that snapshot to the real service functions. Those
+    functions validate - which is right - but they validate at EXECUTION
+    time, i.e. after the user has read the proposal, tapped confirm and
+    proved their identity. A snapshot that fails that check surfaced as a raw
+    English "Transfer currency must match both accounts' currency." inside a
+    Romanian confirmation dialog, at the worst possible moment, with nothing
+    the user could do about it.
+
+    A currency MISMATCH between the two accounts is no longer a reason to
+    refuse - `propose_transfer` now converts at the BNR rate and locks the
+    result onto the proposal. What this function checks is that those locked
+    numbers still describe THESE two accounts. If they do not, the figure the
+    user read and approved is not the figure that would move, and no reading
+    of "confirm" covers that.
+
+    Nothing here weakens a check downstream: every service function still
+    validates its own inputs exactly as before. This only moves the FIRST
+    honest "no" earlier, and says it in Romanian.
+
+    Only `transfer` is covered - it is the one whose payload carries values
+    that can contradict the accounts it names. Payments take their currency
+    from the source account at execution, and the remaining types name no
+    second account to disagree with.
+    """
+    if proposal["proposal_type"] != "transfer":
+        return
+
+    payload = proposal["payload"]
+    try:
+        from_id = uuid.UUID(str(payload["from_account_id"]))
+        to_id = uuid.UUID(str(payload["to_account_id"]))
+    except (KeyError, ValueError):
+        # Not something this check can reason about. Leave it to `_execute`
+        # and the service functions, which reject it exactly as they did
+        # before this function existed - an early check must not become a new
+        # way for a request to fail.
+        return
+
+    from_account = await get_account(supabase, user, from_id)
+    to_account = await get_account(supabase, user, to_id)
+    conversion = _locked_conversion(proposal)
+
+    if from_account["currency"] != to_account["currency"]:
+        if conversion is None:
+            # A proposal built before cross-currency transfers were supported,
+            # still pending. There is no locked rate to execute against, and
+            # inventing one now would execute a number the user never saw.
+            raise CurrencyMismatchError(
+                f"Această propunere a fost pregătită înainte ca transferurile "
+                f"valutare să fie posibile, așa că nu conține un curs de "
+                f"schimb. Respinge-o și cere-mi din nou transferul din "
+                f"{from_account['name']} în {to_account['name']} - îl voi "
+                "recalcula la cursul BNR de azi."
+            )
+        if (
+            conversion["original_currency"] != from_account["currency"]
+            or conversion["converted_currency"] != to_account["currency"]
+        ):
+            raise CurrencyMismatchError(
+                f"Conturile s-au schimbat de când am pregătit propunerea: "
+                f"conversia a fost calculată din {conversion['original_currency']} "
+                f"în {conversion['converted_currency']}, dar acum "
+                f"{from_account['name']} este în {from_account['currency']}, iar "
+                f"{to_account['name']} este în {to_account['currency']}. "
+                "Respinge propunerea și cere-mi transferul din nou."
+            )
+        # The locked numbers still describe these accounts. The payload's
+        # advisory `currency` is not consulted: for an FX transfer the two
+        # authoritative currencies are the ones above.
+        return
+
+    if conversion is not None:
+        # Both accounts read the same currency now, but the proposal carries a
+        # conversion - so one of them changed after it was built. The
+        # converted figure the user approved no longer means anything here.
+        raise CurrencyMismatchError(
+            f"Am pregătit această propunere ca schimb valutar din "
+            f"{conversion['original_currency']} în {conversion['converted_currency']}, "
+            f"dar ambele conturi sunt acum în {from_account['currency']}. "
+            "Respinge propunerea și cere-mi transferul din nou."
+        )
+
+    # The accounts agree with each other but not with what the proposal says.
+    # This is a proposal built before propose_transfer started reading the
+    # currency off the account (it used to take the model's word for it), so
+    # the amount shown to the user was labelled with the wrong currency. It
+    # must NOT be quietly executed in the right one: 500 EUR is not the 500
+    # RON they read and approved.
+    stated_currency = payload.get("currency")
+    if stated_currency is not None and stated_currency != from_account["currency"]:
+        raise CurrencyMismatchError(
+            f"Această propunere a fost pregătită în {stated_currency}, dar "
+            f"{from_account['name']} este în {from_account['currency']}. Suma "
+            "afișată nu corespunde monedei contului, așa că nu o pot executa. "
+            "Respinge propunerea și cere-mi transferul din nou."
+        )
+
+
 async def _execute(
     supabase: AsyncClient, user: UserRead, proposal: dict, auth_method: str
 ) -> dict:
@@ -351,6 +497,26 @@ async def _execute(
     idempotency_key = str(proposal["id"])
 
     if proposal_type == "transfer":
+        conversion = _locked_conversion(proposal)
+        if conversion is not None:
+            # THE LOCKED RATE. Everything below comes off the proposal row as
+            # it was written when the user was shown the figures; no BNR call
+            # happens on this path. The user confirmed a specific converted
+            # amount, and that exact integer is what gets credited.
+            return await create_fx_transfer(
+                supabase,
+                user,
+                from_account_id=uuid.UUID(str(payload["from_account_id"])),
+                to_account_id=uuid.UUID(str(payload["to_account_id"])),
+                from_amount_minor=conversion["original_amount_minor"],
+                to_amount_minor=conversion["converted_amount_minor"],
+                exchange_rate=conversion["exchange_rate"],
+                exchange_rate_date=conversion["exchange_rate_date"],
+                description=payload.get("description"),
+                idempotency_key=idempotency_key,
+                proposal_pre_authorized=True,
+            )
+
         transfer_payload = TransferCreate(
             from_account_id=payload["from_account_id"],
             to_account_id=payload["to_account_id"],

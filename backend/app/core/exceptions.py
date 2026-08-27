@@ -67,6 +67,20 @@ class CurrencyMismatchError(AppError):
     default_message = "Currencies do not match."
 
 
+class ExchangeRateUnavailableError(AppError):
+    """No BNR rate could be obtained for a cross-currency transfer.
+
+    503 rather than 422: nothing about the request is wrong, an upstream we
+    depend on is simply not answering and has no cached answer either. The
+    only alternative would be inventing a rate, which is never an option -
+    see app/core/bnr_client.py.
+    """
+
+    status_code = 503
+    error_code = "exchange_rate_unavailable"
+    default_message = "Cursul valutar BNR nu este disponibil momentan."
+
+
 class SubscriptionPriceIncreaseError(AppError):
     """Raised by payments/service.py when a payment to a recognized
     recurring merchant costs more than the sender's last payment to that
@@ -312,3 +326,22 @@ class AIProviderMisconfiguredError(AppError):
     status_code = 500
     error_code = "ai_provider_misconfigured"
     default_message = "AI provider is misconfigured"
+
+
+class SpeechServiceUnavailableError(AppError):
+    """AZURE_SPEECH_* is unset or incomplete - see
+    Settings.require_azure_speech(). Fails closed rather than silently
+    returning no audio, same reasoning as AIServiceUnavailableError; the
+    frontend falls back to the browser's own SpeechSynthesis on this."""
+
+    status_code = 503
+    error_code = "speech_service_unavailable"
+    default_message = "Read-aloud is not available right now."
+
+
+class SpeechProviderError(AppError):
+    """The upstream Azure Speech call failed (network, auth, quota, ...)."""
+
+    status_code = 502
+    error_code = "speech_provider_error"
+    default_message = "Text-to-speech request failed"

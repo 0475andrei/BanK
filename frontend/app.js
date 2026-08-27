@@ -10,6 +10,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     navItems.forEach(item => {
         item.addEventListener('click', async () => {
+            // A read-aloud in progress belongs to the chat message it was
+            // started from - leaving that view behind it (to any other tab,
+            // including switching straight back into chat) shouldn't leave
+            // it talking over whatever's shown next.
+            stopMessageSpeech();
+
             // Remove active class from all nav items
             navItems.forEach(nav => nav.classList.remove('active'));
             // Add active class to clicked item
@@ -70,6 +76,12 @@ document.addEventListener('DOMContentLoaded', () => {
     initDashboard();
 
     window.addEventListener('languagechange', () => {
+        // Whatever was playing was read in the language just switched away
+        // from - let the next click start it fresh (now correctly, in
+        // whatever the bubble displays post-switch - see
+        // buildMessageSpeakButton) rather than keep talking over the
+        // language change.
+        stopMessageSpeech();
         const messages = document.getElementById('chat-messages');
         const hasOnlyWelcome = messages?.querySelectorAll('.message').length === 1;
         if (hasOnlyWelcome) {
@@ -345,13 +357,6 @@ function renderDocumentChip(document_) {
     label.textContent = `${document_.page_count} pag. · ${document_.filename}`;
     chip.appendChild(label);
 
-    const signBtn = document.createElement('button');
-    signBtn.type = 'button';
-    signBtn.className = 'document-chip-sign';
-    signBtn.textContent = t('esign.sign_button', 'Semnează electronic');
-    signBtn.addEventListener('click', () => handleSignDocument(document_, signBtn));
-    chip.appendChild(signBtn);
-
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'document-chip-close';
@@ -375,39 +380,6 @@ function clearActiveDocument() {
     if (chip) {
         chip.hidden = true;
         chip.innerHTML = '';
-    }
-    const signContainer = document.getElementById('document-sign-card-container');
-    if (signContainer) signContainer.innerHTML = '';
-}
-
-/** "Semnează electronic" on the attached document's chip. Deliberately a
- * direct REST call (POST /esign/documents/{id}/sign-requests), not a chat
- * message - the AI's DocumentAgent has no write tools at all (see
- * backend app/ai/tools/document_tools.py), so a real sign action has to
- * come from an explicit user click, never from asking the chatbot to do it.
- *
- * The call only creates a PENDING proposal - it renders through the exact
- * same confirm/reject card and Face ID/password step-up modal as any other
- * AI-proposed action (see renderProposalCard/openStepUpModal above), because
- * the backend returns the same ProposalRead shape. */
-async function handleSignDocument(document_, triggerBtn) {
-    const container = document.getElementById('document-sign-card-container');
-    if (!container) return;
-
-    triggerBtn.disabled = true;
-    try {
-        const proposal = await apiFetch(`/esign/documents/${document_.id}/sign-requests`, {
-            method: 'POST',
-            body: JSON.stringify({
-                intent: t('esign.sign_intent', 'Am citit și sunt de acord cu conținutul documentului „{filename}”.', { filename: document_.filename }),
-            }),
-        });
-        container.innerHTML = '';
-        renderProposalCard(proposal, container);
-        triggerBtn.hidden = true;
-    } catch (err) {
-        showToast(err.message || t('esign.sign_request_error', 'Eroare la crearea cererii de semnătură.'));
-        triggerBtn.disabled = false;
     }
 }
 
@@ -602,12 +574,367 @@ function appendChatBubble(role, text, options = {}) {
         bubble.textContent = text;
     }
     content.appendChild(bubble);
+
+    // Skipped for the typing placeholder: it has no real text yet and is
+    // removed the moment the actual reply arrives (see sendMessage above).
+    if (role === 'ai' && options.bubbleClass !== 'typing') {
+        const actions = document.createElement('div');
+        actions.className = 'message-actions';
+        // `bubble`, not `text`: the languagechange handler above rewrites
+        // the welcome bubble's textContent in place when the chat is still
+        // showing only that message, so a plain closure over `text` would
+        // keep copying/reading the language it was FIRST created in - read
+        // it fresh off the element at click time instead, so both buttons
+        // always act on whatever is actually on screen.
+        actions.appendChild(buildMessageCopyButton(bubble));
+        actions.appendChild(buildMessageSpeakButton(bubble));
+        content.appendChild(actions);
+    }
+
     wrapper.appendChild(content);
 
     chatMessages.appendChild(wrapper);
     if (window.lucide) lucide.createIcons();
     chatMessages.scrollTop = chatMessages.scrollHeight;
     return wrapper;
+}
+
+/** Small copy-to-clipboard control appended under a real AI reply (see
+ * appendChatBubble above). Copies the bubble's plain text, read fresh at
+ * click time (see the comment where this is called) - never options.html,
+ * since that's the only form guaranteed to be the actual reply and not
+ * markup wrapping it (e.g. the typing indicator's dots). */
+function buildMessageCopyButton(bubble) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'message-copy-btn';
+    button.setAttribute('aria-label', 'Copiază mesajul');
+    button.setAttribute('data-i18n-aria-label', 'chat.copy_message');
+    button.innerHTML = '<i data-lucide="copy" class="icon"></i>';
+
+    button.addEventListener('click', async () => {
+        // Ignore repeat clicks while the checkmark is still showing, rather
+        // than restarting the timer and leaving it stuck on "copied".
+        if (button.classList.contains('is-copied')) return;
+        try {
+            await navigator.clipboard.writeText(bubble.textContent);
+        } catch {
+            // Clipboard API can be unavailable (e.g. insecure context) - not
+            // critical, and there's nothing to confirm if it didn't copy.
+            return;
+        }
+        button.classList.add('is-copied');
+        button.innerHTML = '<i data-lucide="check" class="icon"></i>';
+        if (window.lucide) lucide.createIcons();
+        setTimeout(() => {
+            button.classList.remove('is-copied');
+            button.innerHTML = '<i data-lucide="copy" class="icon"></i>';
+            if (window.lucide) lucide.createIcons();
+        }, 1500);
+    });
+
+    return button;
+}
+
+// BCP-47 locale for each language.js code (its LANGUAGES keys), so a
+// detected language maps to a real SpeechSynthesisUtterance.lang.
+const SPEECH_LOCALES = {
+    ro: 'ro-RO', en: 'en-US', uk: 'uk-UA', hu: 'hu-HU', tr: 'tr-TR',
+    it: 'it-IT', es: 'es-ES', fr: 'fr-FR', de: 'de-DE',
+};
+
+/* --- Per-message language detection ---
+ * document.documentElement.lang (the conversation's UI language) used to be
+ * read aloud unconditionally, which is usually right but not always - a
+ * reply can quote something back in a different language, and more
+ * fundamentally, without an explicit voice selection (see pickVoiceForLocale
+ * below) the browser would silently keep using its default English voice
+ * regardless of what .lang said, which is what made Romanian replies come
+ * out spelled letter-by-letter in an English accent. Detecting per message
+ * fixes the request literally and also gives pickVoiceForLocale a real
+ * target to search for.
+ *
+ * A handful of hand-picked signals per language.js LANGUAGES entry - not a
+ * general-purpose classifier, but this is a closed set of 9 languages and
+ * ordinary chat-length sentences carry plenty of distinguishing characters
+ * or function words, so simple scoring is enough. Ukrainian is handled
+ * separately (Cyrillic is unambiguous); the rest score on Latin-script
+ * diacritics (weighted by how unique they are to that language within this
+ * set) plus a few very common short words. */
+// `\b` only recognizes plain ASCII [A-Za-z0-9_] as "word" characters, so it
+// mismatches at a boundary right next to a diacritic - e.g. `\bși\b` never
+// matches " și " at all, because it needs a word/non-word transition and
+// treats a leading space AND a leading ș as equally "non-word". Building the
+// word list into one lookaround-based regex with \p{L} (any Unicode letter)
+// avoids that - required for "și"/"és" and any future word starting or
+// ending on an accented letter.
+function wordBoundaryPattern(words) {
+    return new RegExp(`(?<![\\p{L}\\p{N}_])(?:${words.join('|')})(?![\\p{L}\\p{N}_])`, 'giu');
+}
+
+// strong: unique enough within this set of 9 to almost guarantee the
+// language on its own. weak: real letters of that language, but shared with
+// at least one other (ö/ü across de/hu/tr, à/è/ù across fr/it, ...) - still
+// useful as a tie-breaker alongside word matches, just outweighed by a
+// single strong hit or a couple of word matches.
+const LATIN_LANGUAGE_SIGNALS = {
+    ro: {
+        strong: /[ăâîșț]/gi, weak: null,
+        words: wordBoundaryPattern(['și', 'este', 'sunt', 'pentru', 'soldul', 'contul', 'cardul', 'mulțumesc']),
+    },
+    hu: {
+        strong: /[őű]/gi, weak: /[áéíóöúü]/gi,
+        words: wordBoundaryPattern(['és', 'hogy', 'nem', 'vagy', 'számla', 'egyenleg', 'köszönöm']),
+    },
+    tr: {
+        strong: /[ığĞİ]/gi, weak: /[şöü]/gi,
+        words: wordBoundaryPattern(['ve', 'için', 'değil', 'hesap', 'bakiye', 'işlem', 'teşekkür']),
+    },
+    de: {
+        strong: /[ß]/gi, weak: /[äöü]/gi,
+        words: wordBoundaryPattern(['und', 'nicht', 'ich', 'der', 'die', 'das', 'konto', 'danke']),
+    },
+    fr: {
+        strong: /[œ]/gi, weak: /[çêëîïûù]/gi,
+        words: wordBoundaryPattern(['et', 'vous', 'pour', 'compte', 'solde', 'bonjour', 'merci']),
+    },
+    es: {
+        strong: /[ñ¿¡]/gi, weak: /[áéíóú]/gi,
+        words: wordBoundaryPattern(['y', 'para', 'cuenta', 'saldo', 'gracias', 'hola']),
+    },
+    it: {
+        strong: null, weak: /[àìòù]/gi,
+        words: wordBoundaryPattern(['e', 'per', 'conto', 'saldo', 'grazie', 'ciao']),
+    },
+    en: {
+        strong: null, weak: null,
+        words: wordBoundaryPattern(['the', 'and', 'your', 'account', 'balance', 'thanks', 'hello']),
+    },
+};
+
+function detectMessageLanguage(text) {
+    if (/[Ѐ-ӿ]/.test(text)) return 'uk'; // Cyrillic - unique in this set.
+
+    let best = null;
+    let bestScore = 0;
+    for (const [language, signal] of Object.entries(LATIN_LANGUAGE_SIGNALS)) {
+        const score = (signal.strong ? (text.match(signal.strong) || []).length * 3 : 0)
+            + (signal.weak ? (text.match(signal.weak) || []).length : 0)
+            + (text.match(signal.words) || []).length * 3;
+        if (score > bestScore) { bestScore = score; best = language; }
+    }
+    // No distinguishing character or word found (e.g. a very short reply) -
+    // trust the conversation's own language rather than defaulting to
+    // English, since that's what the reply was actually asked for in.
+    return bestScore > 0 ? best : (SPEECH_LOCALES[document.documentElement.lang] ? document.documentElement.lang : 'ro');
+}
+
+// speechSynthesis.getVoices() can return [] until the browser finishes
+// loading its voice list, which happens asynchronously - caching it and
+// refreshing on 'voiceschanged' (rather than calling getVoices() fresh right
+// before speaking) avoids a race where the very first read-aloud click finds
+// no voices yet and silently falls back to the system default.
+let cachedVoices = [];
+function refreshVoiceCache() { cachedVoices = window.speechSynthesis.getVoices(); }
+if (window.speechSynthesis) {
+    refreshVoiceCache();
+    window.speechSynthesis.addEventListener('voiceschanged', refreshVoiceCache);
+}
+
+/** Finds an installed voice for a BCP-47 locale (e.g. "ro-RO"), falling
+ * back to any voice for the bare language ("ro"). Without this, setting
+ * only utterance.lang is not enough in every browser/OS combination - some
+ * silently keep using the default voice for an unsupported lang instead of
+ * failing loudly, which is what produced the wrong-accent/letter-by-letter
+ * reading this replaces. Returns null (not a fallback voice) when nothing
+ * matches, since forcing an unrelated voice tends to read worse than
+ * leaving voice unset and letting the engine's own default apply. */
+function pickVoiceForLocale(locale) {
+    if (!cachedVoices.length) refreshVoiceCache();
+    const language = locale.split('-')[0].toLowerCase();
+    return cachedVoices.find((voice) => voice.lang.toLowerCase() === locale.toLowerCase())
+        || cachedVoices.find((voice) => voice.lang.toLowerCase().startsWith(`${language}-`))
+        || cachedVoices.find((voice) => voice.lang.toLowerCase() === language)
+        || null;
+}
+
+/** Asks the backend's Azure Speech endpoint (app/modules/speech) to
+ * synthesize `text` in `locale`, returning a playable object URL - or null
+ * if that service isn't configured or reachable, in which case the caller
+ * falls back to the browser's own (much more limited) SpeechSynthesis.
+ * Deliberately a raw fetch, not apiFetch: apiFetch always parses the body
+ * as JSON, but a successful response here is an audio/mpeg blob. */
+async function fetchSpeechAudio(text, locale) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/speech`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, language: locale }),
+        });
+        if (!response.ok) return null;
+        return URL.createObjectURL(await response.blob());
+    } catch {
+        return null; // Network error, backend down, etc.
+    }
+}
+
+// Only one message reads aloud at a time - starting another stops whichever
+// is currently playing (and resets its button) rather than overlapping.
+let activeSpeech = null;
+
+/** Cancels any in-progress read-aloud and resets its button's icon. Called
+ * whenever the chat transcript itself is torn down (new conversation,
+ * switching to a different saved one) - otherwise playback would continue
+ * over a transcript it no longer belongs to, with no way to stop it since
+ * its button is gone with the rest of the old messages.
+ *
+ * Clears activeSpeech BEFORE calling entry.stop(), not after: stopping
+ * playback (audio.pause(), speechSynthesis.cancel()) can fire that
+ * mechanism's own end/error handler synchronously, and that handler also
+ * touches activeSpeech (see buildMessageSpeakButton's `finish`) - clearing
+ * first means a reentrant call sees "nothing active" and no-ops, rather
+ * than nulling this function's own local reference to the entry it still
+ * needs to call .reset() on. */
+function stopMessageSpeech() {
+    if (!activeSpeech) return;
+    const entry = activeSpeech;
+    activeSpeech = null;
+    entry.stop();
+    entry.reset();
+}
+
+/** Small read-aloud control appended under a real AI reply, next to the
+ * copy button (see appendChatBubble above). Speaks the bubble's plain
+ * text, read fresh at click time (see the comment where this is called) -
+ * detecting its language (see detectMessageLanguage) so it's read back in
+ * the right one rather than assuming the conversation's UI language
+ * always matches.
+ *
+ * Prefers the backend's Azure Speech endpoint (app/modules/speech) - one
+ * configured multilingual neural voice, fluent in whatever language is
+ * requested - falling back to the browser's own SpeechSynthesis (see
+ * pickVoiceForLocale) only when that service is unset or unreachable,
+ * since browser/OS voice coverage for anything beyond English is
+ * inconsistent at best. */
+function buildMessageSpeakButton(bubble) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'message-speak-btn';
+    button.setAttribute('aria-label', 'Ascultă mesajul');
+    button.setAttribute('data-i18n-aria-label', 'chat.speak_message');
+    button.innerHTML = '<i data-lucide="volume-2" class="icon"></i>';
+
+    const reset = () => {
+        button.classList.remove('is-speaking');
+        button.innerHTML = '<i data-lucide="volume-2" class="icon"></i>';
+        if (window.lucide) lucide.createIcons();
+    };
+
+    button.addEventListener('click', async () => {
+        // A second click on the message already playing (or still loading -
+        // see the placeholder activeSpeech entry below) stops it - the icon
+        // shows a stop glyph for exactly this the whole time.
+        if (activeSpeech && activeSpeech.button === button) {
+            stopMessageSpeech();
+            return;
+        }
+        stopMessageSpeech();
+
+        button.classList.add('is-speaking');
+        button.innerHTML = '<i data-lucide="square" class="icon"></i>';
+        if (window.lucide) lucide.createIcons();
+
+        const finish = () => {
+            if (activeSpeech && activeSpeech.button === button) activeSpeech = null;
+            reset();
+        };
+        // Placeholder entry (stop is a no-op) so a click while the request
+        // below is still in flight is recognised as "stop this one" above,
+        // and the guard right after the await sees it was cancelled.
+        activeSpeech = { button, reset, stop: () => {} };
+
+        // Read now, not at button-creation time: the languagechange handler
+        // in initDashboard rewrites the welcome bubble's textContent in
+        // place when the user switches language mid-chat, and a stale
+        // closure would keep reading whatever language the bubble started
+        // in instead of what's actually on screen.
+        const text = bubble.textContent;
+        const locale = SPEECH_LOCALES[detectMessageLanguage(text)] || 'ro-RO';
+        const audioUrl = await fetchSpeechAudio(text, locale);
+
+        if (!activeSpeech || activeSpeech.button !== button) {
+            // Stopped, or superseded by another message, while the request
+            // was in flight - don't resurrect playback for a click that
+            // already asked to cancel.
+            if (audioUrl) URL.revokeObjectURL(audioUrl);
+            return;
+        }
+
+        if (audioUrl) {
+            const audio = new Audio(audioUrl);
+            audio.addEventListener('ended', finish);
+            audio.addEventListener('error', finish);
+            activeSpeech.stop = () => {
+                audio.pause();
+                URL.revokeObjectURL(audioUrl);
+            };
+            audio.play().catch(finish);
+            return;
+        }
+
+        // Backend unavailable - fall back to whatever voice the browser
+        // itself has for this language (see pickVoiceForLocale).
+        if (!window.speechSynthesis) {
+            finish();
+            return;
+        }
+        const voice = pickVoiceForLocale(locale);
+        if (!voice) {
+            // No installed voice for this language at all - setting only
+            // utterance.lang does NOT reliably stop the engine from grabbing
+            // its default voice anyway (observed: an English voice trying to
+            // sound out unfamiliar text ends up spelling it out letter by
+            // letter). That's worse than no audio, and no amount of JS can
+            // conjure a voice the OS/browser was never given, so this says
+            // so instead of quietly producing gibberish - pointing at
+            // whichever free fix actually applies. Chromium-based Edge (not
+            // Chrome itself) ships its own online neural voices for dozens
+            // of languages with no separate install, so it's worth trying
+            // before "add a voice in Windows" - but only on a browser that
+            // isn't already Edge, where that suggestion would be useless.
+            finish();
+            const isEdge = /\bEdg\//.test(navigator.userAgent);
+            showToast(isEdge
+                ? t(
+                    'chat.speak_voice_unavailable_add_language',
+                    'Acest browser nu are o voce instalată pentru limba mesajului. Adaugă limba din Setări Windows > Vorbire.'
+                )
+                : t(
+                    'chat.speak_voice_unavailable_try_edge',
+                    'Acest browser nu are o voce instalată pentru limba mesajului. Încearcă Microsoft Edge, care include voci multilingve, sau adaugă limba din Setări Windows > Vorbire.'
+                ));
+            return;
+        }
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = locale;
+        utterance.onend = utterance.onerror = finish;
+        activeSpeech.stop = () => window.speechSynthesis.cancel();
+        try {
+            // Belt-and-braces: pickVoiceForLocale only ever returns a voice
+            // speechSynthesis.getVoices() itself just handed back, but a
+            // synchronous throw here (a browser quirk, a voice list that
+            // changed underneath us) would otherwise leave the button
+            // stuck showing "speaking" forever, with activeSpeech pointing
+            // at an utterance that was never actually started.
+            utterance.voice = voice;
+            window.speechSynthesis.speak(utterance);
+        } catch {
+            finish();
+        }
+    });
+
+    return button;
 }
 
 function chatErrorMessage(err) {
@@ -703,6 +1030,7 @@ function startNewConversation() {
     setCurrentConversationId(null);
     clearActiveDocument();
     livePendingProposalCards = [];
+    stopMessageSpeech();
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = '';
     appendChatBubble('ai', chatWelcomeText());
@@ -852,6 +1180,7 @@ async function openConversation(conversationId) {
     setCurrentConversationId(conversationId);
     clearActiveDocument();
     livePendingProposalCards = [];
+    stopMessageSpeech();
     renderConversationHistory();
     showConversationHistoryError();
 
@@ -1319,11 +1648,14 @@ async function previewDocumentPdf(path) {
     }
 }
 
-/** Creates the sign-request proposal (same endpoint the self-uploaded-
- * document "Semnează electronic" chip button uses - see handleSignDocument)
- * then opens the OTP+Face modal for it, instead of the generic proposal
- * card + step-up modal - an admin-issued document never goes through
- * POST /chat/proposals/{id}/confirm. */
+/** Creates the sign-request proposal, then opens the OTP+Face modal for it,
+ * instead of the generic proposal card + step-up modal - an admin-issued
+ * document never goes through POST /chat/proposals/{id}/confirm.
+ *
+ * This is now the ONLY way into e-signing: documents a user uploads to the
+ * chat themselves are read-only material for the AI to answer questions
+ * about, never something to sign. Only what the bank formally issues to
+ * them carries a signature. */
 async function handleSignAdminDocument(doc, triggerBtn) {
     triggerBtn.disabled = true;
     try {
@@ -3709,6 +4041,7 @@ function wireProfilePanel(user) {
 
     document.querySelectorAll('.back-to-dashboard-btn').forEach(btn => {
         btn.addEventListener('click', () => {
+            stopMessageSpeech();
             document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
             document.getElementById('view-dashboard').classList.add('active');
             document.querySelector('.nav-item[data-view="dashboard"]').classList.add('active');
@@ -3726,6 +4059,7 @@ function wireProfilePanel(user) {
  * so this deactivates the sidebar explicitly rather than reusing its click
  * handler. */
 function goToProfileView(target) {
+    stopMessageSpeech();
     document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
     document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
     document.getElementById(`view-${target}`).classList.add('active');
