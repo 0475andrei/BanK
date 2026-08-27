@@ -17,6 +17,9 @@ not "this tool moves money" - the side effect is always just a proposal row.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -24,6 +27,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.ai.context import AccessDeniedError, Context, IdentityError
 from app.ai.schemas import ToolResult
 from app.ai.tools.base import Tool
+from app.core import bnr_client, fx
 from app.core.exceptions import IbanNotFoundError
 
 if TYPE_CHECKING:
@@ -98,35 +102,108 @@ async def _insufficient_funds_error(
     )
 
 
-def _currency_mismatch_error(
-    tool_name: str, from_account: dict, to_account: dict
-) -> ToolResult | None:
-    """Checked BEFORE a proposal is created, same reasoning as
-    `_insufficient_funds_error` above and the same bug it was written for.
+@dataclass(frozen=True)
+class _Conversion:
+    """A cross-currency transfer's numbers, locked at proposal time."""
 
-    `transfers.service.create_transfer` requires the two accounts and the
-    transfer to share one currency, and raises `CurrencyMismatchError` when
-    they don't. That check runs at EXECUTION time - i.e. after the user has
-    already read the proposal, tapped confirm, and proved their identity with
-    Face ID or a password. They were then shown "Transfer currency must match
-    both accounts' currency", in English, inside the confirmation dialog of a
-    Romanian app, having committed to something that was never possible.
+    original_amount_minor: int
+    original_currency: str
+    converted_amount_minor: int
+    converted_currency: str
+    exchange_rate: Decimal
+    exchange_rate_date: date
+    stale: bool
 
-    A transfer between a RON account and a EUR one is not a thing this
-    product does - there is no conversion step anywhere in the ledger path -
-    so the honest moment to say so is in the conversation, before a proposal
-    exists at all. Returns a failure ToolResult when the accounts disagree,
-    None when they don't.
+    def as_proposal_columns(self) -> dict:
+        """The six `proposals` columns 0023 added, as PostgREST wants them.
+
+        `exchange_rate` goes as a STRING: the payload is serialised as JSON,
+        which has no decimal type, and letting a Decimal become a float here
+        would be the one place in this path where the rate stops being exact.
+        Postgres parses it back into NUMERIC on the way in.
+        """
+        return {
+            "original_amount_minor": self.original_amount_minor,
+            "original_currency": self.original_currency,
+            "converted_amount_minor": self.converted_amount_minor,
+            "converted_currency": self.converted_currency,
+            "exchange_rate": str(self.exchange_rate),
+            "exchange_rate_date": self.exchange_rate_date.isoformat(),
+        }
+
+    def summary_suffix(self) -> str:
+        """The Romanian sentence the user reads before confirming.
+
+        Shows BOTH amounts, the rate and BNR's publication date, because the
+        number that leaves their account and the number that arrives are
+        different and they are agreeing to both.
+        """
+        rate = f"{self.exchange_rate:.4f}".replace(".", ",")
+        date_ro = self.exchange_rate_date.strftime("%d.%m.%Y")
+        text = (
+            f" (≈ {fx.format_minor(self.converted_amount_minor, self.converted_currency)} "
+            f"la cursul BNR de {rate} din {date_ro})"
+        )
+        if self.stale:
+            text += (
+                " — atenție: nu am putut contacta BNR acum, acesta este "
+                "ultimul curs cunoscut."
+            )
+        return text
+
+
+async def _convert_for_transfer(
+    from_account: dict, to_account: dict, amount_minor: int
+) -> _Conversion | None:
+    """The BNR conversion for a cross-currency transfer, or None if the two
+    accounts already share a currency.
+
+    Returns None for the overwhelmingly common same-currency case WITHOUT
+    touching `bnr_client` at all - no fetch, no cache read, nothing. That
+    path has to stay exactly what it was.
+
+    Raises `BnrUnavailableError` (cold cache) or `UnsupportedCurrencyError`
+    for the caller to turn into a Romanian tool error. Deliberately does not
+    swallow either: a transfer must never be proposed at a rate nobody
+    published.
     """
     if from_account["currency"] == to_account["currency"]:
         return None
+
+    rates, stale = await bnr_client.get_rates()
+    rate = fx.rate_between(rates, from_account["currency"], to_account["currency"])
+    return _Conversion(
+        original_amount_minor=amount_minor,
+        original_currency=from_account["currency"],
+        converted_amount_minor=fx.convert_minor(amount_minor, rate),
+        converted_currency=to_account["currency"],
+        exchange_rate=rate,
+        exchange_rate_date=rates.published_on,
+        stale=stale,
+    )
+
+
+def _conversion_unavailable_error(tool_name: str, exc: Exception) -> ToolResult:
+    """No rate, so no proposal. Never a fabricated one.
+
+    An invented exchange rate is indistinguishable from a real one once it is
+    on a proposal the user is about to confirm, so the only honest outcome
+    here is to say the transfer cannot be prepared right now.
+    """
+    if isinstance(exc, fx.UnsupportedCurrencyError):
+        return ToolResult.failure(
+            name=tool_name,
+            error=(
+                f"BNR nu publică un curs pentru {exc}, așa că nu pot pregăti "
+                "acest transfer valutar."
+            ),
+        )
     return ToolResult.failure(
         name=tool_name,
         error=(
-            f"Nu pot transfera între conturi cu monede diferite: "
-            f"{from_account['name']} este în {from_account['currency']}, iar "
-            f"{to_account['name']} este în {to_account['currency']}. "
-            "Alege două conturi în aceeași monedă."
+            "Cursul valutar BNR nu este disponibil momentan, așa că nu pot "
+            "pregăti un transfer între conturi cu monede diferite. Te rog "
+            "încearcă din nou peste câteva minute."
         ),
     )
 
@@ -183,33 +260,39 @@ class ProposeTransferTool(Tool):
             )
             raise
 
-        # Before the funds check: "these accounts can never transfer to each
-        # other" is a more fundamental refusal than "not enough in this one",
-        # and reporting it first gives the user the actionable message.
-        mismatch = _currency_mismatch_error(self.name, from_account, to_account)
-        if mismatch is not None:
-            return mismatch
-
         insufficient_funds = await _insufficient_funds_error(
             self._supabase, self.name, from_account, validated_input.amount_minor
         )
         if insufficient_funds is not None:
             return insufficient_funds
 
-        # THE currency, from the account rather than from the model. Both
-        # accounts agree by the check above, so either would do; the source is
-        # the one the money leaves. `validated_input.currency` is advisory and
-        # is deliberately not consulted - a model that guessed "RON" for a EUR
-        # account used to produce a proposal that passed review, passed Face
-        # ID, and only then failed in transfers.service.
+        # THE currency, from the account rather than from the model. This is
+        # the currency that LEAVES - `validated_input.currency` is advisory
+        # and deliberately not consulted, since a model that guessed "RON"
+        # for a EUR account used to produce a proposal that passed review,
+        # passed Face ID, and only then failed in transfers.service.
         currency = from_account["currency"]
+
+        # None for a same-currency transfer, and BNR is not touched at all in
+        # that case (see _convert_for_transfer).
+        try:
+            conversion = await _convert_for_transfer(
+                from_account, to_account, validated_input.amount_minor
+            )
+        except (bnr_client.BnrUnavailableError, fx.UnsupportedCurrencyError) as exc:
+            logger.warning("propose_transfer: no BNR rate available (%s)", type(exc).__name__)
+            return _conversion_unavailable_error(self.name, exc)
 
         amount_str = _format_amount(validated_input.amount_minor, currency)
         summary = (
             f"Transfer de {amount_str} din {from_account['name']} în {to_account['name']}"
         )
+        if conversion is not None:
+            summary += conversion.summary_suffix()
 
-        proposal = await self._create_proposal(context, validated_input, summary, currency)
+        proposal = await self._create_proposal(
+            context, validated_input, summary, currency, conversion
+        )
         return ToolResult(
             name=self.name, data={"proposal_id": proposal["id"], "summary": summary}
         )
@@ -220,6 +303,7 @@ class ProposeTransferTool(Tool):
         validated_input: ProposeTransferInput,
         summary: str,
         currency: str,
+        conversion: _Conversion | None,
     ) -> dict:
         from app.modules.chat.proposals_service import create_proposal
 
@@ -236,6 +320,11 @@ class ProposeTransferTool(Tool):
                 "description": validated_input.description,
             },
             summary=summary,
+            # None for a same-currency transfer, and `create_proposal` then
+            # sends an insert with exactly the columns it always sent - so
+            # the ordinary path keeps working whether or not 0023 has been
+            # applied yet.
+            conversion=conversion.as_proposal_columns() if conversion else None,
         )
 
 

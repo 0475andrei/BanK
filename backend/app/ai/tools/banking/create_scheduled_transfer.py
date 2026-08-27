@@ -33,16 +33,16 @@ class CreateScheduledTransferInput(BaseModel):
     amount_minor: int = Field(gt=0, description="Amount per transfer, in minor units (e.g. cents).")
     #: ADVISORY, like propose_transfer's field of the same name: the currency
     #: sent to the service is read from the source account, never from here.
-    #: The service rejects a currency that doesn't match both accounts, and a
-    #: model that guessed "RON" for a EUR account used to turn that into a
-    #: bare `CurrencyMismatchError` the user could do nothing about.
+    #: The service rejects a currency that doesn't match the source account,
+    #: and a model that guessed "RON" for a EUR account used to turn that into
+    #: a bare `CurrencyMismatchError` the user could do nothing about.
     currency: str | None = Field(
         default=None,
         min_length=3,
         max_length=3,
         description=(
-            "Optional. The accounts' own currency is used regardless - you do "
-            "not need to know or guess it."
+            "Optional. The source account's own currency is used regardless - "
+            "you do not need to know or guess it."
         ),
     )
     frequency: Literal["weekly", "monthly"] | None = Field(
@@ -81,26 +81,20 @@ class CreateScheduledTransferTool(Tool):
         from_account_id = context.resolve_account(validated_input.from_account_id)
         to_account_id = context.resolve_account(validated_input.to_account_id)
 
-        # Read both accounts to settle the currency server-side (see the
-        # `currency` field's note). Two reads rather than one because the
-        # service requires them to agree, and saying WHICH two disagree is
-        # the difference between an actionable message and a dead end.
+        # Read the source account to settle the currency server-side (see the
+        # `currency` field's note): `currency` on the schedule is the currency
+        # of what LEAVES, which is the source account's, whatever the model
+        # guessed.
+        #
+        # A destination in a DIFFERENT currency is allowed and is not checked
+        # here on purpose. The conversion happens when the schedule FIRES, at
+        # that day's BNR rate - locking a rate now for a transfer that runs
+        # monthly for a year would be quoting a number that is wrong by
+        # definition on every run but the first. See
+        # scheduled_transfers/service.py::_execute_one.
         from_account = await accounts_service.get_account_for_owner(
             self._supabase, context.user_id, from_account_id
         )
-        to_account = await accounts_service.get_account_for_owner(
-            self._supabase, context.user_id, to_account_id
-        )
-        if from_account["currency"] != to_account["currency"]:
-            return ToolResult.failure(
-                name=self.name,
-                error=(
-                    f"Nu pot programa un transfer între conturi cu monede diferite: "
-                    f"{from_account['name']} este în {from_account['currency']}, iar "
-                    f"{to_account['name']} este în {to_account['currency']}. "
-                    "Alege două conturi în aceeași monedă."
-                ),
-            )
 
         payload = ScheduledTransferCreate(
             from_account_id=from_account_id,
