@@ -417,14 +417,12 @@
     "agent_docs": "Yardım"
   },
   "esign": {
-    "sign_button": "Elektronik olarak imzala",
     "sign_button_short": "İmzala",
     "list_empty": "Şu anda imzalanacak belgen yok.",
     "preview_button": "Önizle",
     "signed_badge": "İmzalandı",
     "preview_failed": "Belge önizlemesi başarısız oldu.",
     "sign_request_error": "İmza talebi oluşturulurken hata oluştu.",
-    "sign_intent": "«{filename}» belgesinin içeriğini okudum ve kabul ediyorum.",
     "sign_intent_official": "«{filename}» resmi belgesinin içeriğini okudum ve kabul ediyorum.",
     "sending_code": "İmza kodu gönderiliyor...",
     "code_sent": "«{filename}» için kod gönderildi. Teams'i kontrol et.",

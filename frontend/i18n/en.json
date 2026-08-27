@@ -417,14 +417,12 @@
     "agent_docs": "Help"
   },
   "esign": {
-    "sign_button": "Sign electronically",
     "sign_button_short": "Sign",
     "list_empty": "You have no documents to sign right now.",
     "preview_button": "Preview",
     "signed_badge": "Signed",
     "preview_failed": "Document preview failed.",
     "sign_request_error": "Error creating the signature request.",
-    "sign_intent": "I have read and agree to the content of the document \"{filename}\".",
     "sign_intent_official": "I have read and agree to the content of the official document \"{filename}\".",
     "sending_code": "Sending signing code...",
     "code_sent": "Code sent for \"{filename}\". Check Teams.",

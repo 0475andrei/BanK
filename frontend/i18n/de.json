@@ -417,14 +417,12 @@
     "agent_docs": "Hilfe"
   },
   "esign": {
-    "sign_button": "Elektronisch signieren",
     "sign_button_short": "Signieren",
     "list_empty": "Du hast derzeit keine Dokumente zu signieren.",
     "preview_button": "Vorschau",
     "signed_badge": "Signiert",
     "preview_failed": "Dokumentvorschau fehlgeschlagen.",
     "sign_request_error": "Fehler beim Erstellen der Signaturanfrage.",
-    "sign_intent": "Ich habe den Inhalt des Dokuments „{filename}“ gelesen und stimme zu.",
     "sign_intent_official": "Ich habe den Inhalt des offiziellen Dokuments „{filename}“ gelesen und stimme zu.",
     "sending_code": "Signaturcode wird gesendet...",
     "code_sent": "Code gesendet für „{filename}“. Prüfe Teams.",

@@ -113,16 +113,22 @@ async def create_sign_request(
     app/modules/chat/proposals_service.py), just triggered directly from a
     "Sign this document" action rather than from the AI tool loop.
 
+    ONLY admin-issued documents are signable. A document a user uploaded to
+    the chat themselves is reference material for the AI to answer questions
+    about - there is no counterparty, nothing was agreed, and a signature
+    over it would attest to nothing. Signing is reserved for what the bank
+    formally issues TO the user (see admin/service.py::
+    generate_and_send_document), which is also why the signature itself goes
+    through the stronger OTP+Face path rather than the ordinary
+    Face-or-password one (see confirm_admin_document below).
+
     NOT an AI tool on purpose: DocumentAgent's tool registry is deliberately
     limited to `read_document` alone (see app/ai/tools/document_tools.py's
     module docstring) so that a document's own text - untrusted input - can
-    never talk its way into a write. Routing a sign request through chat
-    would either have to violate that isolation or bounce the user's own
-    "sign this" request to a different agent's registry mid-conversation.
-    Simpler and safer: this is a direct, non-AI action the frontend calls
-    when the user clicks "Semnează", exactly the way a real e-sign flow
-    presents a specific document with a specific button rather than routing
-    the decision through a chatbot.
+    never talk its way into a write. This stays a direct, non-AI action the
+    frontend calls from the "Documente de semnat" list, exactly the way a
+    real e-sign flow presents a specific document with a specific button
+    rather than routing the decision through a chatbot.
 
     The document's own `sha256` is computed HERE, at request time, and
     carried in the proposal payload - `sign_document` (called only after
@@ -132,6 +138,10 @@ async def create_sign_request(
     document = await documents_service.get_document_with_content(
         supabase, str(user.id), document_id
     )
+    if document.get("issued_by_admin_id") is None:
+        raise ValidationError(
+            "Doar documentele emise de bancă pot fi semnate electronic."
+        )
     if document["conversation_id"] is None:
         raise ValidationError(
             "Acest document nu mai are o conversație asociată și nu poate fi semnat."

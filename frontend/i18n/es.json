@@ -417,14 +417,12 @@
     "agent_docs": "Ayuda"
   },
   "esign": {
-    "sign_button": "Firmar electrónicamente",
     "sign_button_short": "Firmar",
     "list_empty": "No tienes documentos por firmar en este momento.",
     "preview_button": "Vista previa",
     "signed_badge": "Firmado",
     "preview_failed": "No se pudo previsualizar el documento.",
     "sign_request_error": "Error al crear la solicitud de firma.",
-    "sign_intent": "He leído y acepto el contenido del documento «{filename}».",
     "sign_intent_official": "He leído y acepto el contenido del documento oficial «{filename}».",
     "sending_code": "Enviando código de firma...",
     "code_sent": "Código enviado para «{filename}». Revisa Teams.",

@@ -24,7 +24,18 @@ def _build_pdf_bytes(text: str = "Contract de test.") -> bytes:
     return pdf_bytes
 
 
-async def _seed_document(supabase, user, conversation, *, text: str = "Contract de test.") -> dict:
+async def _seed_document(
+    supabase, user, conversation, *, text: str = "Contract de test.", admin_issued: bool = True
+) -> dict:
+    """`admin_issued=True` (the default) is what every signable document
+    looks like: only documents the bank issued TO a user can be signed (see
+    esign_service.create_sign_request). The admin's id is seeded as the
+    user's own here - a shortcut, since these tests only need the column to
+    be non-null, and who issued it is covered by
+    test_admin_document_signing_api.py instead.
+
+    Pass `admin_issued=False` for a self-uploaded document, i.e. the case
+    signing must refuse."""
     content = _build_pdf_bytes(text)
     resp = (
         await supabase.table("documents")
@@ -38,6 +49,7 @@ async def _seed_document(supabase, user, conversation, *, text: str = "Contract 
                 "content": "\\x" + content.hex(),
                 "extracted_text": text,
                 "page_count": 1,
+                "issued_by_admin_id": str(user.id) if admin_issued else None,
             }
         )
         .execute()
@@ -72,6 +84,31 @@ async def test_create_sign_request_creates_pending_proposal(
     assert body["payload"]["document_sha256"] == hashlib.sha256(
         bytes.fromhex(document["content"].removeprefix("\\x"))
     ).hexdigest()
+
+
+async def test_create_sign_request_for_a_self_uploaded_document_is_refused(
+    authed_client, supabase, conversation_factory
+):
+    """A document the user uploaded to the chat themselves is reference
+    material for the AI to read, not something to sign - there is no
+    counterparty and nothing was agreed. Only what the bank issues TO them
+    is signable."""
+    client, user = authed_client
+    conversation = await conversation_factory(user)
+    document = await _seed_document(supabase, user, conversation, admin_issued=False)
+
+    resp = await client.post(
+        f"/api/v1/esign/documents/{document['id']}/sign-requests",
+        json={"intent": "Sunt de acord cu termenii."},
+    )
+    assert resp.status_code == 422, resp.text
+
+    # No proposal was created for it either - the refusal happens before any
+    # state is written, not after.
+    proposals = (
+        await supabase.table("proposals").select("id").eq("user_id", str(user.id)).execute()
+    ).data
+    assert proposals == []
 
 
 async def test_create_sign_request_for_someone_elses_document_returns_404(
