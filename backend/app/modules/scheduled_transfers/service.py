@@ -27,7 +27,11 @@ from app.core.audit import record_audit_event
 from app.core.exceptions import AppError, CurrencyMismatchError, NotFoundError, ValidationError
 from app.db.supabase_client import map_postgrest_error
 from app.modules.accounts import service as accounts_service
-from app.modules.scheduled_transfers.models import ScheduledTransferFrequency, ScheduledTransferStatus
+from app.modules.notifications import service as notifications_service
+from app.modules.scheduled_transfers.models import (
+    ScheduledTransferFrequency,
+    ScheduledTransferStatus,
+)
 from app.modules.scheduled_transfers.schemas import ScheduledTransferCreate
 from app.modules.users.schemas import UserRead
 
@@ -225,6 +229,16 @@ async def _execute_one(supabase: AsyncClient, row: dict) -> None:
         await supabase.table("scheduled_transfers").update(
             {"status": ScheduledTransferStatus.PAUSED.value, "last_error": str(exc)}
         ).eq("id", row["id"]).execute()
+        reason = str(exc).rstrip(".")
+        await notifications_service.create_notification(
+            supabase,
+            row["user_id"],
+            title="Transfer programat întrerupt",
+            body=(
+                f"Transferul tău programat a fost pus pe pauză și nu va mai rula "
+                f"automat: {reason}. Verifică-l în aplicație."
+            ),
+        )
         return
 
     now = datetime.now(UTC)

@@ -27,6 +27,7 @@ from app.modules.chat import conversations_service
 from app.modules.documents import service as documents_service
 from app.modules.documents.extractor import extract_pdf_text
 from app.modules.ledger import service as ledger_service
+from app.modules.notifications import service as notifications_service
 from app.modules.users.schemas import UserRead
 
 _USER_LIST_COLUMNS = (
@@ -276,6 +277,13 @@ async def generate_and_send_document(
         entity=f"documents:{document['id']}",
         metadata={"target_user_id": str(user_id), "title": title},
     )
+
+    await notifications_service.create_notification(
+        supabase,
+        user_id,
+        title="Ai un document nou de semnat",
+        body=f"Banca ți-a trimis documentul „{title}” pentru semnare electronică.",
+    )
     return document
 
 
@@ -443,7 +451,7 @@ async def update_card_order_status(
     """
     existing_resp = (
         await supabase.table("card_orders")
-        .select("id, status")
+        .select("id, status, account_id")
         .eq("id", str(order_id))
         .maybe_single()
         .execute()
@@ -469,6 +477,34 @@ async def update_card_order_status(
         entity=f"card_orders:{order_id}",
         metadata={"from": existing["status"], "to": status},
     )
+
+    # card_orders has no user_id of its own - same account -> user lookup
+    # list_card_orders above already does.
+    account_resp = (
+        await supabase.table("accounts")
+        .select("user_id")
+        .eq("id", existing["account_id"])
+        .maybe_single()
+        .execute()
+    )
+    account_data = account_resp.data if account_resp is not None else None
+    owner_id = account_data["user_id"] if account_data else None
+    if owner_id is not None:
+        titles = {
+            "shipped": "Cardul tău este pe drum",
+            "delivered": "Cardul tău a fost livrat",
+            "cancelled": "Comanda cardului tău a fost anulată",
+        }
+        bodies = {
+            "shipped": "Comanda ta de card fizic a fost expediată.",
+            "delivered": "Cardul tău fizic a fost livrat. Verifică-l în aplicație pentru activare.",
+            "cancelled": "Comanda ta de card fizic a fost anulată.",
+        }
+        if status in titles:
+            await notifications_service.create_notification(
+                supabase, owner_id, title=titles[status], body=bodies[status]
+            )
+
     return updated
 
 

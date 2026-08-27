@@ -2,6 +2,7 @@
 <html lang="en" data-i18n-title="dashboard.title">
 <head>
     <script>try { if (localStorage.getItem('bank_preferred_language') && localStorage.getItem('bank_preferred_language') !== 'ro') document.documentElement.classList.add('i18n-pending'); } catch (_) {}</script>
+    <script>try { if (localStorage.getItem('bank_theme') === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch (_) {}</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="dashboard.title">BanK Dashboard</title>
@@ -12,6 +13,10 @@
     <!-- Toggled by setFaceFlashlight() (api.js) whenever a face camera not
          inside a modal is running - see style.css for the layering. -->
     <div id="face-flashlight-overlay"></div>
+    <!-- New-notification pop-ups (see pollNotifications in app.js) - kept
+         separate from #notifications-panel below, which stays the bell's
+         click-to-open history. -->
+    <div id="notification-popup-container"></div>
     <div class="app-container">
         <!-- Sidebar Navigation -->
         <aside class="sidebar">
@@ -799,6 +804,7 @@
 
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="language.js"></script>
+    <script src="theme.js"></script>
     <script src="api.js"></script>
     <script src="app.js"></script>
 </body>

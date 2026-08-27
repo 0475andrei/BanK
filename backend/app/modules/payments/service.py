@@ -25,6 +25,7 @@ from app.modules.accounts import service as accounts_service
 from app.modules.auth.validation import validate_iban
 from app.modules.beneficiaries import service as beneficiaries_service
 from app.modules.face_auth import service as face_auth_service
+from app.modules.notifications import service as notifications_service
 from app.modules.payments.known_subscriptions import match_known_subscription_business
 from app.modules.payments.schemas import PaymentCreate
 from app.modules.users.schemas import UserRead
@@ -241,6 +242,21 @@ async def create_payment(
         raise
 
     payment = resp.data
+
+    # Not atomic with the money movement, same accepted limitation as the
+    # beneficiary upsert below - a failure here never blocks the payment
+    # itself, it just means the recipient finds out from their statement
+    # instead of the bell icon.
+    await notifications_service.create_notification(
+        supabase,
+        to_account["user_id"],
+        title="Ai primit bani",
+        body=(
+            f"Ai primit {payload.amount_minor / 100:.2f} {currency} de la "
+            f"{user.first_name} {user.last_name} în contul \"{to_account['name']}\"."
+        ),
+        category="money_received",
+    )
 
     if payload.save_beneficiary:
         await beneficiaries_service.upsert_beneficiary(
