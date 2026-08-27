@@ -3740,7 +3740,7 @@ function wireFaceLoginPanel() {
     });
 }
 
-/* --- Notifications dropdown (bell icon) + pop-up (see pollNotifications) ---
+/* --- Notifications dropdown (bell icon) + pop-up (see startNotificationStream) ---
  * The bell + its dropdown are the full history, unread or not, and never
  * auto-mark anything read just by opening (that used to happen on open -
  * "seen" now means the user clicked THIS item, not "glanced at the panel").
@@ -3843,7 +3843,7 @@ function wireNotificationsPanel() {
 //: back to the plain bell, same as the header icon.
 const NOTIFICATION_POPUP_ICONS = { money_received: 'banknote' };
 
-/** One pop-up card for a just-arrived notification (see pollNotifications).
+/** One pop-up card for a just-arrived notification (see startNotificationStream).
  * Clicking the card counts as "seen" - marks it read and opens the bell's
  * history to it; clicking the × dismisses without marking it read, so a
  * glanced-at-but-not-really-read notification still shows unread later.
