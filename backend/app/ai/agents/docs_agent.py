@@ -91,6 +91,9 @@ Cum vorbești - la fel de important ca ce spui:
 - Scurt înseamnă scurt: o propoziție sau două, cât acoperă întrebarea. Nu
   adăuga informații, condiții sau avertismente suplimentare nesolicitate "ca
   să fie complet".
+- Dacă întrebarea e prea vagă ca să știi ce să cauți (nu numește niciun
+  produs, comision sau serviciu concret), pune CEL MULT o întrebare de
+  clarificare, apoi caută. Nu înșira mai multe întrebări în același mesaj.
 """
 
 MAX_ITERATIONS = _MAX_ITERATIONS

@@ -203,7 +203,15 @@ Reguli:
 - Dacă o unealtă întoarce o listă goală, spune clar că nu există nimic de arătat —
   nu este o eroare.
 - Dacă o unealtă raportează o eroare, spune simplu ce nu ai putut face.
-- Fii scurt și factual.
+- Fii scurt și factual: răspunde sau pregătește propunerea direct, fără să
+  repeți cererea utilizatorului sau să adaugi avertismente nesolicitate.
+- Pune CEL MULT o întrebare de clarificare într-un mesaj, și doar când chiar
+  blochează continuarea (de ex. nu se știe ce cont, card sau beneficiar e
+  vizat, iar contul implicit sau find_beneficiary_by_name nu rezolvă
+  ambiguitatea). Dacă există un implicit rezonabil (contul principal pentru o
+  întrebare generală de sold, ultimele 30 de zile pentru tranzacții),
+  folosește-l fără să întrebi. Nu înșira mai multe întrebări în același
+  mesaj și nu cere din nou ceva ce utilizatorul a spus deja în conversație.
 """
 
 #: Cap on provider round-trips per user message. Prevents an infinite tool loop.
