@@ -1152,6 +1152,13 @@ async function confirmWithCredential(proposalId, authMethod, credential, card) {
         closeStepUpModal();
         markProposalCardResolved(card, 'confirmed');
         showToast(t('chat.proposal.confirm_success', 'Acțiunea a fost confirmată și executată cu succes!'));
+        // The direct transfer/payment forms already do this on their own
+        // success path - an AI-proposed one (transfer, payment, account
+        // open/close, card cancel, ...) executes here instead, at
+        // confirm-time, and was the one path that never re-fetched
+        // balances - the new amount was correct in the database but stayed
+        // invisible until a manual page reload.
+        void refreshDashboard();
         return proposal;
     } catch (err) {
         if (err.status === 409) {

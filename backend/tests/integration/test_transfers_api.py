@@ -31,6 +31,37 @@ async def test_create_transfer_moves_balance(authed_client, seed_balance_factory
     assert b_after["balance_minor"] == 2_500
 
 
+async def test_create_transfer_notifies_the_owner_with_the_money_category(
+    authed_client, seed_balance_factory
+):
+    """A transfer moves money into an account just as much as a payment
+    does - it gets the same real-time pop-up/animation on the frontend
+    (category="money_received", see notifications/bus.py), even though
+    transfers are strictly own-account-to-own-account (see
+    transfers/service.py's module docstring) rather than cross-user."""
+    client, _user = authed_client
+    a = (await client.post("/api/v1/accounts", json={"name": "A", "currency": "USD"})).json()
+    b = (await client.post("/api/v1/accounts", json={"name": "B", "currency": "USD"})).json()
+    await seed_balance_factory(a["id"], 10_000)
+
+    resp = await client.post(
+        "/api/v1/transfers",
+        json={
+            "from_account_id": a["id"],
+            "to_account_id": b["id"],
+            "amount_minor": 2_500,
+            "currency": "USD",
+        },
+        headers={"Idempotency-Key": "transfer-notif-1"},
+    )
+    assert resp.status_code == 201, resp.text
+
+    notifications = (await client.get("/api/v1/notifications")).json()
+    assert len(notifications) == 1
+    assert notifications[0]["category"] == "money_received"
+    assert notifications[0]["title"] == "Ai primit bani"
+
+
 async def test_transfer_requires_idempotency_key(authed_client, seed_balance_factory):
     client, _user = authed_client
     a = (await client.post("/api/v1/accounts", json={"name": "A", "currency": "USD"})).json()

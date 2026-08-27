@@ -25,6 +25,7 @@ from app.core.exceptions import (
 from app.db.supabase_client import map_postgrest_error
 from app.modules.accounts import service as accounts_service
 from app.modules.face_auth import service as face_auth_service
+from app.modules.notifications import service as notifications_service
 from app.modules.transfers.schemas import TransferCreate
 from app.modules.users.schemas import UserRead
 
@@ -107,6 +108,23 @@ async def create_transfer(
         if mapped is not None:
             raise mapped from exc
         raise
+
+    # Same category payments/service.py uses for "you got paid" - a
+    # transfer moves money into an account just as much as a payment does,
+    # so it gets the same real-time pop-up/animation on the frontend (see
+    # notifications/bus.py). Always this user's own notification (transfers
+    # are strictly own-account-to-own-account - see this module's docstring),
+    # not a cross-user event like the payments one.
+    await notifications_service.create_notification(
+        supabase,
+        user.id,
+        title="Ai primit bani",
+        body=(
+            f"{payload.amount_minor / 100:.2f} {currency} au fost transferați din "
+            f"\"{from_account['name']}\" în \"{to_account['name']}\"."
+        ),
+        category="money_received",
+    )
 
     return resp.data
 
