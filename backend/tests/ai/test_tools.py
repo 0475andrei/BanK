@@ -175,6 +175,8 @@ def test_all_banking_tools_are_registered(supabase):
         "list_transfers",
         "resolve_iban_holder",
         "find_beneficiary_by_name",
+        # Reads no user data at all - the BNR daily reference rates.
+        "convert_currency",
         "freeze_card",
         "unfreeze_card",
         "set_card_spending_limit",
@@ -331,6 +333,7 @@ def test_all_insights_tools_are_registered(supabase):
         "compute_spending_stats",
         "detect_anomalies",
         "compare_statement_to_ledger",
+        "convert_currency",
         # Step 15: not an analytical tool, but this agent's one way out.
         "handoff_to_agent",
     ]

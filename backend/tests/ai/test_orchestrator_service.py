@@ -322,6 +322,7 @@ def test_insights_agent_gets_only_its_own_tools():
         "compute_spending_stats",
         "detect_anomalies",
         "compare_statement_to_ledger",
+        "convert_currency",
         "handoff_to_agent",
     ]
     assert tools.get("list_cards") is None

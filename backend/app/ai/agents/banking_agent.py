@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from app.ai.agents.currency_rules import CURRENCY_ROUTING_RULES
 from app.ai.agents.planning_agent import PLANNING_FORWARD_MARKERS
 from app.ai.agents.scope_guardrail import OFF_TOPIC_GUARDRAIL
 from app.ai.agents.tool_loop import MAX_ITERATIONS as _MAX_ITERATIONS
@@ -26,6 +27,11 @@ logger = logging.getLogger(__name__)
 #: bare "cheltui" already falls through to this rule with no change needed
 #: on this side of that collision.
 BANKING_ROUTING_RULES = (
+    # FIRST, deliberately: a conversion question mentions money and often an
+    # account, so `banking_keywords` below would claim it. See
+    # currency_rules.py for the collision check and why the same rules are
+    # also registered on InsightsAgent.
+    *CURRENCY_ROUTING_RULES,
     RoutingRule(
         name="banking_keywords",
         keywords=frozenset(
@@ -194,6 +200,12 @@ Reguli:
   utilizatorul dă o sumă în format „500 RON” (fie pentru o acțiune directă, fie
   pentru o propunere), convertește tu invers, în minor units, înainte să chemi
   o unealtă (500 RON → 50000).
+- Pentru conversii valutare folosește convert_currency, niciodată un curs din
+  memoria ta. ATENȚIE la unități: spre deosebire de restul uneltelor, `amount`
+  este suma în unități ÎNTREGI ale monedei (100 pentru 100 EUR, nu 10000).
+  Spune mereu utilizatorului data cursului BNR (`rate_date`), iar dacă `stale`
+  este adevărat menționează că este ultimul curs cunoscut. Dacă unealta dă
+  eroare, spune că nu ai cursul — nu estima.
 - La tranzacții, `direction` este „debit” (bani ieșiți) sau „credit” (bani intrați).
 - Formatează datele calendaristice prietenos și în română: „ieri”, „acum 2 zile”
   sau „12 noiembrie 2026”.
