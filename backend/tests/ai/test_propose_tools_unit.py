@@ -164,22 +164,28 @@ async def test_propose_close_account_requires_an_active_conversation():
 # has read the proposal, tapped confirm, and proved their identity with Face
 # ID or a password - and used to surface as a raw English
 # "Transfer currency must match both accounts' currency." inside the
-# confirmation dialog of a Romanian app. Both tests below are about saying so
-# earlier, in the conversation, where the user can still act on it.
+# confirmation dialog of a Romanian app.
+#
+# Two accounts in DIFFERENT currencies are no longer refused at all: they are
+# converted at the BNR rate (see tests/ai/test_fx_transfers.py). What these
+# tests still hold is the other half of the same fix - the model's `currency`
+# argument is advisory and never decides anything.
 # ---------------------------------------------------------------------------
 
 
 class _TwoCurrencyQuery:
     """Answers with whichever account row was asked for, by id."""
 
+    # The row's `id` is a real UUID (the tool parses it before asking the
+    # ledger for a balance); the key is the opaque id the Context vouches for.
     _ROWS = {
         OWNED_ACCOUNT_IDS[0]: {
-            "id": OWNED_ACCOUNT_IDS[0],
+            "id": "aaaaaaaa-0000-0000-0000-000000000001",
             "name": "Cont Curent",
             "currency": "RON",
         },
         OWNED_ACCOUNT_IDS[1]: {
-            "id": OWNED_ACCOUNT_IDS[1],
+            "id": "aaaaaaaa-0000-0000-0000-000000000002",
             "name": "Cont Euro",
             "currency": "EUR",
         },
@@ -203,38 +209,28 @@ class _TwoCurrencyQuery:
 
 
 class _TwoCurrencySupabase:
+    """Two accounts, RON and EUR, and an empty RON account balance.
+
+    The zero balance is deliberate: it makes `propose_transfer` stop at its
+    funds check, which is the first thing `run` does - so these tests stay
+    about argument handling and never reach BNR.
+    """
+
     def table(self, *_a, **_kw):
         return _TwoCurrencyQuery()
 
+    def rpc(self, _name, _params):
+        from types import SimpleNamespace
 
-async def test_propose_transfer_refuses_two_accounts_in_different_currencies(context):
-    """It must fail HERE, not after Face ID."""
-    result = await ProposeTransferTool(_TwoCurrencySupabase()).execute(
-        ToolCall(
-            id="c1",
-            name="propose_transfer",
-            arguments={
-                "from_account_id": OWNED_ACCOUNT_IDS[0],
-                "to_account_id": OWNED_ACCOUNT_IDS[1],
-                "amount_minor": 10_000,
-                "currency": "RON",
-            },
-        ),
-        context,
-    )
+        class _Rpc:
+            async def execute(self):
+                return SimpleNamespace(data=0)
 
-    assert result.ok is False
-    # Romanian, and it names both accounts and both currencies so the user
-    # knows which pair to change rather than just that something was wrong.
-    assert "monede diferite" in (result.error or "")
-    assert "Cont Curent" in (result.error or "")
-    assert "Cont Euro" in (result.error or "")
-    assert "RON" in (result.error or "")
-    assert "EUR" in (result.error or "")
+        return _Rpc()
 
 
 async def test_propose_transfer_does_not_need_the_model_to_supply_a_currency(context):
-    """The field is advisory now. Omitting it entirely is not an error - the
+    """The field is advisory. Omitting it entirely is not a schema error - the
     account's own currency is what ends up on the proposal either way."""
     result = await ProposeTransferTool(_TwoCurrencySupabase()).execute(
         ToolCall(
@@ -249,10 +245,10 @@ async def test_propose_transfer_does_not_need_the_model_to_supply_a_currency(con
         context,
     )
 
-    # Still refused - for the currency MISMATCH, not for a missing argument.
+    # Refused for lack of funds, NOT for a missing argument.
     assert result.ok is False
     assert "invalid input" not in (result.error or "")
-    assert "monede diferite" in (result.error or "")
+    assert "Fonduri insuficiente" in (result.error or "")
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +297,10 @@ def _accounts(from_currency: str, to_currency: str):
     return _get_account
 
 
-async def test_confirm_refuses_a_transfer_between_two_currencies(monkeypatch):
+async def test_confirm_refuses_a_cross_currency_proposal_with_no_locked_rate(monkeypatch):
+    """A proposal built before cross-currency transfers existed, still
+    pending. There is no rate on it, and inventing one now would execute a
+    number the user never saw."""
     from app.core.exceptions import CurrencyMismatchError
     from app.modules.chat import proposals_service
 
@@ -313,9 +312,8 @@ async def test_confirm_refuses_a_transfer_between_two_currencies(monkeypatch):
         )
 
     message = str(exc.value)
-    assert "monede diferite" in message
+    assert "curs de schimb" in message
     assert "Cont Curent" in message and "Cont Euro" in message
-    assert "RON" in message and "EUR" in message
 
 
 async def test_confirm_refuses_a_proposal_labelled_with_the_wrong_currency(monkeypatch):

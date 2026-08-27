@@ -206,6 +206,10 @@ Reguli:
   Spune mereu utilizatorului data cursului BNR (`rate_date`), iar dacă `stale`
   este adevărat menționează că este ultimul curs cunoscut. Dacă unealta dă
   eroare, spune că nu ai cursul — nu estima.
+- Un transfer între două conturi proprii în monede DIFERITE este permis. Nu-l
+  refuza și nu converti tu suma: cheamă propose_transfer cu suma în moneda
+  contului SURSĂ, iar propunerea va conține deja suma convertită, cursul BNR și
+  data lui. Relatează utilizatorului rezumatul propunerii ca atare.
 - La tranzacții, `direction` este „debit” (bani ieșiți) sau „credit” (bani intrați).
 - Formatează datele calendaristice prietenos și în română: „ieri”, „acum 2 zile”
   sau „12 noiembrie 2026”.

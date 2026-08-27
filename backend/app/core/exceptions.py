@@ -67,6 +67,20 @@ class CurrencyMismatchError(AppError):
     default_message = "Currencies do not match."
 
 
+class ExchangeRateUnavailableError(AppError):
+    """No BNR rate could be obtained for a cross-currency transfer.
+
+    503 rather than 422: nothing about the request is wrong, an upstream we
+    depend on is simply not answering and has no cached answer either. The
+    only alternative would be inventing a rate, which is never an option -
+    see app/core/bnr_client.py.
+    """
+
+    status_code = 503
+    error_code = "exchange_rate_unavailable"
+    default_message = "Cursul valutar BNR nu este disponibil momentan."
+
+
 class SubscriptionPriceIncreaseError(AppError):
     """Raised by payments/service.py when a payment to a recognized
     recurring merchant costs more than the sender's last payment to that
