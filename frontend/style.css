@@ -14,6 +14,13 @@
     --warning-amber: #f59e0b;
     --border-color: rgba(255, 255, 255, 0.08);
 
+    /* The AI avatar's gradient (below) needs to stay vivid in both themes -
+       unlike --primary-teal, which gets darkened for the light theme so it
+       stays readable as text/borders on white. Kept out of the light-theme
+       override block on purpose: same value in both themes. */
+    --avatar-gradient-start: #2DD4BF;
+    --avatar-gradient-end: #3b82f6;
+
     /* Neutral tint used for subtle fills/hovers on top of a surface (a
        fraction of --text-main, in effect). Flipped to a dark tint in the
        light theme below so hover/fill states stay visible on white. */
@@ -985,12 +992,17 @@ body {
     height: 48px;
     flex-shrink: 0;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary-teal), #3b82f6);
+    background: linear-gradient(135deg, var(--avatar-gradient-start), var(--avatar-gradient-end));
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 24px;
     margin-right: 16px;
+    /* Always a saturated teal/blue fill regardless of theme, so the icon
+       needs to stay a fixed light color for contrast rather than following
+       --text-main (which turns dark navy in the light theme and would go
+       muddy against the teal end of the gradient). */
+    color: #fff;
 }
 
 .ai-info h2 { font-size: 18px; }
@@ -1019,12 +1031,13 @@ body {
     height: 32px;
     flex-shrink: 0;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary-teal), #3b82f6);
+    background: linear-gradient(135deg, var(--avatar-gradient-start), var(--avatar-gradient-end));
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 14px;
     margin-right: 12px;
+    color: #fff;
 }
 .message.user .avatar { margin-right: 0; margin-left: 12px; }
 
@@ -1299,7 +1312,37 @@ body {
     padding-bottom: 20px;
 }
 
+/* This card's own dark gradient look is fixed in both themes (like a real
+   bank card - see .virtual/.physical below), but its children (card number,
+   labels, status badge, the limit/cancel buttons) all read the page's
+   color custom properties for their text. Left alone, the light theme's
+   on-white values - dark navy text, darkened green/red/teal accents - would
+   render nearly unreadable against this permanently-dark surface. Re-pinning
+   every color property to its dark-theme value here, once, fixes all of
+   them at once instead of overriding each child selector individually. */
 .credit-card {
+    --bg-surface: #1A2235;
+    --bg-surface-hover: #232d46;
+    --text-main: #F8FAFC;
+    --text-muted: #94A3B8;
+    --primary-teal: #2DD4BF;
+    --primary-teal-hover: #1ebba6;
+    --secondary-blue: #3b82f6;
+    --income-green: #10B981;
+    --expense-red: #EF4444;
+    --frozen-blue: #7dd3fc;
+    --warning-amber: #f59e0b;
+    --border-color: rgba(255, 255, 255, 0.08);
+    --overlay-02: rgba(255, 255, 255, 0.02);
+    --overlay-03: rgba(255, 255, 255, 0.03);
+    --overlay-04: rgba(255, 255, 255, 0.04);
+    --overlay-05: rgba(255, 255, 255, 0.05);
+    --overlay-06: rgba(255, 255, 255, 0.06);
+    --overlay-08: rgba(255, 255, 255, 0.08);
+    --overlay-1: rgba(255, 255, 255, 0.1);
+    --overlay-2: rgba(255, 255, 255, 0.2);
+    --overlay-5: rgba(255, 255, 255, 0.5);
+
     min-width: 340px;
     height: 210px;
     border-radius: 20px;
@@ -1310,6 +1353,7 @@ body {
     position: relative;
     overflow: hidden;
     box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    color: var(--text-main);
 }
 
 .credit-card.virtual {
@@ -1401,19 +1445,6 @@ body {
 .card-eye-btn:hover {
     color: var(--text-main);
     border-color: var(--overlay-5);
-}
-
-/* The credit card itself keeps its own dark gradient in both themes (like a
-   real physical card), so its eye button stays on the original white-based
-   overlay regardless of --overlay-* above. */
-.credit-card .card-eye-btn {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.2);
-}
-
-.credit-card .card-eye-btn:hover {
-    color: #fff;
-    border-color: rgba(255, 255, 255, 0.5);
 }
 
 .chat-mic-btn {
