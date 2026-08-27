@@ -22,6 +22,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.core.exceptions import (
+    CurrencyMismatchError,
     FaceAuthMethodRequiredError,
     InvalidFaceConfirmationError,
     NotFoundError,
@@ -32,7 +33,7 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.security import verify_password
-from app.modules.accounts.service import close_account, open_account
+from app.modules.accounts.service import close_account, get_account, open_account
 from app.modules.auth import service as auth_service
 from app.modules.cards.service import cancel_card
 from app.modules.face_auth import service as face_auth_service
@@ -253,6 +254,11 @@ async def confirm_proposal(
     proposal = await get_proposal(supabase, user, proposal_id)
     await ensure_pending_and_not_expired(supabase, proposal)
 
+    # BEFORE the credential is looked at: a proposal that cannot possibly
+    # execute should not cost the user a Face ID scan first. See
+    # `_assert_still_executable`.
+    await _assert_still_executable(supabase, user, proposal)
+
     if auth_method == "password" and await _proposal_requires_face(supabase, user, proposal):
         raise FaceAuthMethodRequiredError()
 
@@ -309,6 +315,72 @@ async def reject_proposal(supabase: AsyncClient, user: UserRead, proposal_id: st
         .execute()
     )
     return updated.data[0]
+
+
+async def _assert_still_executable(
+    supabase: AsyncClient, user: UserRead, proposal: dict
+) -> None:
+    """Re-check a pending proposal against the accounts as they are NOW.
+
+    A proposal's payload is a snapshot taken when the AI built it, and
+    `_execute` below hands that snapshot to the real service functions. Those
+    functions validate - which is right - but they validate at EXECUTION
+    time, i.e. after the user has read the proposal, tapped confirm and
+    proved their identity. `create_transfer` requires the transfer and both
+    accounts to share one currency, and a snapshot that fails that check
+    surfaced as a raw English "Transfer currency must match both accounts'
+    currency." inside a Romanian confirmation dialog, at the worst possible
+    moment, with nothing the user could do about it.
+
+    Nothing here weakens a check downstream: every service function still
+    validates its own inputs exactly as before. This only moves the FIRST
+    honest "no" earlier, and says it in Romanian.
+
+    Only `transfer` is covered - it is the one whose payload carries a value
+    (`currency`) that can contradict the accounts it names. Payments take
+    their currency from the source account at execution, and the remaining
+    types name no second account to disagree with.
+    """
+    if proposal["proposal_type"] != "transfer":
+        return
+
+    payload = proposal["payload"]
+    try:
+        from_id = uuid.UUID(str(payload["from_account_id"]))
+        to_id = uuid.UUID(str(payload["to_account_id"]))
+    except (KeyError, ValueError):
+        # Not something this check can reason about. Leave it to `_execute`
+        # and the service functions, which reject it exactly as they did
+        # before this function existed - an early check must not become a new
+        # way for a request to fail.
+        return
+
+    from_account = await get_account(supabase, user, from_id)
+    to_account = await get_account(supabase, user, to_id)
+
+    if from_account["currency"] != to_account["currency"]:
+        raise CurrencyMismatchError(
+            f"Nu pot executa acest transfer: {from_account['name']} este în "
+            f"{from_account['currency']}, iar {to_account['name']} este în "
+            f"{to_account['currency']}. Un transfer între conturi cu monede "
+            "diferite nu este posibil. Respinge propunerea și cere-mi "
+            "transferul din nou, între două conturi în aceeași monedă."
+        )
+
+    # The accounts agree with each other but not with what the proposal says.
+    # This is a proposal built before propose_transfer started reading the
+    # currency off the account (it used to take the model's word for it), so
+    # the amount shown to the user was labelled with the wrong currency. It
+    # must NOT be quietly executed in the right one: 500 EUR is not the 500
+    # RON they read and approved.
+    stated_currency = payload.get("currency")
+    if stated_currency is not None and stated_currency != from_account["currency"]:
+        raise CurrencyMismatchError(
+            f"Această propunere a fost pregătită în {stated_currency}, dar "
+            f"{from_account['name']} este în {from_account['currency']}. Suma "
+            "afișată nu corespunde monedei contului, așa că nu o pot executa. "
+            "Respinge propunerea și cere-mi transferul din nou."
+        )
 
 
 async def _execute(

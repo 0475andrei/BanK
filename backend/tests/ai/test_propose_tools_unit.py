@@ -10,6 +10,8 @@ tests/integration/test_propose_tools.py and test_proposals_confirm.py.
 
 from __future__ import annotations
 
+import pytest
+
 from app.ai.context import Context
 from app.ai.schemas import ToolCall
 from app.ai.tools.propose_tools import (
@@ -251,3 +253,101 @@ async def test_propose_transfer_does_not_need_the_model_to_supply_a_currency(con
     assert result.ok is False
     assert "invalid input" not in (result.error or "")
     assert "monede diferite" in (result.error or "")
+
+
+# ---------------------------------------------------------------------------
+# The other half of the same fix: the CONFIRM path.
+#
+# The tools above stop a bad proposal being created. These cover proposals
+# that already exist - built before propose_transfer read the currency off
+# the account, or naming two accounts that no longer (or never did) agree.
+# `_execute` hands the stored payload straight to create_transfer, which
+# validates at execution time: after the user has read the proposal, tapped
+# confirm, and proved their identity. `_assert_still_executable` moves that
+# "no" ahead of the credential check and says it in Romanian.
+# ---------------------------------------------------------------------------
+
+
+def _transfer_proposal(currency: str) -> dict:
+    return {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "proposal_type": "transfer",
+        "payload": {
+            "from_account_id": "22222222-2222-2222-2222-222222222222",
+            "to_account_id": "33333333-3333-3333-3333-333333333333",
+            "amount_minor": 50_000,
+            "currency": currency,
+        },
+    }
+
+
+def _accounts(from_currency: str, to_currency: str):
+    rows = {
+        "22222222-2222-2222-2222-222222222222": {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "name": "Cont Curent",
+            "currency": from_currency,
+        },
+        "33333333-3333-3333-3333-333333333333": {
+            "id": "33333333-3333-3333-3333-333333333333",
+            "name": "Cont Euro",
+            "currency": to_currency,
+        },
+    }
+
+    async def _get_account(_supabase, _user, account_id):
+        return rows[str(account_id)]
+
+    return _get_account
+
+
+async def test_confirm_refuses_a_transfer_between_two_currencies(monkeypatch):
+    from app.core.exceptions import CurrencyMismatchError
+    from app.modules.chat import proposals_service
+
+    monkeypatch.setattr(proposals_service, "get_account", _accounts("RON", "EUR"))
+
+    with pytest.raises(CurrencyMismatchError) as exc:
+        await proposals_service._assert_still_executable(
+            None, None, _transfer_proposal("RON")
+        )
+
+    message = str(exc.value)
+    assert "monede diferite" in message
+    assert "Cont Curent" in message and "Cont Euro" in message
+    assert "RON" in message and "EUR" in message
+
+
+async def test_confirm_refuses_a_proposal_labelled_with_the_wrong_currency(monkeypatch):
+    """A stale proposal must not be quietly executed in the RIGHT currency:
+    500 EUR is not the 500 RON the user read and approved."""
+    from app.core.exceptions import CurrencyMismatchError
+    from app.modules.chat import proposals_service
+
+    monkeypatch.setattr(proposals_service, "get_account", _accounts("RON", "RON"))
+
+    with pytest.raises(CurrencyMismatchError) as exc:
+        await proposals_service._assert_still_executable(
+            None, None, _transfer_proposal("EUR")
+        )
+
+    assert "nu corespunde monedei contului" in str(exc.value)
+
+
+async def test_confirm_lets_a_consistent_transfer_through(monkeypatch):
+    from app.modules.chat import proposals_service
+
+    monkeypatch.setattr(proposals_service, "get_account", _accounts("RON", "RON"))
+
+    # No exception is the assertion.
+    await proposals_service._assert_still_executable(None, None, _transfer_proposal("RON"))
+
+
+async def test_confirm_does_not_second_guess_other_proposal_types():
+    """Only a transfer carries a currency that can contradict its accounts."""
+    from app.modules.chat import proposals_service
+
+    for proposal_type in ("payment", "open_account", "close_account", "cancel_card"):
+        await proposals_service._assert_still_executable(
+            None, None, {"proposal_type": proposal_type, "payload": {}}
+        )
