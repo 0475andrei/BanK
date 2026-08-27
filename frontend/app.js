@@ -760,28 +760,64 @@ function pickVoiceForLocale(locale) {
         || null;
 }
 
+/** Asks the backend's Azure Speech endpoint (app/modules/speech) to
+ * synthesize `text` in `locale`, returning a playable object URL - or null
+ * if that service isn't configured or reachable, in which case the caller
+ * falls back to the browser's own (much more limited) SpeechSynthesis.
+ * Deliberately a raw fetch, not apiFetch: apiFetch always parses the body
+ * as JSON, but a successful response here is an audio/mpeg blob. */
+async function fetchSpeechAudio(text, locale) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/speech`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, language: locale }),
+        });
+        if (!response.ok) return null;
+        return URL.createObjectURL(await response.blob());
+    } catch {
+        return null; // Network error, backend down, etc.
+    }
+}
+
 // Only one message reads aloud at a time - starting another stops whichever
 // is currently playing (and resets its button) rather than overlapping.
 let activeSpeech = null;
 
 /** Cancels any in-progress read-aloud and resets its button's icon. Called
  * whenever the chat transcript itself is torn down (new conversation,
- * switching to a different saved one) - otherwise the utterance would keep
- * playing over a transcript it no longer belongs to, with no way to stop it
- * since its button is gone with the rest of the old messages. */
+ * switching to a different saved one) - otherwise playback would continue
+ * over a transcript it no longer belongs to, with no way to stop it since
+ * its button is gone with the rest of the old messages.
+ *
+ * Clears activeSpeech BEFORE calling entry.stop(), not after: stopping
+ * playback (audio.pause(), speechSynthesis.cancel()) can fire that
+ * mechanism's own end/error handler synchronously, and that handler also
+ * touches activeSpeech (see buildMessageSpeakButton's `finish`) - clearing
+ * first means a reentrant call sees "nothing active" and no-ops, rather
+ * than nulling this function's own local reference to the entry it still
+ * needs to call .reset() on. */
 function stopMessageSpeech() {
     if (!activeSpeech) return;
-    window.speechSynthesis?.cancel();
-    activeSpeech.reset();
+    const entry = activeSpeech;
     activeSpeech = null;
+    entry.stop();
+    entry.reset();
 }
 
-/** Small read-aloud control appended under a real AI reply, next to the copy
- * button (see appendChatBubble above). Speaks the same plain-text message
- * the copy button copies, detecting that message's own language (see
- * detectMessageLanguage) and speaking it with a matching installed voice
- * (see pickVoiceForLocale) rather than assuming the conversation's UI
- * language and the browser's default voice are both right. */
+/** Small read-aloud control appended under a real AI reply, next to the
+ * copy button (see appendChatBubble above). Speaks the same plain-text
+ * message the copy button copies, detecting its language (see
+ * detectMessageLanguage) so it's read back in the right one rather than
+ * assuming the conversation's UI language always matches.
+ *
+ * Prefers the backend's Azure Speech endpoint (app/modules/speech) - one
+ * configured multilingual neural voice, fluent in whatever language is
+ * requested - falling back to the browser's own SpeechSynthesis (see
+ * pickVoiceForLocale) only when that service is unset or unreachable,
+ * since browser/OS voice coverage for anything beyond English is
+ * inconsistent at best. */
 function buildMessageSpeakButton(text) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -796,31 +832,64 @@ function buildMessageSpeakButton(text) {
         if (window.lucide) lucide.createIcons();
     };
 
-    button.addEventListener('click', () => {
-        if (!window.speechSynthesis) return;
-
-        // A second click on the message already playing stops it - the icon
-        // (see below) shows a stop glyph while speaking for exactly this.
+    button.addEventListener('click', async () => {
+        // A second click on the message already playing (or still loading -
+        // see the placeholder activeSpeech entry below) stops it - the icon
+        // shows a stop glyph for exactly this the whole time.
         if (activeSpeech && activeSpeech.button === button) {
             stopMessageSpeech();
             return;
         }
         stopMessageSpeech();
 
+        button.classList.add('is-speaking');
+        button.innerHTML = '<i data-lucide="square" class="icon"></i>';
+        if (window.lucide) lucide.createIcons();
+
+        const finish = () => {
+            if (activeSpeech && activeSpeech.button === button) activeSpeech = null;
+            reset();
+        };
+        // Placeholder entry (stop is a no-op) so a click while the request
+        // below is still in flight is recognised as "stop this one" above,
+        // and the guard right after the await sees it was cancelled.
+        activeSpeech = { button, reset, stop: () => {} };
+
         const locale = SPEECH_LOCALES[detectMessageLanguage(text)] || 'ro-RO';
+        const audioUrl = await fetchSpeechAudio(text, locale);
+
+        if (!activeSpeech || activeSpeech.button !== button) {
+            // Stopped, or superseded by another message, while the request
+            // was in flight - don't resurrect playback for a click that
+            // already asked to cancel.
+            if (audioUrl) URL.revokeObjectURL(audioUrl);
+            return;
+        }
+
+        if (audioUrl) {
+            const audio = new Audio(audioUrl);
+            audio.addEventListener('ended', finish);
+            audio.addEventListener('error', finish);
+            activeSpeech.stop = () => {
+                audio.pause();
+                URL.revokeObjectURL(audioUrl);
+            };
+            audio.play().catch(finish);
+            return;
+        }
+
+        // Backend unavailable - fall back to whatever voice the browser
+        // itself has for this language (see pickVoiceForLocale).
+        if (!window.speechSynthesis) {
+            finish();
+            return;
+        }
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = locale;
         const voice = pickVoiceForLocale(locale);
         if (voice) utterance.voice = voice;
-        utterance.onend = utterance.onerror = () => {
-            if (activeSpeech && activeSpeech.button === button) activeSpeech = null;
-            reset();
-        };
-
-        activeSpeech = { button, reset };
-        button.classList.add('is-speaking');
-        button.innerHTML = '<i data-lucide="square" class="icon"></i>';
-        if (window.lucide) lucide.createIcons();
+        utterance.onend = utterance.onerror = finish;
+        activeSpeech.stop = () => window.speechSynthesis.cancel();
         window.speechSynthesis.speak(utterance);
     });
 

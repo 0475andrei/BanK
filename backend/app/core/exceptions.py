@@ -307,3 +307,22 @@ class AIProviderMisconfiguredError(AppError):
     status_code = 500
     error_code = "ai_provider_misconfigured"
     default_message = "AI provider is misconfigured"
+
+
+class SpeechServiceUnavailableError(AppError):
+    """AZURE_SPEECH_* is unset or incomplete - see
+    Settings.require_azure_speech(). Fails closed rather than silently
+    returning no audio, same reasoning as AIServiceUnavailableError; the
+    frontend falls back to the browser's own SpeechSynthesis on this."""
+
+    status_code = 503
+    error_code = "speech_service_unavailable"
+    default_message = "Read-aloud is not available right now."
+
+
+class SpeechProviderError(AppError):
+    """The upstream Azure Speech call failed (network, auth, quota, ...)."""
+
+    status_code = 502
+    error_code = "speech_provider_error"
+    default_message = "Text-to-speech request failed"

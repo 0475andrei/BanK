@@ -136,6 +136,31 @@ class Settings(BaseSettings):
     # can be rotated without invalidating signatures made under the old one.
     ESIGN_KEY_ID: str = "esign-dev-1"
 
+    # ------------------------------------------------------------------
+    # Azure AI Speech - text-to-speech for the chat "read aloud" button
+    # (app/modules/speech). A separate Azure resource from Azure OpenAI
+    # above (Project Settings > Keys and Endpoint on the Speech - or
+    # multi-service Foundry - resource).
+    # ------------------------------------------------------------------
+    # Full resource endpoint, e.g. https://<resource>.cognitiveservices.azure.com
+    # Either this or AZURE_SPEECH_REGION is required; this one wins if both
+    # are set (see require_azure_speech below).
+    AZURE_SPEECH_ENDPOINT: str | None = None
+    # Falls back to constructing the standard regional endpoint
+    # (https://<region>.tts.speech.microsoft.com) when AZURE_SPEECH_ENDPOINT
+    # is unset - e.g. "westeurope", not a full URL.
+    AZURE_SPEECH_REGION: str | None = None
+    AZURE_SPEECH_KEY: str | None = None
+    # A "Multilingual" neural voice (Azure names these explicitly, e.g.
+    # "...MultilingualNeural") is what makes one AZURE_SPEECH_VOICE able to
+    # speak every language app.ai/frontend support fluently: synthesize()
+    # wraps the text in an SSML <lang> tag naming the target language, which
+    # this style of voice honors, rather than needing a different voice
+    # picked per language.
+    AZURE_SPEECH_VOICE: str = "en-US-AndrewMultilingualNeural"
+    # Fallback SSML language when a caller doesn't name one.
+    AZURE_SPEECH_LANGUAGE: str = "en-US"
+
     @field_validator("AZURE_OPENAI_ENDPOINT")
     @classmethod
     def _normalise_endpoint(cls, value: str | None) -> str | None:
@@ -257,6 +282,38 @@ class Settings(BaseSettings):
             )
         return self.ESIGN_PRIVATE_KEY
 
+    def require_azure_speech(self) -> "AzureSpeechConfig":
+        """Validated Azure Speech config, or raise with an actionable message.
+
+        AZURE_SPEECH_ENDPOINT wins when both it and AZURE_SPEECH_REGION are
+        set; REGION only exists to build the standard regional endpoint for
+        a deployment that names a region instead of a full resource URL.
+        """
+        endpoint = self.AZURE_SPEECH_ENDPOINT
+        if not endpoint and self.AZURE_SPEECH_REGION:
+            endpoint = f"https://{self.AZURE_SPEECH_REGION.strip()}.tts.speech.microsoft.com"
+        missing = [
+            name
+            for name, value in (
+                ("AZURE_SPEECH_ENDPOINT or AZURE_SPEECH_REGION", endpoint),
+                ("AZURE_SPEECH_KEY", self.AZURE_SPEECH_KEY),
+            )
+            if not value
+        ]
+        if missing:
+            raise ConfigurationError(
+                "Missing Azure Speech configuration: "
+                + ", ".join(missing)
+                + f". Add them to {_BACKEND_DIR / '.env'} (see .env.example)."
+            )
+        assert endpoint and self.AZURE_SPEECH_KEY
+        return AzureSpeechConfig(
+            endpoint=endpoint,
+            key=self.AZURE_SPEECH_KEY,
+            voice=self.AZURE_SPEECH_VOICE,
+            default_language=self.AZURE_SPEECH_LANGUAGE,
+        )
+
 
 class AzureOpenAIConfig(BaseSettings):
     """The Azure values, proven present. Never logged."""
@@ -276,6 +333,17 @@ class DocumentIntelligenceConfig(BaseSettings):
 
     endpoint: str
     key: str
+
+
+class AzureSpeechConfig(BaseSettings):
+    """The Azure Speech values, proven present. Never logged."""
+
+    model_config = SettingsConfigDict(extra="forbid")
+
+    endpoint: str
+    key: str
+    voice: str
+    default_language: str
 
 
 settings = Settings()
