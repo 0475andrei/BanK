@@ -421,14 +421,12 @@
     "agent_docs": "Aide"
   },
   "esign": {
-    "sign_button": "Signer électroniquement",
     "sign_button_short": "Signer",
     "list_empty": "Vous n'avez aucun document à signer pour le moment.",
     "preview_button": "Aperçu",
     "signed_badge": "Signé",
     "preview_failed": "L'aperçu du document a échoué.",
     "sign_request_error": "Erreur lors de la création de la demande de signature.",
-    "sign_intent": "J'ai lu et j'accepte le contenu du document « {filename} ».",
     "sign_intent_official": "J'ai lu et j'accepte le contenu du document officiel « {filename} ».",
     "sending_code": "Envoi du code de signature...",
     "code_sent": "Code envoyé pour « {filename} ». Vérifiez Teams.",

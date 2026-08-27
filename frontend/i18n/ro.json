@@ -421,14 +421,12 @@
     "agent_docs": "Ajutor"
   },
   "esign": {
-    "sign_button": "Semnează electronic",
     "sign_button_short": "Semnează",
     "list_empty": "Nu ai documente de semnat momentan.",
     "preview_button": "Previzualizează",
     "signed_badge": "Semnat",
     "preview_failed": "Previzualizarea documentului a eșuat.",
     "sign_request_error": "Eroare la crearea cererii de semnătură.",
-    "sign_intent": "Am citit și sunt de acord cu conținutul documentului „{filename}”.",
     "sign_intent_official": "Am citit și sunt de acord cu conținutul documentului oficial „{filename}”.",
     "sending_code": "Se trimite codul de semnare...",
     "code_sent": "Cod trimis pentru „{filename}”. Verifică Teams.",

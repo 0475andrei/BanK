@@ -2354,25 +2354,6 @@ html.i18n-pending body { visibility: hidden; }
 }
 .document-chip-close:hover { color: var(--expense-red); }
 
-.document-chip-sign {
-    background: none;
-    border: 1px solid var(--primary-teal);
-    border-radius: var(--border-radius-sm);
-    color: var(--primary-teal);
-    cursor: pointer;
-    font-size: 12px;
-    line-height: 1;
-    padding: 4px 8px;
-    white-space: nowrap;
-}
-.document-chip-sign:hover { background-color: var(--primary-teal); color: #fff; }
-.document-chip-sign:disabled { opacity: 0.6; cursor: default; }
-
-#document-sign-card-container:empty { display: none; }
-#document-sign-card-container .human-in-the-loop-card {
-    margin: 12px 20px 0;
-}
-
 .documents-to-sign-list {
     display: flex;
     flex-direction: column;

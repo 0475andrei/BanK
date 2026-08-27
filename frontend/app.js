@@ -338,13 +338,6 @@ function renderDocumentChip(document_) {
     label.textContent = `${document_.page_count} pag. · ${document_.filename}`;
     chip.appendChild(label);
 
-    const signBtn = document.createElement('button');
-    signBtn.type = 'button';
-    signBtn.className = 'document-chip-sign';
-    signBtn.textContent = t('esign.sign_button', 'Semnează electronic');
-    signBtn.addEventListener('click', () => handleSignDocument(document_, signBtn));
-    chip.appendChild(signBtn);
-
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'document-chip-close';
@@ -368,39 +361,6 @@ function clearActiveDocument() {
     if (chip) {
         chip.hidden = true;
         chip.innerHTML = '';
-    }
-    const signContainer = document.getElementById('document-sign-card-container');
-    if (signContainer) signContainer.innerHTML = '';
-}
-
-/** "Semnează electronic" on the attached document's chip. Deliberately a
- * direct REST call (POST /esign/documents/{id}/sign-requests), not a chat
- * message - the AI's DocumentAgent has no write tools at all (see
- * backend app/ai/tools/document_tools.py), so a real sign action has to
- * come from an explicit user click, never from asking the chatbot to do it.
- *
- * The call only creates a PENDING proposal - it renders through the exact
- * same confirm/reject card and Face ID/password step-up modal as any other
- * AI-proposed action (see renderProposalCard/openStepUpModal above), because
- * the backend returns the same ProposalRead shape. */
-async function handleSignDocument(document_, triggerBtn) {
-    const container = document.getElementById('document-sign-card-container');
-    if (!container) return;
-
-    triggerBtn.disabled = true;
-    try {
-        const proposal = await apiFetch(`/esign/documents/${document_.id}/sign-requests`, {
-            method: 'POST',
-            body: JSON.stringify({
-                intent: t('esign.sign_intent', 'Am citit și sunt de acord cu conținutul documentului „{filename}”.', { filename: document_.filename }),
-            }),
-        });
-        container.innerHTML = '';
-        renderProposalCard(proposal, container);
-        triggerBtn.hidden = true;
-    } catch (err) {
-        showToast(err.message || t('esign.sign_request_error', 'Eroare la crearea cererii de semnătură.'));
-        triggerBtn.disabled = false;
     }
 }
 
@@ -1654,11 +1614,14 @@ async function previewDocumentPdf(path) {
     }
 }
 
-/** Creates the sign-request proposal (same endpoint the self-uploaded-
- * document "Semnează electronic" chip button uses - see handleSignDocument)
- * then opens the OTP+Face modal for it, instead of the generic proposal
- * card + step-up modal - an admin-issued document never goes through
- * POST /chat/proposals/{id}/confirm. */
+/** Creates the sign-request proposal, then opens the OTP+Face modal for it,
+ * instead of the generic proposal card + step-up modal - an admin-issued
+ * document never goes through POST /chat/proposals/{id}/confirm.
+ *
+ * This is now the ONLY way into e-signing: documents a user uploads to the
+ * chat themselves are read-only material for the AI to answer questions
+ * about, never something to sign. Only what the bank formally issues to
+ * them carries a signature. */
 async function handleSignAdminDocument(doc, triggerBtn) {
     triggerBtn.disabled = true;
     try {

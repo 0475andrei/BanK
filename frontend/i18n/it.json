@@ -421,14 +421,12 @@
     "agent_docs": "Aiuto"
   },
   "esign": {
-    "sign_button": "Firma elettronicamente",
     "sign_button_short": "Firma",
     "list_empty": "Al momento non hai documenti da firmare.",
     "preview_button": "Anteprima",
     "signed_badge": "Firmato",
     "preview_failed": "Anteprima del documento non riuscita.",
     "sign_request_error": "Errore nella creazione della richiesta di firma.",
-    "sign_intent": "Ho letto e accetto il contenuto del documento «{filename}».",
     "sign_intent_official": "Ho letto e accetto il contenuto del documento ufficiale «{filename}».",
     "sending_code": "Invio del codice di firma...",
     "code_sent": "Codice inviato per «{filename}». Controlla Teams.",

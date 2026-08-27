@@ -8,11 +8,16 @@
     // could drift out of sync, leaving browsers stuck on a stale bundle that
     // rendered raw "section.key" strings for any key added after their cache
     // was written.
-    const I18N_VERSION = 22;
+    const I18N_VERSION = 23;
     const CACHE_PREFIX = `bank_i18n_v${I18N_VERSION}:`;
     const DEFAULT_LANGUAGE = 'ro';
     const LANGUAGES = { ro: 'Română', en: 'English', uk: 'Українська', hu: 'Magyar', tr: 'Türkçe', it: 'Italiano', es: 'Español', fr: 'Français', de: 'Deutsch' };
-    const bundles = new Map();  
+    const bundles = new Map();
+    // Every translated text node's ORIGINAL (untranslated) string, keyed by
+    // the DOM node itself. translateTextNode always re-translates FROM this,
+    // never from the node's current (possibly already-translated) text -
+    // without it, switching language A -> B -> A would translate B's output
+    // as if it were source text, corrupting the page instead of restoring it.
     const sourceText = new WeakMap();
     let activeBundle = {};
 
@@ -81,6 +86,13 @@
     function interpolate(value, params = {}) {
         return String(value).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? `{${name}}`));
     }
+    // Three-tier lookup, in order: (1) `value` as a dotted "section.key" path
+    // into the bundle - the normal case; (2) `value` as a literal bare key
+    // inside the "common" section - lets markup/JS pass a short key without
+    // knowing/repeating its section; (3) that same bare key searched across
+    // EVERY section, as a last resort for a key whose section the caller got
+    // wrong or omitted. Falls through to returning `value` itself unchanged
+    // (never throws) so a missing translation shows the key, not a crash.
     function translate(value, params = {}) {
         if (!value) return value;
         const result = value.split('.').reduce((current, part) => current?.[part], activeBundle);
@@ -94,6 +106,11 @@
     function translateTextNode(node) {
         if (!node.nodeValue.trim()) return;
         const parent = node.parentElement;
+        // .notranslate marks browser/OS "offer to translate this page"
+        // hints off-limits to OUR translator too (e.g. proper nouns) - except
+        // inside .language-selector, which is itself marked .notranslate
+        // (so a browser translate feature never mangles it) but still needs
+        // ITS OWN option labels (the language names) run through our i18n.
         if (!parent || parent.closest('script, style, [data-i18n-ignore]') || (parent.closest('.notranslate') && !parent.closest('.language-selector'))) return;
         const original = sourceText.get(node) || node.nodeValue;
         sourceText.set(node, original);
@@ -108,6 +125,13 @@
             try { params = element.dataset.i18nParams ? JSON.parse(element.dataset.i18nParams) : {}; } catch { /* Ignore malformed optional metadata. */ }
             element.textContent = translate(key, params);
         }
+        // Same anti-double-translation guard as `sourceText` above, but for
+        // attributes instead of text nodes (a WeakMap can't key off an
+        // attribute, so the original is stashed in a sibling DOM attribute
+        // instead): `data-i18n-source-${attribute}` is written once, on
+        // first translation, and every later re-translation (language
+        // switch) reads FROM that stashed original - never from the
+        // attribute's current, possibly-already-translated value.
         ['placeholder', 'title', 'aria-label'].forEach((attribute) => {
             const source = `data-i18n-source-${attribute}`;
             const keyAttribute = `data-i18n-${attribute}`;
@@ -167,12 +191,22 @@
     window.refreshTranslations = () => translatePage();
     document.addEventListener('DOMContentLoaded', async () => {
         addSelector();
+        // app.js/admin.js render most of the UI (proposal cards, chat
+        // history, notification lists, ...) AFTER this file's initial pass,
+        // via plain DOM APIs that know nothing about i18n - this observer is
+        // what actually translates that later content, by re-running the
+        // same translate functions on every node it sees appended anywhere
+        // in the page.
         new MutationObserver((mutations) => mutations.forEach((mutation) => mutation.addedNodes.forEach((node) => {
             if (node.nodeType === Node.TEXT_NODE) translateTextNode(node);
             else if (node.nodeType === Node.ELEMENT_NODE) translatePage(node);
         }))).observe(document.body, { childList: true, subtree: true });
         const language = preferredLanguage();
         try { await activateLanguage(language); } catch { document.documentElement.classList.remove('i18n-pending'); }
+        // Warm the cache for every OTHER language in the background (fire
+        // and forget, errors ignored) so switching languages later is
+        // instant instead of waiting on a fetch - never blocks the page's
+        // own load on languages nobody may ever select.
         Object.keys(LANGUAGES).filter((code) => code !== language).forEach((code) => loadBundle(code).catch(() => {}));
     });
 })();
