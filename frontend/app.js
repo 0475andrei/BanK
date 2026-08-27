@@ -1584,6 +1584,7 @@ async function initDashboard() {
     wireAddBeneficiaryForm();
     wireScheduledTransfersModal();
     wireHeaderSearch();
+    startNotificationPolling();
 
     await loadAccountProducts();
     await refreshDashboard();
@@ -3739,16 +3740,41 @@ function wireFaceLoginPanel() {
     });
 }
 
-/* --- Notifications dropdown (bell icon) --- */
+/* --- Notifications dropdown (bell icon) + pop-up (see pollNotifications) ---
+ * The bell + its dropdown are the full history, unread or not, and never
+ * auto-mark anything read just by opening (that used to happen on open -
+ * "seen" now means the user clicked THIS item, not "glanced at the panel").
+ * The pop-up is the separate, one-off "something just happened" moment. */
+
+//: Caps the badge's own text at "9+" rather than growing arbitrarily wide
+//: next to the bell icon - the exact count is always one click away in the
+//: dropdown anyway.
+function formatBadgeCount(count) {
+    return count > 9 ? '9+' : String(count);
+}
 
 async function refreshNotificationsBadge() {
     const badge = document.getElementById('notifications-badge');
     try {
         const { count } = await apiFetch('/notifications/unread-count');
         badge.hidden = count === 0;
+        badge.textContent = count === 0 ? '' : formatBadgeCount(count);
     } catch {
         badge.hidden = true;
     }
+}
+
+/** Marks one notification read (server + the badge), independent of
+ * whichever UI surface (dropdown row or pop-up) triggered it. */
+async function markNotificationSeen(id) {
+    try {
+        await apiFetch(`/notifications/${id}/mark-read`, { method: 'POST' });
+    } catch {
+        // Best-effort: a failed mark-read leaves the item unread rather than
+        // lying about it locally - the next list/badge refresh reflects
+        // reality either way.
+    }
+    refreshNotificationsBadge();
 }
 
 function renderNotifications(notifications) {
@@ -3758,7 +3784,7 @@ function renderNotifications(notifications) {
         return;
     }
     list.innerHTML = notifications.map(n => `
-        <div class="notification-item ${n.read_at ? '' : 'unread'}">
+        <div class="notification-item ${n.read_at ? '' : 'unread'}" data-id="${n.id}">
             <div class="notification-dot"></div>
             <div>
                 <div class="notification-title">${escapeHTML(n.title)}</div>
@@ -3767,25 +3793,26 @@ function renderNotifications(notifications) {
             </div>
         </div>
     `).join('');
+
+    list.querySelectorAll('.notification-item.unread').forEach(item => {
+        item.addEventListener('click', async () => {
+            item.classList.remove('unread');
+            await markNotificationSeen(item.dataset.id);
+        }, { once: true });
+    });
 }
 
 async function loadNotifications() {
     const list = document.getElementById('notifications-list');
     try {
-        const notifications = await apiFetch('/notifications');
-        renderNotifications(notifications);
-        if (notifications.some(n => !n.read_at)) {
-            await apiFetch('/notifications/mark-read', { method: 'POST' });
-            document.getElementById('notifications-badge').hidden = true;
-        }
+        renderNotifications(await apiFetch('/notifications'));
     } catch (err) {
         list.innerHTML = `<div class="empty-state">${escapeHTML(t('dynamic.load_notifications_error', 'Nu s-au putut încărca notificările: {message}', { message: err.message }))}</div>`;
     }
 }
 
 /** Sets up the auto-hide notifications dropdown: opens on click of the
- * header bell, closes on an outside click or Escape. Loads the list and
- * marks everything read (clearing the badge) each time it's opened. */
+ * header bell, closes on an outside click or Escape. */
 function wireNotificationsPanel() {
     const panel = document.getElementById('notifications-panel');
     const trigger = document.getElementById('notifications-btn');
@@ -3810,6 +3837,103 @@ function wireNotificationsPanel() {
     });
 
     refreshNotificationsBadge();
+}
+
+//: Icon per known category - anything else (including no category) falls
+//: back to the plain bell, same as the header icon.
+const NOTIFICATION_POPUP_ICONS = { money_received: 'banknote' };
+
+/** One pop-up card for a just-arrived notification (see pollNotifications).
+ * Clicking the card counts as "seen" - marks it read and opens the bell's
+ * history to it; clicking the × dismisses without marking it read, so a
+ * glanced-at-but-not-really-read notification still shows unread later.
+ * Auto-dismisses either way after DISMISS_MS so these never pile up. */
+function showNotificationPopup(notification) {
+    const container = document.getElementById('notification-popup-container');
+    if (!container) return;
+
+    const isMoney = notification.category === 'money_received';
+    const card = document.createElement('div');
+    card.className = `notification-popup${isMoney ? ' is-money' : ''}`;
+
+    const icon = NOTIFICATION_POPUP_ICONS[notification.category] || 'bell';
+    card.innerHTML = `
+        <div class="notification-popup-icon"><i data-lucide="${icon}" class="icon"></i></div>
+        <div>
+            <div class="notification-popup-title">${escapeHTML(notification.title)}</div>
+            <div class="notification-popup-text">${escapeHTML(notification.body)}</div>
+        </div>
+        <button type="button" class="notification-popup-close" aria-label="${escapeHTML(t('common.Anulează', 'Close'))}">×</button>
+        ${isMoney ? '<span class="money-particle">💰</span><span class="money-particle">💰</span><span class="money-particle">💰</span>' : ''}
+    `;
+    container.appendChild(card);
+    if (window.lucide) lucide.createIcons();
+
+    const DISMISS_MS = 6000;
+    let dismissed = false;
+    function dismiss() {
+        if (dismissed) return;
+        dismissed = true;
+        clearTimeout(timer);
+        card.classList.add('is-leaving');
+        card.addEventListener('animationend', () => card.remove(), { once: true });
+    }
+    const timer = setTimeout(dismiss, DISMISS_MS);
+
+    card.querySelector('.notification-popup-close').addEventListener('click', (event) => {
+        event.stopPropagation();
+        dismiss();
+    });
+    card.addEventListener('click', () => {
+        dismiss();
+        markNotificationSeen(notification.id);
+        document.getElementById('notifications-btn')?.click();
+    });
+}
+
+//: The newest notification id already shown a pop-up for - null until the
+//: first poll, so the user's entire pre-existing inbox never pops up all at
+//: once on login; only notifications created after that point do.
+let latestSeenNotificationId = null;
+const NOTIFICATION_POLL_MS = 20000;
+
+/** Checks for new notifications and pops one up per new arrival, oldest
+ * first (so a "you got paid twice" burst reads in the order it happened).
+ * This is the "something checks when the request is done" half of the
+ * feature - a payment landing, a scheduled transfer pausing, etc. all go
+ * through notifications_service.create_notification on the backend, so
+ * polling this one endpoint covers every event source at once rather than
+ * needing a bespoke check per action. */
+async function pollNotifications() {
+    let notifications;
+    try {
+        notifications = await apiFetch('/notifications');
+    } catch {
+        return; // Try again next tick; a transient failure isn't worth surfacing.
+    }
+    if (notifications.length === 0) return;
+
+    if (latestSeenNotificationId === null) {
+        latestSeenNotificationId = notifications[0].id;
+        refreshNotificationsBadge();
+        return;
+    }
+
+    const lastIndex = notifications.findIndex(n => n.id === latestSeenNotificationId);
+    // -1 means the previously-newest one is no longer in the first page
+    // (unlikely at DEFAULT_LIMIT=20, but degrade to "nothing new" rather
+    // than replaying the whole page as if it were all fresh).
+    const freshOnes = lastIndex === -1 ? [] : notifications.slice(0, lastIndex);
+    if (freshOnes.length === 0) return;
+
+    latestSeenNotificationId = notifications[0].id;
+    freshOnes.slice().reverse().forEach(showNotificationPopup);
+    refreshNotificationsBadge();
+}
+
+function startNotificationPolling() {
+    pollNotifications();
+    setInterval(pollNotifications, NOTIFICATION_POLL_MS);
 }
 
 /* --- Referral code (panel section 2) --- */

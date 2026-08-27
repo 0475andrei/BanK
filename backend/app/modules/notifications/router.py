@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends
 from supabase import AsyncClient
 
@@ -33,3 +35,12 @@ async def mark_read(
     user: UserRead = Depends(get_current_user),
 ) -> None:
     await service.mark_all_read(supabase, user)
+
+
+@router.post("/{notification_id}/mark-read", status_code=204)
+async def mark_one_read(
+    notification_id: uuid.UUID,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: UserRead = Depends(get_current_user),
+) -> None:
+    await service.mark_read(supabase, user, notification_id)
