@@ -98,11 +98,57 @@ async def _insufficient_funds_error(
     )
 
 
+def _currency_mismatch_error(
+    tool_name: str, from_account: dict, to_account: dict
+) -> ToolResult | None:
+    """Checked BEFORE a proposal is created, same reasoning as
+    `_insufficient_funds_error` above and the same bug it was written for.
+
+    `transfers.service.create_transfer` requires the two accounts and the
+    transfer to share one currency, and raises `CurrencyMismatchError` when
+    they don't. That check runs at EXECUTION time - i.e. after the user has
+    already read the proposal, tapped confirm, and proved their identity with
+    Face ID or a password. They were then shown "Transfer currency must match
+    both accounts' currency", in English, inside the confirmation dialog of a
+    Romanian app, having committed to something that was never possible.
+
+    A transfer between a RON account and a EUR one is not a thing this
+    product does - there is no conversion step anywhere in the ledger path -
+    so the honest moment to say so is in the conversation, before a proposal
+    exists at all. Returns a failure ToolResult when the accounts disagree,
+    None when they don't.
+    """
+    if from_account["currency"] == to_account["currency"]:
+        return None
+    return ToolResult.failure(
+        name=tool_name,
+        error=(
+            f"Nu pot transfera între conturi cu monede diferite: "
+            f"{from_account['name']} este în {from_account['currency']}, iar "
+            f"{to_account['name']} este în {to_account['currency']}. "
+            "Alege două conturi în aceeași monedă."
+        ),
+    )
+
+
 class ProposeTransferInput(BaseModel):
     from_account_id: str = Field(description="One of the user's own account identifiers.")
     to_account_id: str = Field(description="Another of the user's own account identifiers.")
     amount_minor: int = Field(gt=0, description="Amount in integer minor units (e.g. cents).")
-    currency: str = Field(min_length=3, max_length=3)
+    #: ADVISORY. The currency actually written onto the proposal is read from
+    #: the source account server-side, never from here - see `run`. Kept in the
+    #: schema because the model has always sent it and dropping the field
+    #: would make every existing prompt example invalid, but a wrong guess
+    #: here can no longer produce a proposal that fails at confirmation time.
+    currency: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=3,
+        description=(
+            "Optional. The account's own currency is used regardless - you do "
+            "not need to know or guess it."
+        ),
+    )
     description: str | None = Field(default=None, max_length=500)
 
 
@@ -137,24 +183,43 @@ class ProposeTransferTool(Tool):
             )
             raise
 
+        # Before the funds check: "these accounts can never transfer to each
+        # other" is a more fundamental refusal than "not enough in this one",
+        # and reporting it first gives the user the actionable message.
+        mismatch = _currency_mismatch_error(self.name, from_account, to_account)
+        if mismatch is not None:
+            return mismatch
+
         insufficient_funds = await _insufficient_funds_error(
             self._supabase, self.name, from_account, validated_input.amount_minor
         )
         if insufficient_funds is not None:
             return insufficient_funds
 
-        amount_str = _format_amount(validated_input.amount_minor, validated_input.currency)
+        # THE currency, from the account rather than from the model. Both
+        # accounts agree by the check above, so either would do; the source is
+        # the one the money leaves. `validated_input.currency` is advisory and
+        # is deliberately not consulted - a model that guessed "RON" for a EUR
+        # account used to produce a proposal that passed review, passed Face
+        # ID, and only then failed in transfers.service.
+        currency = from_account["currency"]
+
+        amount_str = _format_amount(validated_input.amount_minor, currency)
         summary = (
             f"Transfer de {amount_str} din {from_account['name']} în {to_account['name']}"
         )
 
-        proposal = await self._create_proposal(context, validated_input, summary)
+        proposal = await self._create_proposal(context, validated_input, summary, currency)
         return ToolResult(
             name=self.name, data={"proposal_id": proposal["id"], "summary": summary}
         )
 
     async def _create_proposal(
-        self, context: Context, validated_input: ProposeTransferInput, summary: str
+        self,
+        context: Context,
+        validated_input: ProposeTransferInput,
+        summary: str,
+        currency: str,
     ) -> dict:
         from app.modules.chat.proposals_service import create_proposal
 
@@ -167,7 +232,7 @@ class ProposeTransferTool(Tool):
                 "from_account_id": validated_input.from_account_id,
                 "to_account_id": validated_input.to_account_id,
                 "amount_minor": validated_input.amount_minor,
-                "currency": validated_input.currency,
+                "currency": currency,
                 "description": validated_input.description,
             },
             summary=summary,

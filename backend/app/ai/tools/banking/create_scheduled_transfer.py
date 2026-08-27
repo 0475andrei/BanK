@@ -31,7 +31,20 @@ class CreateScheduledTransferInput(BaseModel):
     from_account_id: str = Field(description="The source account's id (from list_accounts).")
     to_account_id: str = Field(description="The destination account's id (from list_accounts).")
     amount_minor: int = Field(gt=0, description="Amount per transfer, in minor units (e.g. cents).")
-    currency: str = Field(min_length=3, max_length=3, description="Must match both accounts.")
+    #: ADVISORY, like propose_transfer's field of the same name: the currency
+    #: sent to the service is read from the source account, never from here.
+    #: The service rejects a currency that doesn't match both accounts, and a
+    #: model that guessed "RON" for a EUR account used to turn that into a
+    #: bare `CurrencyMismatchError` the user could do nothing about.
+    currency: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=3,
+        description=(
+            "Optional. The accounts' own currency is used regardless - you do "
+            "not need to know or guess it."
+        ),
+    )
     frequency: Literal["weekly", "monthly"] | None = Field(
         default=None,
         description="Omit/null for a single one-time future transfer instead of a recurring one.",
@@ -61,17 +74,39 @@ class CreateScheduledTransferTool(Tool):
 
     async def run(self, validated_input: BaseModel, context: Context) -> ToolResult:
         assert isinstance(validated_input, CreateScheduledTransferInput)
+        from app.modules.accounts import service as accounts_service
         from app.modules.scheduled_transfers import service as scheduled_transfers_service
         from app.modules.scheduled_transfers.schemas import ScheduledTransferCreate
 
         from_account_id = context.resolve_account(validated_input.from_account_id)
         to_account_id = context.resolve_account(validated_input.to_account_id)
 
+        # Read both accounts to settle the currency server-side (see the
+        # `currency` field's note). Two reads rather than one because the
+        # service requires them to agree, and saying WHICH two disagree is
+        # the difference between an actionable message and a dead end.
+        from_account = await accounts_service.get_account_for_owner(
+            self._supabase, context.user_id, from_account_id
+        )
+        to_account = await accounts_service.get_account_for_owner(
+            self._supabase, context.user_id, to_account_id
+        )
+        if from_account["currency"] != to_account["currency"]:
+            return ToolResult.failure(
+                name=self.name,
+                error=(
+                    f"Nu pot programa un transfer între conturi cu monede diferite: "
+                    f"{from_account['name']} este în {from_account['currency']}, iar "
+                    f"{to_account['name']} este în {to_account['currency']}. "
+                    "Alege două conturi în aceeași monedă."
+                ),
+            )
+
         payload = ScheduledTransferCreate(
             from_account_id=from_account_id,
             to_account_id=to_account_id,
             amount_minor=validated_input.amount_minor,
-            currency=validated_input.currency,
+            currency=from_account["currency"],
             description=validated_input.description,
             frequency=validated_input.frequency,
             start_at=datetime.now(UTC) + timedelta(days=validated_input.start_in_days),
