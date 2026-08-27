@@ -324,6 +324,7 @@
     "voice_input_error": "A hangbevitel sikertelen volt. Próbáld újra, vagy írd be az üzenetet.",
     "iban_read_from_file": "IBAN a csatolt fájlból beolvasva: {iban}",
     "iban_not_found_in_file": "Nem találtunk egyértelmű IBAN-t a fájlban - kérjük, írd be kézzel.",
+    "iban_is_own_account": "Ez az IBAN a tiéd - nem küldhetsz pénzt saját magadnak.",
     "panel_heading": "BanK MI-asszisztens",
     "history": {
       "rename_title": "Beszélgetés átnevezése",

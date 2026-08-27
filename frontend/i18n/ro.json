@@ -324,6 +324,7 @@
     "voice_input_error": "Dictarea vocală a eșuat. Încearcă din nou sau scrie mesajul.",
     "iban_read_from_file": "IBAN citit din fișierul atașat: {iban}",
     "iban_not_found_in_file": "Nu am găsit un IBAN clar în fișier - te rog scrie-l manual.",
+    "iban_is_own_account": "Acest IBAN este al tău - nu poți trimite bani către tine însuți.",
     "panel_heading": "Asistent AI BanK",
     "history": {
       "rename_title": "Redenumește conversația",

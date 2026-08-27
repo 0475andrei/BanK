@@ -324,6 +324,7 @@
     "voice_input_error": "Sesli giriş başarısız oldu. Tekrar dene veya mesajını yaz.",
     "iban_read_from_file": "Ekli dosyadan okunan IBAN: {iban}",
     "iban_not_found_in_file": "Dosyada net bir IBAN bulunamadı - lütfen manuel olarak yazın.",
+    "iban_is_own_account": "Bu IBAN size ait - kendinize para gönderemezsiniz.",
     "panel_heading": "BanK Yapay Zekâ Asistanı",
     "history": {
       "rename_title": "Görüşmeyi yeniden adlandır",

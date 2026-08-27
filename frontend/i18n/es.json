@@ -324,6 +324,7 @@
     "voice_input_error": "La entrada de voz falló. Inténtalo de nuevo o escribe tu mensaje.",
     "iban_read_from_file": "IBAN leído del archivo adjunto: {iban}",
     "iban_not_found_in_file": "No se encontró un IBAN claro en el archivo - escríbelo manualmente.",
+    "iban_is_own_account": "Este IBAN es tuyo - no puedes enviarte dinero a ti mismo.",
     "panel_heading": "Asistente de IA de BanK",
     "history": {
       "rename_title": "Cambiar nombre de la conversación",

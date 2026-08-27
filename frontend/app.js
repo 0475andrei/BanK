@@ -159,7 +159,15 @@ function wireChatAttach() {
             }
             const result = await res.json();
 
-            if (result.iban && !result.low_confidence) {
+            const scannedIban = result.iban ? result.iban.replace(/\s+/g, '').toUpperCase() : null;
+            const isOwnIban = scannedIban && currentAccounts.some(
+                (account) => account.iban && account.iban.replace(/\s+/g, '').toUpperCase() === scannedIban
+            );
+
+            if (isOwnIban) {
+                statusEl.className = 'field-hint ocr-warning';
+                statusEl.textContent = t('chat.iban_is_own_account', 'Acest IBAN este al tău - nu poți trimite bani către tine însuți.');
+            } else if (result.iban && !result.low_confidence) {
                 statusEl.hidden = true;
                 const chatInput = document.getElementById('chat-input');
                 chatInput.value = t('chat.iban_read_from_file', 'IBAN citit din fișierul atașat: {iban}', { iban: result.iban });

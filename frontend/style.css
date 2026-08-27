@@ -2443,7 +2443,12 @@ html.i18n-pending body { visibility: hidden; }
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 100;
+    /* Must beat .top-header (200) - it sits in its own stacking context
+       (position: relative for the profile-panel dropdown fix) and would
+       otherwise paint over any modal opened from inside the dashboard,
+       most visibly with the face-confirm flashlight: the header stayed
+       dark and interactive while everything below it went white. */
+    z-index: 300;
 }
 
 .modal-overlay[hidden] { display: none; }

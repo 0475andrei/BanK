@@ -324,6 +324,7 @@
     "voice_input_error": "L'input vocale non è riuscito. Riprova o scrivi il messaggio.",
     "iban_read_from_file": "IBAN letto dal file allegato: {iban}",
     "iban_not_found_in_file": "Non abbiamo trovato un IBAN chiaro nel file - inseriscilo manualmente.",
+    "iban_is_own_account": "Questo IBAN è tuo - non puoi inviare denaro a te stesso.",
     "panel_heading": "Assistente IA BanK",
     "history": {
       "rename_title": "Rinomina conversazione",

@@ -324,6 +324,7 @@
     "voice_input_error": "Spracheingabe fehlgeschlagen. Bitte versuche es erneut oder tippe deine Nachricht.",
     "iban_read_from_file": "IBAN aus der angehängten Datei gelesen: {iban}",
     "iban_not_found_in_file": "In der Datei wurde keine eindeutige IBAN gefunden - bitte gib sie manuell ein.",
+    "iban_is_own_account": "Diese IBAN gehört dir - du kannst dir nicht selbst Geld senden.",
     "panel_heading": "BanK KI-Assistent",
     "history": {
       "rename_title": "Unterhaltung umbenennen",

@@ -324,6 +324,7 @@
     "voice_input_error": "La saisie vocale a échoué. Réessayez ou écrivez votre message.",
     "iban_read_from_file": "IBAN lu dans le fichier joint : {iban}",
     "iban_not_found_in_file": "Aucun IBAN clair n'a été trouvé dans le fichier - veuillez le saisir manuellement.",
+    "iban_is_own_account": "Cet IBAN est le vôtre - vous ne pouvez pas vous envoyer de l'argent à vous-même.",
     "panel_heading": "Assistant IA BanK",
     "history": {
       "rename_title": "Renommer la conversation",

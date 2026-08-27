@@ -324,6 +324,7 @@
     "voice_input_error": "Voice input failed. Please try again or type your message.",
     "iban_read_from_file": "IBAN read from the attached file: {iban}",
     "iban_not_found_in_file": "We couldn't find a clear IBAN in the file - please type it manually.",
+    "iban_is_own_account": "This IBAN is yours - you can't send money to yourself.",
     "panel_heading": "BanK AI Assistant",
     "history": {
       "rename_title": "Rename conversation",
