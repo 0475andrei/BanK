@@ -468,7 +468,10 @@
   "face_confirm": {
     "title": "Mit Face ID bestätigen",
     "default_reason": "Der Betrag überschreitet die Bestätigungsgrenze - bestätige deine Identität per Kamera.",
-    "camera_error": "Auf die Kamera konnte nicht zugegriffen werden. Überprüfe die Browserberechtigungen."
+    "camera_error": "Auf die Kamera konnte nicht zugegriffen werden. Überprüfe die Browserberechtigungen.",
+    "use_password_instead": "Stattdessen Passwort verwenden",
+    "password_label": "Passwort",
+    "password_required": "Gib dein Passwort ein."
   },
   "price_increase": {
     "title": "Der Abo-Preis ist gestiegen",

@@ -468,7 +468,10 @@
   "face_confirm": {
     "title": "Confirmar con Face ID",
     "default_reason": "El importe supera el umbral de confirmación - verifica tu identidad con la cámara.",
-    "camera_error": "No se pudo acceder a la cámara. Comprueba los permisos del navegador."
+    "camera_error": "No se pudo acceder a la cámara. Comprueba los permisos del navegador.",
+    "use_password_instead": "Usar la contraseña en su lugar",
+    "password_label": "Contraseña",
+    "password_required": "Introduce tu contraseña."
   },
   "price_increase": {
     "title": "El precio de la suscripción ha subido",

@@ -134,6 +134,13 @@ function wireChatAttach() {
         const file = attachInput.files[0];
         if (!file) return;
 
+        // Clears a stale message from the OTHER attach button (they share no
+        // state, but sit right next to each other) - otherwise a leftover
+        // "no IBAN found" from an earlier attempt on this button stays
+        // visible under a now-successful document attach on the other one,
+        // reading as if something is currently broken when it isn't.
+        document.getElementById('document-attach-status')?.setAttribute('hidden', '');
+
         statusEl.hidden = false;
         statusEl.className = 'field-hint';
         statusEl.textContent = t('common.reading_file', 'Se citește fișierul...');
@@ -190,6 +197,10 @@ function wireDocumentAttach() {
     attachInput.addEventListener('change', async () => {
         const file = attachInput.files[0];
         if (!file) return;
+
+        // See the matching comment in wireChatAttach above - same reason,
+        // other direction.
+        document.getElementById('chat-attach-status')?.setAttribute('hidden', '');
 
         if (file.size > MAX_DOCUMENT_SIZE_BYTES) {
             statusEl.hidden = false;
@@ -1188,13 +1199,21 @@ function wireStepUpModal() {
         // requestFaceConfirmationToken() (reused as-is) drives its own modal
         // (#face-confirm-modal) - hide this one while that's on top, and
         // bring it back if the user cancels the camera instead of finishing.
+        // allowPasswordFallback: true because the backend already accepts
+        // auth_method="password" for this same endpoint (POST
+        // /chat/proposals/{id}/confirm) once enough face failures are on
+        // record for this proposal - see confirm_proposal's own gate.
         modal.hidden = true;
-        const token = await requestFaceConfirmationToken();
-        if (!token) {
+        const credential = await requestFaceConfirmationToken(undefined, { allowPasswordFallback: true });
+        if (!credential) {
             modal.hidden = false;
             return;
         }
-        await confirmWithCredential(proposalId, 'face', token, card);
+        if (typeof credential === 'string') {
+            await confirmWithCredential(proposalId, 'face', credential, card);
+        } else {
+            await confirmWithCredential(proposalId, 'password', credential.password, card);
+        }
     });
 
     document.getElementById('step-up-password-form').addEventListener('submit', async (event) => {
@@ -2710,14 +2729,18 @@ async function submitWithFaceConfirmation(path, idempotencyKey, body) {
         }
         if (err.status !== 428) throw err;
 
-        const token = await requestFaceConfirmationToken();
-        if (!token) return CONFIRMATION_CANCELLED;
+        // allowPasswordFallback: true - the backend's enforce_face_confirmation
+        // accepts a correct account password as an equal alternative to a face
+        // token (see face_auth/service.py), so after enough failed captures the
+        // user isn't stuck if Face ID just isn't working for them right now.
+        const credential = await requestFaceConfirmationToken(undefined, { allowPasswordFallback: true });
+        if (!credential) return CONFIRMATION_CANCELLED;
 
-        return await apiFetch(path, {
-            method: 'POST',
-            headers: { 'Idempotency-Key': idempotencyKey, 'X-Face-Confirmation': token },
-            body,
-        });
+        const headers = { 'Idempotency-Key': idempotencyKey };
+        if (typeof credential === 'string') headers['X-Face-Confirmation'] = credential;
+        else headers['X-Step-Up-Password'] = credential.password;
+
+        return await apiFetch(path, { method: 'POST', headers, body });
     }
 }
 
@@ -2794,13 +2817,31 @@ function faceConfirmDefaultReason() {
     return t('face_confirm.default_reason', 'Suma depășește pragul de confirmare - verifică-ți identitatea prin cameră.');
 }
 
+//: After this many failed captures in one modal session, a caller that
+//: opted in (allowPasswordFallback: true) gets a "use password instead"
+//: link - Face ID stops being a hard requirement once it's demonstrably
+//: not working for this user right now.
+const MAX_FACE_CONFIRM_ATTEMPTS = 3;
+
 /** Opens the face-confirm modal, captures a photo, exchanges it for a
- * short-lived confirmation token via POST /auth/face/confirm. Resolves with
- * the token, or null if the user cancels. Never rejects - camera/API errors
- * show inline in the modal and let the user retry or cancel. `reason`
- * overrides the modal's explanatory text for callers other than the
- * large-transfer step-up this was originally built for. */
-function requestFaceConfirmationToken(reason = faceConfirmDefaultReason()) {
+ * short-lived confirmation token via POST /auth/face/confirm.
+ *
+ * Resolves with:
+ *   - a face token (string) - the original, still-default contract, unchanged
+ *     for every caller that doesn't pass allowPasswordFallback
+ *   - { password: string } - ONLY when allowPasswordFallback is true AND the
+ *     user switched to password after MAX_FACE_CONFIRM_ATTEMPTS failures
+ *   - null - the user cancelled
+ * Never rejects - camera/API errors show inline in the modal and let the
+ * user retry or cancel. `reason` overrides the modal's explanatory text for
+ * callers other than the large-transfer step-up this was originally built
+ * for.
+ *
+ * Callers that never pass `allowPasswordFallback` see the exact same
+ * string-or-null shape as before this fallback existed - the password path
+ * is simply never reachable for them (the link stays hidden), so they need
+ * no changes at all. */
+function requestFaceConfirmationToken(reason = faceConfirmDefaultReason(), { allowPasswordFallback = false } = {}) {
     return new Promise((resolve) => {
         const modal = document.getElementById('face-confirm-modal');
         const video = document.getElementById('face-confirm-video');
@@ -2809,32 +2850,73 @@ function requestFaceConfirmationToken(reason = faceConfirmDefaultReason()) {
         const captureBtn = document.getElementById('capture-face-confirm');
         const cancelBtn = document.getElementById('cancel-face-confirm');
         const closeBtn = document.getElementById('close-face-confirm-modal');
+        const cameraSection = document.getElementById('face-confirm-camera-section');
+        const passwordSection = document.getElementById('face-confirm-password-section');
+        const passwordInput = document.getElementById('face-confirm-password-input');
+        const usePasswordBtn = document.getElementById('face-confirm-use-password');
 
         let stream = null;
+        let usingPassword = false;
+        let failedAttempts = 0;
         errorEl.hidden = true;
+        usePasswordBtn.hidden = true;
+        cameraSection.hidden = false;
+        passwordSection.hidden = true;
+        passwordInput.value = '';
         document.getElementById('face-confirm-reason').textContent = reason;
         modal.hidden = false;
 
-        function cleanup(result) {
+        function stopCamera() {
             if (stream) stream.getTracks().forEach(track => track.stop());
             stream = null;
             video.srcObject = null;
-            modal.hidden = true;
             setFaceFlashlight(false, modal);
+        }
+
+        function cleanup(result) {
+            stopCamera();
+            modal.hidden = true;
             captureBtn.onclick = null;
             cancelBtn.onclick = null;
             closeBtn.onclick = null;
+            usePasswordBtn.onclick = null;
             resolve(result);
         }
 
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then((s) => { stream = s; video.srcObject = s; setFaceFlashlight(true, modal); })
-            .catch(() => {
-                errorEl.textContent = t('face_confirm.camera_error', 'Nu s-a putut accesa camera. Verifică permisiunile browserului.');
-                errorEl.hidden = false;
-            });
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then((s) => { stream = s; video.srcObject = s; setFaceFlashlight(true, modal); })
+                .catch(() => {
+                    errorEl.textContent = t('face_confirm.camera_error', 'Nu s-a putut accesa camera. Verifică permisiunile browserului.');
+                    errorEl.hidden = false;
+                });
+        }
+
+        //: Swaps the modal from camera capture to a plain password field -
+        //: same modal, same Confirm/Cancel buttons, just a different input.
+        function switchToPassword() {
+            usingPassword = true;
+            stopCamera();
+            errorEl.hidden = true;
+            cameraSection.hidden = true;
+            passwordSection.hidden = false;
+            passwordInput.focus();
+        }
+
+        startCamera();
 
         captureBtn.onclick = () => {
+            if (usingPassword) {
+                const password = passwordInput.value;
+                if (!password) {
+                    errorEl.textContent = t('face_confirm.password_required', 'Introdu parola.');
+                    errorEl.hidden = false;
+                    return;
+                }
+                cleanup({ password });
+                return;
+            }
+
             errorEl.hidden = true;
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
@@ -2858,10 +2940,15 @@ function requestFaceConfirmationToken(reason = faceConfirmDefaultReason()) {
                 } catch (err) {
                     errorEl.textContent = err.message;
                     errorEl.hidden = false;
+                    failedAttempts += 1;
+                    if (allowPasswordFallback && failedAttempts >= MAX_FACE_CONFIRM_ATTEMPTS) {
+                        usePasswordBtn.hidden = false;
+                    }
                 }
             }, 'image/jpeg', 0.92);
         };
 
+        usePasswordBtn.onclick = switchToPassword;
         cancelBtn.onclick = () => cleanup(null);
         closeBtn.onclick = () => cleanup(null);
     });

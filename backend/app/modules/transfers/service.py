@@ -60,6 +60,8 @@ async def create_transfer(
     idempotency_key: str,
     face_token: str | None = None,
     proposal_pre_authorized: bool = False,
+    *,
+    password: str | None = None,
 ) -> dict:
     existing = await _find_by_idempotency_key(supabase, idempotency_key)
     if existing is not None:
@@ -87,6 +89,7 @@ async def create_transfer(
             user,
             required=face_auth_service.requires_face_confirmation(payload.amount_minor),
             token=face_token,
+            password=password,
         )
 
     try:

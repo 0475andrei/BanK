@@ -468,7 +468,10 @@
   "face_confirm": {
     "title": "Face ID ile onayla",
     "default_reason": "Tutar onay eşiğini aşıyor - kimliğinizi kamerayla doğrulayın.",
-    "camera_error": "Kameraya erişilemedi. Tarayıcı izinlerinizi kontrol edin."
+    "camera_error": "Kameraya erişilemedi. Tarayıcı izinlerinizi kontrol edin.",
+    "use_password_instead": "Bunun yerine şifre kullan",
+    "password_label": "Şifre",
+    "password_required": "Şifreni gir."
   },
   "price_increase": {
     "title": "Abonelik ücreti arttı",

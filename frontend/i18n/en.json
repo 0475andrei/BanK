@@ -468,7 +468,10 @@
   "face_confirm": {
     "title": "Confirm with Face ID",
     "default_reason": "The amount is over the confirmation threshold - verify your identity via camera.",
-    "camera_error": "Couldn't access the camera. Check your browser permissions."
+    "camera_error": "Couldn't access the camera. Check your browser permissions.",
+    "use_password_instead": "Use password instead",
+    "password_label": "Password",
+    "password_required": "Enter your password."
   },
   "price_increase": {
     "title": "The subscription price has increased",

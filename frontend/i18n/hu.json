@@ -468,7 +468,10 @@
   "face_confirm": {
     "title": "Megerősítés Face ID-vel",
     "default_reason": "Az összeg meghaladja a megerősítési küszöböt - igazold személyazonosságodat a kamerán keresztül.",
-    "camera_error": "Nem sikerült elérni a kamerát. Ellenőrizd a böngésző jogosultságait."
+    "camera_error": "Nem sikerült elérni a kamerát. Ellenőrizd a böngésző jogosultságait.",
+    "use_password_instead": "Jelszó használata helyette",
+    "password_label": "Jelszó",
+    "password_required": "Add meg a jelszavad."
   },
   "price_increase": {
     "title": "Az előfizetés ára emelkedett",

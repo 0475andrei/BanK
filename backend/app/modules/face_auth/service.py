@@ -28,6 +28,7 @@ from app.core.exceptions import (
     UnauthorizedError,
     ValidationError,
 )
+from app.core.security import verify_password
 from app.modules.auth import service as auth_service
 from app.modules.users.schemas import UserRead
 
@@ -279,12 +280,27 @@ def requires_face_confirmation(amount_minor: int) -> bool:
     return amount_minor >= FACE_CONFIRMATION_THRESHOLD_MINOR
 
 
+async def _verify_user_password(supabase: AsyncClient, user: UserRead, password: str) -> bool:
+    """Same check confirm_proposal's auth_method="password" branch uses -
+    the account's real login password, not a separate credential."""
+    resp = (
+        await supabase.table("users")
+        .select("password_hash")
+        .eq("id", str(user.id))
+        .maybe_single()
+        .execute()
+    )
+    password_hash = resp.data["password_hash"] if resp is not None and resp.data else None
+    return password_hash is not None and verify_password(password, password_hash)
+
+
 async def enforce_face_confirmation(
     supabase: AsyncClient,
     user: UserRead,
     *,
     required: bool,
     token: str | None,
+    password: str | None = None,
     require_enrolled: bool = False,
 ) -> None:
     """Single call site transfers/service.py and payments/service.py use
@@ -295,13 +311,23 @@ async def enforce_face_confirmation(
     ID is mandatory - raises FaceEnrollmentRequiredError when the user has
     never enrolled it at all (there is no token they could supply),
     FaceConfirmationRequiredError when they have but didn't supply a token
-    for THIS request, or InvalidFaceConfirmationError when the supplied
-    one doesn't check out.
+    or password for THIS request, or InvalidFaceConfirmationError/
+    UnauthorizedError when the one supplied doesn't check out.
 
     This used to no-op for a user with no Face ID enrolled, treating it as
     an optional extra rather than a real requirement - changed so a large
     transfer or a first payment to someone new can never go through
     unverified just because the sender skipped enrolling.
+
+    `password` is the account's real login password, accepted as an equal
+    alternative to a face token - not a weaker check, just a different
+    factor. The caller decides WHEN it's appropriate to offer it (the
+    frontend only reveals a password option after several failed face
+    captures in the same modal session - see requestFaceConfirmationToken
+    in app.js); this function itself doesn't track attempt counts, it only
+    verifies whichever credential it was actually given. `token` is tried
+    first if both happen to be present (never expected from a real client,
+    but token wins deterministically rather than depending on dict order).
 
     `require_enrolled` (default False, existing callers never pass it) is a
     SEPARATE gate from `required`: enrollment as a precondition for the
@@ -320,6 +346,13 @@ async def enforce_face_confirmation(
     if not await has_face_enrolled(supabase, user):
         raise FaceEnrollmentRequiredError()
 
-    if token is None:
-        raise FaceConfirmationRequiredError()
-    await _consume_face_confirmation(supabase, user, token)
+    if token is not None:
+        await _consume_face_confirmation(supabase, user, token)
+        return
+
+    if password is not None:
+        if not await _verify_user_password(supabase, user, password):
+            raise UnauthorizedError("Incorrect password.")
+        return
+
+    raise FaceConfirmationRequiredError()

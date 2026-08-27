@@ -468,7 +468,10 @@
   "face_confirm": {
     "title": "Confirmer avec Face ID",
     "default_reason": "Le montant dépasse le seuil de confirmation - vérifiez votre identité via la caméra.",
-    "camera_error": "Impossible d'accéder à la caméra. Vérifiez les autorisations du navigateur."
+    "camera_error": "Impossible d'accéder à la caméra. Vérifiez les autorisations du navigateur.",
+    "use_password_instead": "Utiliser le mot de passe à la place",
+    "password_label": "Mot de passe",
+    "password_required": "Saisissez votre mot de passe."
   },
   "price_increase": {
     "title": "Le prix de l'abonnement a augmenté",

@@ -218,8 +218,13 @@ class FaceAuthMethodRequiredError(AppError):
     proposals_service._proposal_requires_face and
     face_auth_service.enforce_face_confirmation. Distinct from
     FaceConfirmationRequiredError: the caller isn't missing a token, they
-    affirmatively chose the wrong step-up method for this amount/recipient,
-    and must retry with `auth_method: "face"` instead."""
+    affirmatively chose the wrong step-up method for this amount/recipient.
+    Not a hard wall, though: proposals_service.confirm_proposal stops
+    raising this once enough failed attempts are already on record for this
+    proposal (FACE_FAILURES_BEFORE_PASSWORD_FALLBACK) - the caller should
+    retry with `auth_method: "face"` UNLESS the UI already walked them
+    through several failed face attempts, in which case a plain password
+    retry is expected to succeed instead."""
 
     status_code = 428
     error_code = "face_auth_method_required"

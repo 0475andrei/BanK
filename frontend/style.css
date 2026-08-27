@@ -2469,8 +2469,36 @@ html.i18n-pending body { visibility: hidden; }
 /* Modal-based camera flow (the step-up face-confirm modal): the backdrop
    itself goes white - the .modal card is its own DOM child, so it always
    paints on top of its own parent's background with no z-index changes
-   needed. */
+   needed.
+
+   The card's OWN background goes white too, not just the backdrop around
+   it: .modal is capped at 420px, but on a narrow phone screen (exactly
+   where a flashlight is actually useful) that card fills nearly the whole
+   viewport, leaving almost none of the backdrop's white visible - "full
+   screen" only held on wide viewports without this. Colors below are
+   fixed, not theme tokens: the flashlight is always pure white regardless
+   of the app's light/dark theme, so its own text/buttons need their own
+   fixed dark colors to stay legible against it either way. */
 .modal-overlay.face-flashlight { background-color: #ffffff; }
+
+.modal-overlay.face-flashlight .modal {
+    background-color: #ffffff;
+    border-color: rgba(11, 15, 23, 0.12);
+    color: #0B0F17;
+}
+
+.modal-overlay.face-flashlight .modal-close { color: #0B0F17; }
+.modal-overlay.face-flashlight .modal-close:hover { color: #000000; }
+
+.modal-overlay.face-flashlight .btn-secondary {
+    background-color: rgba(11, 15, 23, 0.06);
+    color: #0B0F17;
+    border-color: rgba(11, 15, 23, 0.2);
+}
+
+.modal-overlay.face-flashlight .btn-secondary:hover {
+    background-color: rgba(11, 15, 23, 0.12);
+}
 
 .modal {
     width: 100%;

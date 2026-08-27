@@ -55,6 +55,19 @@ PROPOSAL_EXPIRY_MINUTES = 10
 CONFIRM_MAX_FAILED_ATTEMPTS = auth_service.LOGIN_MAX_FAILED_ATTEMPTS
 CONFIRM_LOCKOUT_WINDOW_MINUTES = auth_service.LOGIN_LOCKOUT_WINDOW_MINUTES
 
+#: A face-required proposal (large transfer, first payment to someone new)
+#: still can't be confirmed with a password out of the gate - see
+#: _proposal_requires_face below - but stops refusing it once this many
+#: failed attempts are already on record for THIS proposal, exactly
+#: mirroring face_auth/service.py::enforce_face_confirmation's own password
+#: fallback for the direct (non-AI) path. Reuses the same counter
+#: CONFIRM_MAX_FAILED_ATTEMPTS rate-limits with below - the only way to
+#: accumulate failures under this key before password is allowed at all is
+#: by failing face, so this number is really "how many failed face
+#: attempts", even though the counter itself doesn't distinguish which
+#: method failed.
+FACE_FAILURES_BEFORE_PASSWORD_FALLBACK = 3
+
 
 def _confirm_attempt_key(user_id: str, proposal_id: str) -> str:
     """Reuses `login_attempts.email` (VARCHAR(320), no format constraint) as
@@ -254,7 +267,11 @@ async def confirm_proposal(
     await ensure_pending_and_not_expired(supabase, proposal)
 
     if auth_method == "password" and await _proposal_requires_face(supabase, user, proposal):
-        raise FaceAuthMethodRequiredError()
+        failed_so_far = await _count_recent_failed_confirm_attempts(
+            supabase, str(user.id), proposal["id"]
+        )
+        if failed_so_far < FACE_FAILURES_BEFORE_PASSWORD_FALLBACK:
+            raise FaceAuthMethodRequiredError()
 
     # THE critical security gate. Only reached with a still-pending, not-yet-
     # expired proposal; only past this point does anything real execute.
