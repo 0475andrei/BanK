@@ -41,6 +41,7 @@ from app.modules.auth.validation import (
     extract_gender,
     validate_national_id,
 )
+from app.modules.notifications import service as notifications_service
 from app.modules.users.schemas import UserRead
 
 LOGIN_MAX_FAILED_ATTEMPTS = 5
@@ -391,6 +392,18 @@ async def change_password(
 
     await record_audit_event(
         supabase, user_id=user.id, action="auth.change_password", entity=f"users:{user.id}"
+    )
+
+    # Fraud-alert pattern: a real attacker who changed the password would
+    # otherwise leave the account owner with no signal that it happened.
+    await notifications_service.create_notification(
+        supabase,
+        user.id,
+        title="Parola a fost schimbată",
+        body=(
+            "Parola contului tău a fost schimbată chiar acum. Dacă nu ai "
+            "fost tu, contactează banca imediat."
+        ),
     )
 
 
