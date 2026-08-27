@@ -1,12 +1,19 @@
-"""GET /api/v1/notifications, /unread-count, and the two mark-read
-endpoints (bulk and single). Notifications have no creation endpoint of
-their own - every row here is seeded directly (mirroring how
+"""GET /api/v1/notifications, /unread-count, /stream, and the two
+mark-read endpoints (bulk and single). Notifications have no creation
+endpoint of their own - every row here is seeded directly (mirroring how
 notifications_service.create_notification would insert it), the same
 "real DB, no HTTP for setup" pattern other tests use for state their own
 feature doesn't create (see e.g. enroll_face in conftest.py).
 """
 
+import asyncio
+import uuid
 from datetime import UTC, datetime
+
+import pytest
+
+from app.modules.notifications import bus
+from app.modules.notifications import service as notifications_service
 
 
 async def _seed(supabase, user_id, *, title="Test", body="Body", category=None, read=False):
@@ -164,3 +171,46 @@ async def test_payment_received_notification_carries_the_money_category(
     notifications = (await payee.get("/api/v1/notifications")).json()
     assert len(notifications) == 1
     assert notifications[0]["category"] == "money_received"
+
+
+async def test_stream_requires_authentication(client):
+    resp = await client.get("/api/v1/notifications/stream")
+    assert resp.status_code == 401
+
+
+async def test_creating_a_notification_publishes_it_to_a_subscribed_queue(supabase):
+    """GET /notifications/stream itself isn't exercised here: httpx's
+    ASGITransport fully buffers a StreamingResponse's body when it's wrapped
+    by this app's two BaseHTTPMiddleware layers (rate limiting, request-id)
+    - a known ASGITransport-in-tests limitation, not a real bug (verified
+    live against the actual running server: a real payment's notification
+    arrived on an open stream in well under a second). See
+    test_notification_bus.py for the bus module's own unit tests.
+
+    What this DOES prove end to end: create_notification - the one thing
+    every real caller (payments, admin, auth) actually invokes - really
+    publishes to `bus`, not just inserts a row."""
+    user_id = str(uuid.uuid4())
+    queue = bus.subscribe(user_id)
+    try:
+        await notifications_service.create_notification(
+            supabase, user_id, "Test", "Body", category="money_received"
+        )
+        published = await asyncio.wait_for(queue.get(), timeout=5)
+    finally:
+        bus.unsubscribe(user_id, queue)
+
+    assert published["title"] == "Test"
+    assert published["category"] == "money_received"
+
+
+async def test_creating_a_notification_does_not_publish_to_a_different_users_queue(supabase):
+    user_id = str(uuid.uuid4())
+    other_user_id = str(uuid.uuid4())
+    queue = bus.subscribe(user_id)
+    try:
+        await notifications_service.create_notification(supabase, other_user_id, "Not for you", "Body")
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(queue.get(), timeout=0.5)
+    finally:
+        bus.unsubscribe(user_id, queue)

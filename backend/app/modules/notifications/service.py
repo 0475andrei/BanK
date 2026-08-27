@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from supabase import AsyncClient
 
+from app.modules.notifications import bus
 from app.modules.users.schemas import UserRead
 
 DEFAULT_LIMIT = 20
@@ -25,12 +26,19 @@ async def create_notification(
     callers - today just the frontend's pop-up animation - that need to key
     off WHAT happened rather than parse the free-text title/body, which is
     fixed Romanian prose with no locale concept. None for every caller that
-    doesn't need one; existing rows have no category either."""
+    doesn't need one; existing rows have no category either.
+
+    Publishes to `bus` after the insert (never before - a subscriber must
+    never be told about a row that could still fail to be written), so any
+    open GET /notifications/stream connection for this user gets it
+    immediately instead of waiting for that client's own poll."""
     row: dict[str, str] = {"user_id": str(user_id), "title": title, "body": body}
     if category is not None:
         row["category"] = category
     resp = await supabase.table("notifications").insert(row).execute()
-    return resp.data[0]
+    created = resp.data[0]
+    bus.publish(str(user_id), created)
+    return created
 
 
 async def list_notifications(supabase: AsyncClient, user: UserRead, limit: int = DEFAULT_LIMIT) -> list[dict]:
