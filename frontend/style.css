@@ -1159,16 +1159,22 @@ body {
     border-bottom-right-radius: 4px;
 }
 
-/* Copy-to-clipboard, appended under every real AI reply (see
+/* Copy and read-aloud controls, appended under every real AI reply (see
    appendChatBubble in app.js - skipped for the transient typing bubble).
-   align-self keeps it a compact left-anchored control rather than
+   align-self keeps the row a compact left-anchored control rather than
    stretching full-width like .message-content's other flex children. */
-.message-copy-btn {
+.message-actions {
+    display: flex;
     align-self: flex-start;
+    gap: 2px;
+    margin-top: 6px;
+}
+
+.message-copy-btn,
+.message-speak-btn {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    margin-top: 6px;
     padding: 4px 6px;
     background: transparent;
     border: none;
@@ -1180,13 +1186,16 @@ body {
 }
 
 .message-copy-btn:hover,
-.message-copy-btn:focus-visible {
+.message-copy-btn:focus-visible,
+.message-speak-btn:hover,
+.message-speak-btn:focus-visible {
     color: var(--text-main);
     background-color: var(--overlay-06);
     outline: none;
 }
 
-.message-copy-btn .icon {
+.message-copy-btn .icon,
+.message-speak-btn .icon {
     width: 13px;
     height: 13px;
     stroke-width: 2;
@@ -1197,6 +1206,14 @@ body {
    revert - no layout shift, no popup. */
 .message-copy-btn.is-copied {
     color: var(--income-green);
+}
+
+/* Stays teal - not a brief pulse like .is-copied above - for as long as the
+   message is actually playing, since unlike the copy confirmation this
+   reflects real, possibly multi-second, ongoing state (see the stop-glyph
+   swap and stopMessageSpeech in app.js). */
+.message-speak-btn.is-speaking {
+    color: var(--primary-teal);
 }
 
 /* Assistant is thinking: same bubble, a quiet label over three pulsing dots. */

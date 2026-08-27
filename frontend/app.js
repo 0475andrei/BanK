@@ -587,7 +587,11 @@ function appendChatBubble(role, text, options = {}) {
     // Skipped for the typing placeholder: it has no real text yet and is
     // removed the moment the actual reply arrives (see sendMessage above).
     if (role === 'ai' && options.bubbleClass !== 'typing') {
-        content.appendChild(buildMessageCopyButton(text));
+        const actions = document.createElement('div');
+        actions.className = 'message-actions';
+        actions.appendChild(buildMessageCopyButton(text));
+        actions.appendChild(buildMessageSpeakButton(text));
+        content.appendChild(actions);
     }
 
     wrapper.appendChild(content);
@@ -629,6 +633,77 @@ function buildMessageCopyButton(text) {
             button.innerHTML = '<i data-lucide="copy" class="icon"></i>';
             if (window.lucide) lucide.createIcons();
         }, 1500);
+    });
+
+    return button;
+}
+
+// BCP-47 locale for each language.js code, so SpeechSynthesisUtterance picks
+// a matching voice instead of whatever the browser's default happens to be.
+const SPEECH_LOCALES = {
+    ro: 'ro-RO', en: 'en-US', uk: 'uk-UA', hu: 'hu-HU', tr: 'tr-TR',
+    it: 'it-IT', es: 'es-ES', fr: 'fr-FR', de: 'de-DE',
+};
+
+// Only one message reads aloud at a time - starting another stops whichever
+// is currently playing (and resets its button) rather than overlapping.
+let activeSpeech = null;
+
+/** Cancels any in-progress read-aloud and resets its button's icon. Called
+ * whenever the chat transcript itself is torn down (new conversation,
+ * switching to a different saved one) - otherwise the utterance would keep
+ * playing over a transcript it no longer belongs to, with no way to stop it
+ * since its button is gone with the rest of the old messages. */
+function stopMessageSpeech() {
+    if (!activeSpeech) return;
+    window.speechSynthesis?.cancel();
+    activeSpeech.reset();
+    activeSpeech = null;
+}
+
+/** Small read-aloud control appended under a real AI reply, next to the copy
+ * button (see appendChatBubble above). Speaks the same plain-text message
+ * the copy button copies, in whatever language the reply was generated in -
+ * sendMessage requests that language as document.documentElement.lang,
+ * which language.js keeps in sync with the language selector, so it's also
+ * the right language to read the reply back in. */
+function buildMessageSpeakButton(text) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'message-speak-btn';
+    button.setAttribute('aria-label', 'Ascultă mesajul');
+    button.setAttribute('data-i18n-aria-label', 'chat.speak_message');
+    button.innerHTML = '<i data-lucide="volume-2" class="icon"></i>';
+
+    const reset = () => {
+        button.classList.remove('is-speaking');
+        button.innerHTML = '<i data-lucide="volume-2" class="icon"></i>';
+        if (window.lucide) lucide.createIcons();
+    };
+
+    button.addEventListener('click', () => {
+        if (!window.speechSynthesis) return;
+
+        // A second click on the message already playing stops it - the icon
+        // (see below) shows a stop glyph while speaking for exactly this.
+        if (activeSpeech && activeSpeech.button === button) {
+            stopMessageSpeech();
+            return;
+        }
+        stopMessageSpeech();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = SPEECH_LOCALES[document.documentElement.lang] || document.documentElement.lang || 'ro-RO';
+        utterance.onend = utterance.onerror = () => {
+            if (activeSpeech && activeSpeech.button === button) activeSpeech = null;
+            reset();
+        };
+
+        activeSpeech = { button, reset };
+        button.classList.add('is-speaking');
+        button.innerHTML = '<i data-lucide="square" class="icon"></i>';
+        if (window.lucide) lucide.createIcons();
+        window.speechSynthesis.speak(utterance);
     });
 
     return button;
@@ -727,6 +802,7 @@ function startNewConversation() {
     setCurrentConversationId(null);
     clearActiveDocument();
     livePendingProposalCards = [];
+    stopMessageSpeech();
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = '';
     appendChatBubble('ai', chatWelcomeText());
@@ -876,6 +952,7 @@ async function openConversation(conversationId) {
     setCurrentConversationId(conversationId);
     clearActiveDocument();
     livePendingProposalCards = [];
+    stopMessageSpeech();
     renderConversationHistory();
     showConversationHistoryError();
 

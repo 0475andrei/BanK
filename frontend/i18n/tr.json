@@ -323,6 +323,7 @@
     "voice_input_not_supported": "Bu tarayıcı sesle giriş özelliğini desteklemiyor.",
     "voice_input_error": "Sesli giriş başarısız oldu. Tekrar dene veya mesajını yaz.",
     "copy_message": "Mesajı kopyala",
+    "speak_message": "Mesajı sesli oku",
     "iban_read_from_file": "Ekli dosyadan okunan IBAN: {iban}",
     "iban_not_found_in_file": "Dosyada net bir IBAN bulunamadı - lütfen manuel olarak yazın.",
     "panel_heading": "BanK Yapay Zekâ Asistanı",

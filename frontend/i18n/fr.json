@@ -323,6 +323,7 @@
     "voice_input_not_supported": "La saisie vocale n'est pas prise en charge par ce navigateur.",
     "voice_input_error": "La saisie vocale a échoué. Réessayez ou écrivez votre message.",
     "copy_message": "Copier le message",
+    "speak_message": "Écouter le message",
     "iban_read_from_file": "IBAN lu dans le fichier joint : {iban}",
     "iban_not_found_in_file": "Aucun IBAN clair n'a été trouvé dans le fichier - veuillez le saisir manuellement.",
     "panel_heading": "Assistant IA BanK",

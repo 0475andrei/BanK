@@ -323,6 +323,7 @@
     "voice_input_not_supported": "L'input vocale non è supportato da questo browser.",
     "voice_input_error": "L'input vocale non è riuscito. Riprova o scrivi il messaggio.",
     "copy_message": "Copia messaggio",
+    "speak_message": "Ascolta il messaggio",
     "iban_read_from_file": "IBAN letto dal file allegato: {iban}",
     "iban_not_found_in_file": "Non abbiamo trovato un IBAN chiaro nel file - inseriscilo manualmente.",
     "panel_heading": "Assistente IA BanK",
