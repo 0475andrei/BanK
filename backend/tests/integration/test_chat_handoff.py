@@ -413,10 +413,21 @@ async def test_a_handoff_to_documents_is_refused_over_http(
 async def test_statement_mode_blocks_the_handoff_over_http(
     authed_client, scripted_provider, supabase
 ):
-    """With a statement active the whole turn goes to DocumentAgent anyway (the
-    context-first override), so the banking gate is never even the thing that
-    stops it - belt and braces, and this proves the outer one still holds after
-    Step 15 restructured dispatch."""
+    """The statement-mode handoff gate (orchestrator.py's `_handoff_allowed`,
+    the `context.statement_id is not None and target == "banking"` branch)
+    still holds over the real HTTP stack.
+
+    DEMO_MESSAGE matches InsightsAgent's own routing rule ('recurent'), so
+    since the routing-fix pass (see Orchestrator.route's docstring) a statement
+    being active no longer force-routes it to DocumentAgent first - that hard
+    override was the sticky-routing bug the fix pass removed, proven at the
+    unit level by test_active_statement_does_not_capture_a_live_account_question
+    in tests/ai/test_orchestrator_routing.py. So this turn reaches InsightsAgent
+    directly, exactly like it would with no statement attached; the interesting
+    behaviour is what happens when it then asks to hand off to BankingAgent
+    with statement-derived (statement_rows, not ledger) ids in play - the gate
+    below must still refuse that, over HTTP and not just in the orchestrator
+    unit tests."""
     client, user = authed_client
     await _open_account(client)
 
@@ -430,7 +441,7 @@ async def test_statement_mode_blocks_the_handoff_over_http(
         .execute()
     ).data[0]
 
-    scripted_provider(ModelResponse(text="Extrasul conține..."))
+    provider = scripted_provider(ModelResponse(tool_calls=[_handoff_call("banking")]))
 
     body = (
         await client.post(
@@ -439,4 +450,11 @@ async def test_statement_mode_blocks_the_handoff_over_http(
         )
     ).json()
 
-    assert [hop["agent_name"] for hop in body["routing_chain"]] == ["documents"]
+    # Routes to InsightsAgent by rule, same as with no statement attached.
+    assert [hop["agent_name"] for hop in body["routing_chain"]] == ["insights"]
+    # The gate refused the handoff to banking rather than honouring it: one
+    # provider call, no second hop.
+    assert provider.call_count == 1
+    # InsightsAgent had written nothing when it asked - same refusal fallback
+    # as test_a_handoff_to_documents_is_refused_over_http above.
+    assert body["reply"] == HANDOFF_REFUSED_REPLY
