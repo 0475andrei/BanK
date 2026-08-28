@@ -205,12 +205,14 @@ def test_every_tool_advertises_a_usable_spec(supabase):
         assert spec["function"]["parameters"]["type"] == "object"
 
 
-def test_list_accounts_spec_takes_no_arguments(supabase):
+def test_list_accounts_spec_takes_no_identity_arguments(supabase):
     registry = ToolRegistry([ListAccountsTool(supabase)])
     params = _spec_for(registry, "list_accounts")["function"]["parameters"]
 
-    # Nothing to supply, so nothing to guess or widen.
-    assert params.get("properties", {}) == {}
+    # The only argument narrows by STATUS (include_closed), never by
+    # identity - there is still nothing here for the model to guess or widen
+    # who the accounts belong to.
+    assert set(params.get("properties", {})) == {"include_closed"}
     assert not params.get("required")
 
 

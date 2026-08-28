@@ -323,7 +323,12 @@ async def open_account(
     # whether the user had any account at all prior to this call - not
     # "prior to this call, excluding the one we're about to create" (which
     # would always be true and defeat the point).
-    is_first_account = len(await list_accounts_for_owner(supabase, user.id)) == 0
+    # include_closed=True: a user whose only prior account was closed has
+    # still had an account before, so this must not be reset to "first"
+    # just because list_accounts_for_owner now hides closed ones by default.
+    is_first_account = (
+        len(await list_accounts_for_owner(supabase, user.id, include_closed=True)) == 0
+    )
 
     extra_fields: dict = {"product_type": product_type}
     if product_type == PRODUCT_SAVINGS:
@@ -421,26 +426,35 @@ async def get_account(supabase: AsyncClient, user: UserRead, account_id: uuid.UU
 
 
 async def list_accounts_for_owner(
-    supabase: AsyncClient, user_id: uuid.UUID | str
+    supabase: AsyncClient, user_id: uuid.UUID | str, *, include_closed: bool = False
 ) -> list[dict]:
     """Account list for callers holding a bare user id.
 
     Same reason `get_account_for_owner` exists: the AI layer's `Context` carries
     a user id string, not a `UserRead`. `list_accounts` below is this same read
     for the banking modules, which do have the full user.
+
+    Closed accounts are excluded by default - this is the single place every
+    "which accounts does this user have" / "what is their balance" read goes
+    through (Context.account_ids via build_context_for_user, the list_accounts
+    AI tool, planning's current_balance, transactions' cross-account reads), so
+    filtering here means a closed account stops appearing in - or being summed
+    into - every one of those by default, with no per-caller filtering to get
+    wrong. Pass `include_closed=True` only where a caller genuinely means
+    "every account this user has ever had" (e.g. the AI's list_accounts tool
+    when the user explicitly asks for closed/historical accounts).
     """
-    resp = (
-        await supabase.table("accounts")
-        .select("*")
-        .eq("user_id", str(user_id))
-        .order("created_at")
-        .execute()
-    )
+    query = supabase.table("accounts").select("*").eq("user_id", str(user_id))
+    if not include_closed:
+        query = query.eq("status", AccountStatus.ACTIVE.value)
+    resp = await query.order("created_at").execute()
     return resp.data
 
 
-async def list_accounts(supabase: AsyncClient, user: UserRead) -> list[dict]:
-    return await list_accounts_for_owner(supabase, user.id)
+async def list_accounts(
+    supabase: AsyncClient, user: UserRead, *, include_closed: bool = False
+) -> list[dict]:
+    return await list_accounts_for_owner(supabase, user.id, include_closed=include_closed)
 
 
 async def get_account_balance(supabase: AsyncClient, user: UserRead, account_id: uuid.UUID) -> int:

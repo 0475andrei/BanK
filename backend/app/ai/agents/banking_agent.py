@@ -111,6 +111,12 @@ Ce unealtă folosești:
   „soldul contului de economii”) → get_balance
 - „ce conturi am”, „câte conturi am”, „arată-mi conturile” → list_accounts
   (întoarce toate conturile, fiecare cu soldul lui — nu mai e nevoie de get_balance)
+- list_accounts și get_balance NU includ conturile ÎNCHISE implicit — un cont
+  închis nu apare și nu este numărat la niciun sold general. Cheamă
+  list_accounts cu include_closed=true DOAR când utilizatorul cere explicit
+  conturile închise/istoricul conturilor (ex. „arată-mi și conturile
+  închise”, „ce conturi am avut”) — niciodată pentru o întrebare obișnuită de
+  sold.
 - „ultimele tranzacții”, „ce am cheltuit”, „arată-mi tranzacțiile” → list_transactions
   (implicit ultimele 30 de zile; folosește days_back=7 pentru „săptămâna asta”,
   days_back=90 pentru „ultimul trimestru”)

@@ -56,7 +56,16 @@ async def list_user_transactions_in_range_for_owner(
     Ownership is enforced by deriving the account set from `user_id` rather
     than accepting one - there is no account parameter to abuse.
     """
-    accounts = await accounts_service.list_accounts_for_owner(supabase, user_id)
+    # include_closed=True: this is transaction HISTORY, read by insights'
+    # spending analysis tools (compute_spending_stats, detect_anomalies,
+    # categorize_transactions, ...) via load_rows. A closed account's past
+    # transactions are still real spending that happened, and "list_accounts
+    # excludes closed accounts by default" (Bug B) is about the ACCOUNT/
+    # BALANCE surface, not about erasing history from analysis that already
+    # covers a date range - see list_accounts_for_owner's docstring.
+    accounts = await accounts_service.list_accounts_for_owner(
+        supabase, user_id, include_closed=True
+    )
     account_ids = [str(account["id"]) for account in accounts]
     if not account_ids:
         # A user with no accounts has no transactions. Legitimate, not an error.

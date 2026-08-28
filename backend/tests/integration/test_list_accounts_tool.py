@@ -7,11 +7,17 @@ that are genuinely SUM(ledger_entries).
 
 from app.ai.context import build_context_for_user
 from app.ai.schemas import ToolCall
-from app.ai.tools.banking import ListAccountsTool
+from app.ai.tools.banking import GetBalanceTool, ListAccountsTool
 
 
-def _call(call_id: str = "c1") -> ToolCall:
-    return ToolCall(id=call_id, name="list_accounts", arguments={})
+def _call(call_id: str = "c1", *, include_closed: bool = False) -> ToolCall:
+    return ToolCall(
+        id=call_id, name="list_accounts", arguments={"include_closed": include_closed}
+    )
+
+
+async def _close(supabase, account_id: str) -> None:
+    await supabase.table("accounts").update({"status": "closed"}).eq("id", account_id).execute()
 
 
 async def test_list_accounts_returns_all_user_accounts_with_balances(
@@ -80,3 +86,75 @@ async def test_list_accounts_does_not_leak_other_users_accounts(
     returned_ids = [account["id"] for account in result.data["accounts"]]
     assert returned_ids == [str(alice_account["id"])]
     assert str(bob_account["id"]) not in returned_ids
+
+
+async def test_list_accounts_excludes_a_closed_account_by_default(
+    supabase, user_factory, account_factory, seed_balance_factory
+):
+    """Bug: a user closes an account via chat, then in a later conversation
+    asks for their balance and the closed account still showed up. The fix is
+    a default status filter in accounts_service.list_accounts_for_owner - this
+    proves it reaches the AI tool the model actually calls."""
+    user = await user_factory()
+    open_account = await account_factory(user, name="Checking")
+    closed_account = await account_factory(user, name="Old Savings")
+    await seed_balance_factory(open_account["id"], 10_000)
+    await _close(supabase, closed_account["id"])
+
+    # The Context itself is built after the close, so its own account
+    # allowlist (used everywhere else - get_balance's default, propose_*,
+    # planning) already excludes the closed account too.
+    context = await build_context_for_user(user, supabase)
+    assert str(closed_account["id"]) not in context.account_ids
+
+    result = await ListAccountsTool(supabase).execute(_call(), context)
+
+    assert result.ok, result.error
+    returned_ids = [account["id"] for account in result.data["accounts"]]
+    assert returned_ids == [str(open_account["id"])]
+    assert str(closed_account["id"]) not in returned_ids
+
+
+async def test_list_accounts_includes_closed_accounts_when_explicitly_requested(
+    supabase, user_factory, account_factory, seed_balance_factory
+):
+    user = await user_factory()
+    open_account = await account_factory(user, name="Checking")
+    closed_account = await account_factory(user, name="Old Savings")
+    await seed_balance_factory(open_account["id"], 10_000)
+    await _close(supabase, closed_account["id"])
+
+    # A closed account is not in account_ids, so it cannot be resolved as a
+    # specific/default account by other tools - but list_accounts still needs
+    # to be able to SHOW it, since context.account_ids is not consulted by the
+    # underlying accounts_service query here.
+    context = await build_context_for_user(user, supabase)
+    result = await ListAccountsTool(supabase).execute(
+        _call(include_closed=True), context
+    )
+
+    assert result.ok, result.error
+    by_id = {account["id"]: account for account in result.data["accounts"]}
+    assert set(by_id) == {str(open_account["id"]), str(closed_account["id"])}
+    assert by_id[str(closed_account["id"])]["status"] == "closed"
+
+
+async def test_get_balance_default_account_skips_a_closed_first_account(
+    supabase, user_factory, account_factory, seed_balance_factory
+):
+    """A closed account must not become the implicit default just because it
+    was opened first (account_ids[0])."""
+    user = await user_factory()
+    closed_account = await account_factory(user, name="Old Checking")
+    open_account = await account_factory(user, name="New Checking")
+    await seed_balance_factory(open_account["id"], 55_000)
+    await _close(supabase, closed_account["id"])
+
+    context = await build_context_for_user(user, supabase)
+    result = await GetBalanceTool(supabase).execute(
+        ToolCall(id="c1", name="get_balance", arguments={}), context
+    )
+
+    assert result.ok, result.error
+    assert result.data["account_id"] == str(open_account["id"])
+    assert result.data["balance_minor"] == 55_000
