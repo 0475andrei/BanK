@@ -246,6 +246,80 @@ async def test_confirm_already_confirmed_returns_error_no_double_execution(
     assert from_after["balance_minor"] == from_account["balance_minor"] - 10_000
 
 
+async def test_confirm_already_rejected_returns_clear_error_not_success(
+    authed_client, supabase, conversation_factory
+):
+    """The false-success bug: reject via chat (or the button), then click
+    the still-visible Confirmă on the now-stale card. Must come back as a
+    distinct, clearly-errored response carrying the proposal's real status -
+    never anything success-shaped - and must leave both balances untouched.
+    See ensure_pending_and_not_expired's `details={"status": ...}` in
+    proposals_service.py, added because this exact response used to be
+    indistinguishable from "confirmed elsewhere" and frontend/app.js's
+    confirmWithCredential defaulted the ambiguous case to a false green
+    "Confirmată" card."""
+    client, user = authed_client
+    from_account = await _open_account(client, "Cont Curent")
+    to_account = await _open_account(client, "Economii")
+    conversation = await conversation_factory(user)
+    proposal = await _seed(supabase, user, conversation, from_account, to_account)
+
+    reject_resp = await client.post(f"/api/v1/chat/proposals/{proposal['id']}/reject")
+    assert reject_resp.status_code == 200, reject_resp.text
+
+    resp = await client.post(
+        f"/api/v1/chat/proposals/{proposal['id']}/confirm",
+        json={"auth_method": "password", "credential": "password123"},
+    )
+    assert resp.status_code == 409, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "proposal_not_pending"
+    assert error["details"] == {"status": "rejected"}
+
+    from_after = (await client.get(f"/api/v1/accounts/{from_account['id']}")).json()
+    to_after = (await client.get(f"/api/v1/accounts/{to_account['id']}")).json()
+    assert from_after["balance_minor"] == from_account["balance_minor"]
+    assert to_after["balance_minor"] == to_account["balance_minor"]
+
+    row = await _row(supabase, proposal["id"], select="status")
+    assert row["status"] == "rejected"
+
+
+async def test_reject_an_already_confirmed_proposal_returns_clear_error(
+    authed_client, supabase, conversation_factory
+):
+    """Reverse case of the bug above (Step 5's explicit "check, don't
+    assume" ask): rejecting a proposal that was already confirmed elsewhere.
+    This path never produced a false-success UI state - handleRejectProposal
+    in app.js never marks a card resolved on error - but it shares the exact
+    same missing-`details` gap as confirm did, in
+    reject_proposal_for_owner."""
+    client, user = authed_client
+    from_account = await _open_account(client, "Cont Curent")
+    to_account = await _open_account(client, "Economii")
+    conversation = await conversation_factory(user)
+    proposal = await _seed(supabase, user, conversation, from_account, to_account)
+
+    confirm_resp = await client.post(
+        f"/api/v1/chat/proposals/{proposal['id']}/confirm",
+        json={"auth_method": "password", "credential": "password123"},
+    )
+    assert confirm_resp.status_code == 200, confirm_resp.text
+
+    resp = await client.post(f"/api/v1/chat/proposals/{proposal['id']}/reject")
+    assert resp.status_code == 409, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "proposal_not_pending"
+    assert error["details"] == {"status": "confirmed"}
+
+    from_after = (await client.get(f"/api/v1/accounts/{from_account['id']}")).json()
+    # Only the confirm's transfer applied - the failed reject moved nothing.
+    assert from_after["balance_minor"] == from_account["balance_minor"] - 10_000
+
+    row = await _row(supabase, proposal["id"], select="status")
+    assert row["status"] == "confirmed"
+
+
 async def test_confirm_expired_proposal_returns_error(
     authed_client, supabase, conversation_factory
 ):

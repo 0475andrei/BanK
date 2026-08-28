@@ -217,9 +217,18 @@ async def ensure_pending_and_not_expired(supabase: AsyncClient, proposal: dict) 
     OTP+Face path for admin-issued documents (confirm_admin_document).
 
     Status is checked BEFORE expiry so an already-decided proposal reports
-    its real state rather than "expired" if it happens to also be old."""
+    its real state rather than "expired" if it happens to also be old.
+
+    Both errors below carry the proposal's real terminal status in `details`
+    - not just a generic "not pending" - so a caller (chat/router.py's error
+    body, and from there the frontend) can tell "already rejected" apart from
+    "already confirmed (e.g. a second tab)" instead of having to guess. See
+    frontend/app.js's confirmWithCredential, which used to default every
+    ProposalNotPendingError to "confirmed" and rendered a green "Confirmată"
+    card for a proposal a user had actually rejected minutes earlier - a
+    false success screen on a banking app."""
     if proposal["status"] != "pending":
-        raise ProposalNotPendingError()
+        raise ProposalNotPendingError(details={"status": proposal["status"]})
 
     created_at = datetime.fromisoformat(proposal["created_at"])
     if datetime.now(UTC) - created_at > timedelta(minutes=PROPOSAL_EXPIRY_MINUTES):
@@ -229,7 +238,7 @@ async def ensure_pending_and_not_expired(supabase: AsyncClient, proposal: dict) 
             .eq("id", proposal["id"])
             .execute()
         )
-        raise ProposalExpiredError()
+        raise ProposalExpiredError(details={"status": "expired"})
 
 
 async def mark_confirmed(supabase: AsyncClient, proposal: dict, result: dict) -> dict:
@@ -363,7 +372,14 @@ async def reject_proposal_for_owner(supabase: AsyncClient, user_id: str, proposa
     exists alongside the `UserRead`-taking version below."""
     proposal = await get_proposal_for_owner(supabase, user_id, proposal_id)
     if proposal["status"] != "pending":
-        raise ProposalNotPendingError()
+        # Same reverse-case gap as ensure_pending_and_not_expired above:
+        # without `details`, rejecting an already-confirmed proposal and
+        # rejecting an already-rejected one were indistinguishable to the
+        # caller. This path never produced a false-success UI state (see
+        # frontend/app.js's handleRejectProposal, whose catch block never
+        # marks the card resolved) - only a generic error toast - but it
+        # deserves the same real status here too.
+        raise ProposalNotPendingError(details={"status": proposal["status"]})
 
     updated = (
         await supabase.table("proposals")

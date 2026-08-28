@@ -10,7 +10,7 @@ already covered by test_propose_tools.py's pattern for propose_*).
 """
 
 from app.ai.context import build_context
-from app.ai.schemas import ToolCall
+from app.ai.schemas import ModelResponse, ToolCall
 from app.ai.tools.banking import CancelProposalTool
 from app.modules.chat.proposals_service import create_proposal, mark_confirmed
 
@@ -194,3 +194,75 @@ async def test_cancel_proposal_without_id_and_nothing_pending_fails_cleanly(
 
     assert not result.ok
     assert "nu există nicio propunere" in result.error.lower()
+
+
+# ---------------------------------------------------------------------------
+# Part 3 of the false-success bug fix: ChatResponse.resolved_proposal_id.
+#
+# A user can cancel a proposal from a LATER chat message - a different turn
+# than the one that rendered its card - so the frontend can't rely on "the
+# card just created this turn" the way it does for `proposal` on a fresh
+# propose_* call. These drive cancel_proposal through the real /api/v1/chat
+# endpoint (unlike the tool-level tests above) specifically to assert on
+# what the HTTP response carries, since that's what frontend/app.js's
+# resolveLivePendingProposalCard actually reads. See router.
+# _extract_resolved_proposal and app.js's chat-send handler.
+# ---------------------------------------------------------------------------
+
+
+async def test_chat_cancel_proposal_surfaces_resolved_proposal_on_response(
+    authed_client, scripted_provider, supabase, conversation_factory
+):
+    client, user = authed_client
+    from_account = await _open_account(client, "Cont Curent")
+    to_account = await _open_account(client, "Economii")
+    conversation = await conversation_factory(user)
+    proposal = await _seed(supabase, user, conversation, from_account, to_account)
+
+    scripted_provider(
+        # "anulează propunerea" matches no keyword rule (see INSIGHTS_
+        # ROUTING_RULES's `anul ` comment in insights_agent.py - deliberately
+        # NOT "anulează", to avoid claiming this exact phrase), so
+        # orchestrator._classify_with_model makes its own `.complete()` call
+        # before the chosen agent's tool loop starts - one extra scripted
+        # response, ahead of the actual tool call.
+        ModelResponse(text="banking"),
+        ModelResponse(tool_calls=[_call(proposal["id"])]),
+        ModelResponse(text="Am anulat propunerea."),
+    )
+
+    resp = await client.post(
+        "/api/v1/chat",
+        json={"message": "anulează propunerea", "conversation_id": conversation["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+
+    body = resp.json()
+    assert body["resolved_proposal_id"] == proposal["id"]
+    assert body["resolved_proposal_status"] == "rejected"
+    # This turn didn't propose anything new - only cancelled an old one.
+    assert body["proposal"] is None
+
+    row = await _row(supabase, proposal["id"])
+    assert row["status"] == "rejected"
+
+
+async def test_chat_without_cancel_proposal_leaves_resolved_proposal_id_null(
+    authed_client, scripted_provider, supabase, conversation_factory
+):
+    """An ordinary turn (no cancel_proposal call at all) must not populate
+    resolved_proposal_id - it's additive/optional, same as `proposal`."""
+    client, user = authed_client
+    conversation = await conversation_factory(user)
+
+    scripted_provider(ModelResponse(text="Salut!"))
+
+    resp = await client.post(
+        "/api/v1/chat",
+        json={"message": "salut", "conversation_id": conversation["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+
+    body = resp.json()
+    assert body["resolved_proposal_id"] is None
+    assert body["resolved_proposal_status"] is None

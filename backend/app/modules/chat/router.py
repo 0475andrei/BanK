@@ -179,6 +179,7 @@ async def chat(
 
     new_messages = await _persist_turn(supabase, conversation_id, payload.message, turn)
     proposal = await _extract_proposal(supabase, user, new_messages)
+    resolved_proposal_id, resolved_proposal_status = _extract_resolved_proposal(new_messages)
 
     routing_chain = turn.routing_chain
     return ChatResponse(
@@ -192,6 +193,8 @@ async def chat(
         # Backward-compatible duplicate of the last hop - see ChatResponse.
         routing=routing_chain[-1] if routing_chain else None,
         proposal=proposal,
+        resolved_proposal_id=resolved_proposal_id,
+        resolved_proposal_status=resolved_proposal_status,
     )
 
 
@@ -269,6 +272,29 @@ async def _extract_proposal(
         proposal = await proposals_service.get_proposal(supabase, user, proposal_id)
         return ProposalRead.model_validate(proposal)
     return None
+
+
+def _extract_resolved_proposal(new_messages: list[Message]) -> tuple[str | None, str | None]:
+    """If this turn called cancel_proposal and it succeeded, surface the id
+    and new status of the proposal it resolved (see ChatResponse.
+    resolved_proposal_id) so the frontend can update THAT proposal's card -
+    which was rendered on an earlier turn, not this one - instead of leaving
+    it stale with live Confirm/Reject buttons after a chat-driven "anulează"
+    sent as a later message (see app/ai/tools/banking/cancel_proposal.py).
+
+    No extra DB round trip: cancel_proposal's own ToolResult already carries
+    both the id and the resulting status, same as _extract_proposal reads
+    `proposal_id` off the propose_* tools' result above - the trace is
+    already the single source of truth for what happened this turn."""
+    for message in new_messages:
+        if message.role != "tool" or message.name != "cancel_proposal":
+            continue
+        content = json.loads(message.content or "{}")
+        if not content.get("ok"):
+            continue
+        result = content["result"]
+        return result["proposal_id"], result["status"]
+    return None, None
 
 
 @router.get("/conversations", response_model=list[ConversationRead])

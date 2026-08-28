@@ -999,6 +999,9 @@ async function sendMessage() {
             supersedeLivePendingProposalCards();
             livePendingProposalCards.push(renderProposalCard(response.proposal, aiBubble));
         }
+        if (response.resolved_proposal_id) {
+            resolveLivePendingProposalCard(response.resolved_proposal_id, response.resolved_proposal_status);
+        }
         setCurrentConversationId(response.conversation_id);
         void loadConversationHistory();
         // The agent can freeze/unfreeze a card, change a limit, or touch
@@ -1453,6 +1456,23 @@ function supersedeLivePendingProposalCards() {
     livePendingProposalCards = [];
 }
 
+/** Resolves ONE specific still-live card by proposal id - the counterpart to
+ * supersedeLivePendingProposalCards above, for cancel_proposal (see
+ * ChatResponse.resolved_proposal_id): a user can say "anulează" as a LATER
+ * message, several turns after the proposal's card was rendered, so that
+ * card is not necessarily this turn's card (or even still in
+ * livePendingProposalCards's most recent entry) - it has to be looked up by
+ * id. Leaves every other live card untouched, unlike the supersede-all
+ * behaviour above, which is specifically for "a new proposal replaces
+ * whatever was pending before it". */
+function resolveLivePendingProposalCard(proposalId, status) {
+    const card = livePendingProposalCards.find(c => c.dataset.proposalId === proposalId);
+    if (!card || !card.isConnected) return;
+    if (card.classList.contains('proposal-confirmed') || card.classList.contains('proposal-rejected')) return;
+    markProposalCardResolved(card, status === 'confirmed' ? 'confirmed' : 'rejected');
+    livePendingProposalCards = livePendingProposalCards.filter(c => c !== card);
+}
+
 /** Simple toast for background feedback that doesn't belong in the chat
  * transcript itself (a proposal being confirmed/rejected). Auto-dismisses. */
 function showToast(message) {
@@ -1525,7 +1545,22 @@ async function handleRejectProposal(proposalId, card) {
         showToast(t('chat.proposal.reject_success', 'Propunerea a fost anulată.'));
     } catch (err) {
         buttons.forEach(btn => { btn.disabled = false; });
-        showToast(t('chat.proposal.reject_error', 'Eroare la anulare.'));
+        // Rejecting an already-confirmed/rejected/expired proposal (e.g. a
+        // second tab, or a chat-driven confirm sent as a later message)
+        // never marks this card resolved - it's left stale with live
+        // buttons rather than shown as falsely rejected. err.details.status
+        // (see reject_proposal_for_owner in proposals_service.py) lets the
+        // toast at least say what really happened instead of a generic
+        // error.
+        const actualStatus = err.details?.status;
+        const message = actualStatus === 'confirmed'
+            ? t('chat.proposal.already_confirmed', 'Această propunere a fost deja confirmată.')
+            : actualStatus === 'expired'
+                ? t('chat.proposal.already_expired', 'Această propunere a expirat.')
+                : actualStatus === 'rejected'
+                    ? t('chat.proposal.already_rejected', 'Această propunere a fost deja anulată.')
+                    : t('chat.proposal.reject_error', 'Eroare la anulare.');
+        showToast(message);
     }
 }
 
@@ -1578,11 +1613,29 @@ async function confirmWithCredential(proposalId, authMethod, credential, card) {
         return proposal;
     } catch (err) {
         if (err.status === 409) {
-            // Already confirmed/rejected/expired elsewhere (e.g. a second
-            // tab) - the card's own buttons are stale, so just reflect it.
+            // Already confirmed/rejected/expired elsewhere - e.g. a second
+            // tab, or (the case that used to break) a chat-driven rejection
+            // sent as a later message while this stale card was still
+            // showing. err.code alone can't tell "rejected" apart from
+            // "confirmed elsewhere" (both are proposal_not_pending), so we
+            // read the proposal's REAL terminal status from err.details -
+            // see ensure_pending_and_not_expired in proposals_service.py.
+            // Defaulting to "confirmed" here (the old behaviour) painted a
+            // false success card for a proposal the user had rejected and
+            // that never executed - never do that again on missing/unknown
+            // details.
             closeStepUpModal();
-            markProposalCardResolved(card, err.code === 'proposal_expired' ? 'rejected' : 'confirmed');
-            showToast(err.message);
+            const actualStatus = err.details?.status;
+            const resolvedState = actualStatus === 'confirmed' ? 'confirmed' : 'rejected';
+            markProposalCardResolved(card, resolvedState);
+            const message = actualStatus === 'confirmed'
+                ? t('chat.proposal.already_confirmed', 'Această propunere a fost deja confirmată.')
+                : actualStatus === 'expired'
+                    ? t('chat.proposal.already_expired', 'Această propunere a expirat.')
+                    : actualStatus === 'rejected'
+                        ? t('chat.proposal.already_rejected', 'Această propunere a fost deja anulată.')
+                        : err.message;
+            showToast(message);
             return null;
         }
         showStepUpError(err.message || t('chat.proposal.auth_failed', 'Autentificare eșuată.'));
