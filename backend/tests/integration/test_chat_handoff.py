@@ -159,7 +159,13 @@ async def test_insights_hands_off_to_banking_which_proposes_cancel_card(
     body = resp.json()
 
     # 1. InsightsAgent really did find the recurring charge - not a stub.
-    recurring = _tool_payload(provider, 0, "detect_recurring_payments")
+    # Call 0 is the round-trip that PRODUCED the detect_recurring_payments
+    # tool call, before the tool has even run - the model is only shown the
+    # tool's result on the NEXT call, once ToolLoopAgent.run has appended it
+    # to `working` (see tool_loop.py). Call 1 is InsightsAgent's second
+    # round-trip (the one that responds with the handoff), so that's the one
+    # whose prompt actually contains the tool result.
+    recurring = _tool_payload(provider, 1, "detect_recurring_payments")
     assert recurring["ok"] is True
     names = [p["name"] for p in recurring["result"]["recurring_payments"]]
     assert RECURRING_MERCHANT in names
