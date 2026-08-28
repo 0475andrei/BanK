@@ -189,6 +189,7 @@ def test_all_banking_tools_are_registered(supabase):
         "propose_open_account",
         "propose_close_account",
         "propose_cancel_card",
+        "cancel_proposal",
     ]
 
 
@@ -300,6 +301,7 @@ _ALLOWED_WRITE_TOOL_NAMES = frozenset(
         "propose_open_account",
         "propose_close_account",
         "propose_cancel_card",
+        "cancel_proposal",
     }
 )
 

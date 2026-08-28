@@ -1,6 +1,7 @@
 """Banking tools: reads, plus a small set of low-stakes writes (see each
 write tool's own docstring for why it's safe to execute directly)."""
 
+from app.ai.tools.banking.cancel_proposal import CancelProposalTool
 from app.ai.tools.banking.convert_currency import ConvertCurrencyTool
 from app.ai.tools.banking.create_scheduled_transfer import CreateScheduledTransferTool
 from app.ai.tools.banking.find_beneficiary import FindBeneficiaryByNameTool
@@ -17,6 +18,7 @@ from app.ai.tools.banking.set_card_spending_limit import SetCardSpendingLimitToo
 
 __all__ = [
     "AddBeneficiaryTool",
+    "CancelProposalTool",
     "ConvertCurrencyTool",
     "CreateScheduledTransferTool",
     "FindBeneficiaryByNameTool",
