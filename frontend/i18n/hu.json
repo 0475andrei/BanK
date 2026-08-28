@@ -101,7 +101,7 @@
     "label": "Kártya",
     "expiry": "Lejárat",
     "cvv": "CVV",
-    "limit": "Limit",
+    "limit": "Keret",
     "show_details": "Lejárat és CVV megjelenítése",
     "hide_details": "Lejárat és CVV elrejtése",
     "status_active": "Aktív",
