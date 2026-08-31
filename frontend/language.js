@@ -12,6 +12,24 @@
     const CACHE_PREFIX = `bank_i18n_v${I18N_VERSION}:`;
     const DEFAULT_LANGUAGE = 'ro';
     const LANGUAGES = { ro: 'Română', en: 'English', uk: 'Українська', hu: 'Magyar', tr: 'Türkçe', it: 'Italiano', es: 'Español', fr: 'Français', de: 'Deutsch' };
+    // Every language's name, translated into every OTHER language - so the
+    // selector menu itself reads in whichever language is currently active
+    // (e.g. a Turkish UI lists "İngilizce", not "English") instead of always
+    // showing each option in its own endonym. Keyed [displayLanguage][code].
+    const LANGUAGE_NAMES = {
+        ro: { ro: 'Română', en: 'Engleză', uk: 'Ucraineană', hu: 'Maghiară', tr: 'Turcă', it: 'Italiană', es: 'Spaniolă', fr: 'Franceză', de: 'Germană' },
+        en: { ro: 'Romanian', en: 'English', uk: 'Ukrainian', hu: 'Hungarian', tr: 'Turkish', it: 'Italian', es: 'Spanish', fr: 'French', de: 'German' },
+        uk: { ro: 'Румунська', en: 'Англійська', uk: 'Українська', hu: 'Угорська', tr: 'Турецька', it: 'Італійська', es: 'Іспанська', fr: 'Французька', de: 'Німецька' },
+        hu: { ro: 'Román', en: 'Angol', uk: 'Ukrán', hu: 'Magyar', tr: 'Török', it: 'Olasz', es: 'Spanyol', fr: 'Francia', de: 'Német' },
+        tr: { ro: 'Rumence', en: 'İngilizce', uk: 'Ukraynaca', hu: 'Macarca', tr: 'Türkçe', it: 'İtalyanca', es: 'İspanyolca', fr: 'Fransızca', de: 'Almanca' },
+        it: { ro: 'Rumeno', en: 'Inglese', uk: 'Ucraino', hu: 'Ungherese', tr: 'Turco', it: 'Italiano', es: 'Spagnolo', fr: 'Francese', de: 'Tedesco' },
+        es: { ro: 'Rumano', en: 'Inglés', uk: 'Ucraniano', hu: 'Húngaro', tr: 'Turco', it: 'Italiano', es: 'Español', fr: 'Francés', de: 'Alemán' },
+        fr: { ro: 'Roumain', en: 'Anglais', uk: 'Ukrainien', hu: 'Hongrois', tr: 'Turc', it: 'Italien', es: 'Espagnol', fr: 'Français', de: 'Allemand' },
+        de: { ro: 'Rumänisch', en: 'Englisch', uk: 'Ukrainisch', hu: 'Ungarisch', tr: 'Türkisch', it: 'Italienisch', es: 'Spanisch', fr: 'Französisch', de: 'Deutsch' },
+    };
+    function languageNameIn(displayLanguage, code) {
+        return LANGUAGE_NAMES[displayLanguage]?.[code] || LANGUAGES[code];
+    }
     const bundles = new Map();
     // Every translated text node's ORIGINAL (untranslated) string, keyed by
     // the DOM node itself. translateTextNode always re-translates FROM this,
@@ -169,7 +187,13 @@
         const trigger = selector.querySelector('.language-selector-trigger');
         const menu = selector.querySelector('.language-selector-menu');
         const current = selector.querySelector('.language-selector-current');
-        const setSelected = (language) => { current.textContent = LANGUAGES[language]; selector.querySelectorAll('.language-selector-option').forEach((option) => option.setAttribute('aria-selected', String(option.dataset.language === language))); };
+        const setSelected = (language) => {
+            current.textContent = LANGUAGES[language];
+            selector.querySelectorAll('.language-selector-option').forEach((option) => {
+                option.textContent = languageNameIn(language, option.dataset.language);
+                option.setAttribute('aria-selected', String(option.dataset.language === language));
+            });
+        };
         const close = () => { menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); };
         setSelected(preferredLanguage());
         trigger.addEventListener('click', () => { menu.hidden = !menu.hidden; trigger.setAttribute('aria-expanded', String(!menu.hidden)); });

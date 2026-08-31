@@ -101,7 +101,7 @@
     "label": "Kart",
     "expiry": "Son kullanma",
     "cvv": "CVV",
-    "limit": "Limit",
+    "limit": "Sınır",
     "show_details": "Son kullanma tarihini ve CVV'yi göster",
     "hide_details": "Son kullanma tarihini ve CVV'yi gizle",
     "status_active": "Aktif",
