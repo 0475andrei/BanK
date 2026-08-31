@@ -322,8 +322,13 @@
     "voice_input_label": "Dictează mesajul",
     "voice_input_not_supported": "Dictarea vocală nu este suportată de acest browser.",
     "voice_input_error": "Dictarea vocală a eșuat. Încearcă din nou sau scrie mesajul.",
+    "copy_message": "Copiază mesajul",
+    "speak_message": "Ascultă mesajul",
+    "speak_voice_unavailable_try_edge": "Acest browser nu are o voce instalată pentru limba mesajului. Încearcă Microsoft Edge, care include voci multilingve, sau adaugă limba din Setări Windows > Vorbire.",
+    "speak_voice_unavailable_add_language": "Acest browser nu are o voce instalată pentru limba mesajului. Adaugă limba din Setări Windows > Vorbire.",
     "iban_read_from_file": "IBAN citit din fișierul atașat: {iban}",
     "iban_not_found_in_file": "Nu am găsit un IBAN clar în fișier - te rog scrie-l manual.",
+    "iban_is_own_account": "Acest IBAN este al tău - nu poți trimite bani către tine însuți.",
     "panel_heading": "Asistent AI BanK",
     "history": {
       "rename_title": "Redenumește conversația",
@@ -466,7 +471,10 @@
   "face_confirm": {
     "title": "Confirmă cu Face ID",
     "default_reason": "Suma depășește pragul de confirmare - verifică-ți identitatea prin cameră.",
-    "camera_error": "Nu s-a putut accesa camera. Verifică permisiunile browserului."
+    "camera_error": "Nu s-a putut accesa camera. Verifică permisiunile browserului.",
+    "use_password_instead": "Folosește parola în loc",
+    "password_label": "Parolă",
+    "password_required": "Introdu parola."
   },
   "price_increase": {
     "title": "Prețul abonamentului a crescut",

@@ -17,6 +17,7 @@ from app.modules.notifications.router import router as notifications_router
 from app.modules.onboarding.router import router as onboarding_router
 from app.modules.payments.router import router as payments_router
 from app.modules.scheduled_transfers.router import router as scheduled_transfers_router
+from app.modules.speech.router import router as speech_router
 from app.modules.statements.router import router as statements_router
 from app.modules.transactions.router import router as transactions_router
 from app.modules.transfers.router import router as transfers_router
@@ -47,6 +48,7 @@ api_router.include_router(onboarding_router, prefix="/onboarding", tags=["onboar
 api_router.include_router(notifications_router, prefix="/notifications", tags=["notifications"])
 api_router.include_router(face_auth_router, prefix="/auth/face", tags=["face-auth"])
 api_router.include_router(insights_router, prefix="/insights", tags=["insights"])
+api_router.include_router(speech_router, prefix="/speech", tags=["speech"])
 api_router.include_router(
     trusted_devices_router, prefix="/trusted-devices", tags=["trusted-devices"]
 )

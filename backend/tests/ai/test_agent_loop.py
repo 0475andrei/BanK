@@ -91,6 +91,7 @@ async def test_tools_are_advertised_to_the_provider(make_agent, context):
         "list_transfers",
         "resolve_iban_holder",
         "find_beneficiary_by_name",
+        "convert_currency",
         "freeze_card",
         "unfreeze_card",
         "set_card_spending_limit",

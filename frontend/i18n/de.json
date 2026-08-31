@@ -322,8 +322,13 @@
     "voice_input_label": "Nachricht diktieren",
     "voice_input_not_supported": "Spracheingabe wird von diesem Browser nicht unterstützt.",
     "voice_input_error": "Spracheingabe fehlgeschlagen. Bitte versuche es erneut oder tippe deine Nachricht.",
+    "copy_message": "Nachricht kopieren",
+    "speak_message": "Nachricht vorlesen",
+    "speak_voice_unavailable_try_edge": "Dieser Browser hat keine installierte Stimme für die Sprache der Nachricht. Probiere Microsoft Edge, das mehrsprachige Stimmen enthält, oder füge die Sprache unter Windows-Einstellungen > Sprache hinzu.",
+    "speak_voice_unavailable_add_language": "Dieser Browser hat keine installierte Stimme für die Sprache der Nachricht. Füge die Sprache unter Windows-Einstellungen > Sprache hinzu.",
     "iban_read_from_file": "IBAN aus der angehängten Datei gelesen: {iban}",
     "iban_not_found_in_file": "In der Datei wurde keine eindeutige IBAN gefunden - bitte gib sie manuell ein.",
+    "iban_is_own_account": "Diese IBAN gehört dir - du kannst dir nicht selbst Geld senden.",
     "panel_heading": "BanK KI-Assistent",
     "history": {
       "rename_title": "Unterhaltung umbenennen",
@@ -431,6 +436,7 @@
     "sign_success": "Das Dokument wurde erfolgreich signiert!",
     "sign_error": "Signatur fehlgeschlagen."
   },
+  
   "face_id": {
     "status_check_error": "Face-ID-Status konnte nicht geprüft werden. Versuche es erneut.",
     "enrollment_required_generic": "Diese Aktion erfordert aktiviertes Face ID. Du wirst zur Einrichtung weitergeleitet.",
@@ -466,7 +472,10 @@
   "face_confirm": {
     "title": "Mit Face ID bestätigen",
     "default_reason": "Der Betrag überschreitet die Bestätigungsgrenze - bestätige deine Identität per Kamera.",
-    "camera_error": "Auf die Kamera konnte nicht zugegriffen werden. Überprüfe die Browserberechtigungen."
+    "camera_error": "Auf die Kamera konnte nicht zugegriffen werden. Überprüfe die Browserberechtigungen.",
+    "use_password_instead": "Stattdessen Passwort verwenden",
+    "password_label": "Passwort",
+    "password_required": "Gib dein Passwort ein."
   },
   "price_increase": {
     "title": "Der Abo-Preis ist gestiegen",

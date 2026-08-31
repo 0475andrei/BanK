@@ -101,7 +101,7 @@
     "label": "Kart",
     "expiry": "Son kullanma",
     "cvv": "CVV",
-    "limit": "Limit",
+    "limit": "Sınır",
     "show_details": "Son kullanma tarihini ve CVV'yi göster",
     "hide_details": "Son kullanma tarihini ve CVV'yi gizle",
     "status_active": "Aktif",
@@ -322,8 +322,13 @@
     "voice_input_label": "Mesajını söyle",
     "voice_input_not_supported": "Bu tarayıcı sesle giriş özelliğini desteklemiyor.",
     "voice_input_error": "Sesli giriş başarısız oldu. Tekrar dene veya mesajını yaz.",
+    "copy_message": "Mesajı kopyala",
+    "speak_message": "Mesajı sesli oku",
+    "speak_voice_unavailable_try_edge": "Bu tarayıcıda mesajın dili için yüklü bir ses yok. Çok dilli sesler içeren Microsoft Edge'i deneyin veya dili Windows Ayarları > Konuşma bölümünden ekleyin.",
+    "speak_voice_unavailable_add_language": "Bu tarayıcıda mesajın dili için yüklü bir ses yok. Dili Windows Ayarları > Konuşma bölümünden ekleyin.",
     "iban_read_from_file": "Ekli dosyadan okunan IBAN: {iban}",
     "iban_not_found_in_file": "Dosyada net bir IBAN bulunamadı - lütfen manuel olarak yazın.",
+    "iban_is_own_account": "Bu IBAN size ait - kendinize para gönderemezsiniz.",
     "panel_heading": "BanK Yapay Zekâ Asistanı",
     "history": {
       "rename_title": "Görüşmeyi yeniden adlandır",
@@ -466,7 +471,10 @@
   "face_confirm": {
     "title": "Face ID ile onayla",
     "default_reason": "Tutar onay eşiğini aşıyor - kimliğinizi kamerayla doğrulayın.",
-    "camera_error": "Kameraya erişilemedi. Tarayıcı izinlerinizi kontrol edin."
+    "camera_error": "Kameraya erişilemedi. Tarayıcı izinlerinizi kontrol edin.",
+    "use_password_instead": "Bunun yerine şifre kullan",
+    "password_label": "Şifre",
+    "password_required": "Şifreni gir."
   },
   "price_increase": {
     "title": "Abonelik ücreti arttı",

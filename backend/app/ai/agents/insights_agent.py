@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 
+from app.ai.agents.currency_rules import CURRENCY_ROUTING_RULES
 from app.ai.agents.scope_guardrail import OFF_TOPIC_GUARDRAIL
 from app.ai.agents.tool_loop import ToolLoopAgent
 from app.ai.routing import RoutingRule
@@ -83,6 +84,10 @@ INSIGHTS_ANALYTICAL_MARKERS = frozenset(
 )
 
 INSIGHTS_ROUTING_RULES = (
+    # FIRST, ahead of `insights_time_slice`'s `luna`: "cursul euro luna asta"
+    # is a rate question, not a spending analysis. Registered on BankingAgent
+    # too - see currency_rules.py for why both, and for the collision check.
+    *CURRENCY_ROUTING_RULES,
     RoutingRule(
         name="insights_spending",
         keywords=frozenset({"spend", "expense"}),
@@ -137,6 +142,11 @@ REGULI:
   pe categoria X"), dar niciodată să nu pretinzi că ai făcut-o.
 - Convertește sumele din unități minore în format lizibil (RON cu virgulă
   zecimală, două zecimale: 50000 înseamnă „500,00 RON").
+- Pentru conversii valutare folosește convert_currency, niciodată un curs din
+  memoria ta. `amount` este suma în unități ÎNTREGI ale monedei (100 pentru
+  100 EUR, nu 10000) — altfel decât la celelalte unelte. Spune mereu data
+  cursului BNR (`rate_date`); dacă `stale` este adevărat, menționează că este
+  ultimul curs cunoscut. Dacă unealta dă eroare, spune că nu ai cursul.
 - Datele: pentru interogări cu intervale („săptămâna trecută", „luna
   octombrie", „ultimele 3 luni"), calculează tu datele ISO (start_date,
   end_date) și pasează-le instrumentului. Data de azi este ziua curentă.
@@ -206,6 +216,26 @@ CÂND SĂ PREDAI CONVERSAȚIA (handoff_to_agent):
 - Dacă utilizatorul vrea, pornind de la analiza ta, un PLAN sau o proiecție
   („cât aș economisi în 6 luni dacă renunț la abonamentele astea?"), cheamă
   handoff_to_agent cu target_agent="planning".
+- ÎNTREBARE COMPUSĂ - două cereri într-un singur mesaj, din care tu poți
+  acoperi doar una (de ex. „care e soldul meu și cât am cheltuit luna asta?":
+  cheltuielile sunt ale tale, soldul nu). Atunci:
+  1. Scrie ÎNTÂI răspunsul tău complet la partea ta, ca text normal.
+  2. Abia apoi cheamă handoff_to_agent cu target_agent="banking" și
+     context_hint = exact partea rămasă, formulată ca cerere a
+     utilizatorului („Utilizatorul vrea și soldul conturilor sale.").
+  Ordinea contează: dacă chemi unealta înainte să scrii, partea ta de
+  răspuns se pierde.
+  Predă astfel DOAR pentru părți pe care celălalt agent le CITEȘTE: sold,
+  conturi, carduri, tranzacții, transferuri. Dacă partea rămasă cere o
+  ACȚIUNE (transfer, plată, blocare sau anulare de card, deschidere sau
+  închidere de cont), NU preda automat pentru ea - răspunde la partea ta și
+  spune-i utilizatorului să ceară acțiunea separat, ca să treacă prin
+  confirmările ei normale.
+- Dacă rămân trei sau mai multe cereri distincte, nu încerca să le acoperi pe
+  toate într-o tură: răspunde la partea ta, predă cel mult o dată, iar pentru
+  ce rămâne încheie cu o singură propoziție de forma „Pentru X, te rog
+  întreabă-mă separat." Nicio parte a întrebării nu are voie să rămână fără
+  niciun răspuns și fără nicio mențiune.
 - Nu preda pentru orice sugestie. Doar când utilizatorul chiar vrea să se
   întâmple ceva, iar tu nu ai instrumentul potrivit. Dacă nu e clar ce vrea,
   întreabă-l întâi, normal, în conversație.

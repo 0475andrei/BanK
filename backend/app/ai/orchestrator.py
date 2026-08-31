@@ -26,6 +26,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from app.ai.agents.base import Agent
+from app.ai.agents.document_agent import DOCUMENT_FOLLOWUP_RULE
 from app.ai.agents.scope_guardrail import OFF_TOPIC_DECLINE_MESSAGE, is_out_of_scope
 from app.ai.context import Context
 from app.ai.routing import RoutingDecision, normalise
@@ -85,6 +86,16 @@ ALLOWED_HANDOFF_TARGETS: dict[str, frozenset[str]] = {
 HANDOFF_REFUSED_REPLY = (
     "Am găsit ceva ce nu pot duce eu la capăt și nu am putut continua cu "
     "celălalt asistent. Spune-mi direct ce vrei să faci și te ajut de acolo."
+)
+
+#: Appended when a COMPOUND-question handoff is refused: the source agent
+#: answered its own half (see HandoffRequest.answer_so_far) and the remaining
+#: half has nowhere to go. Without this the user would be shown a confident
+#: half-answer with no sign that the rest of what they asked was dropped -
+#: which is the exact failure the compound-question work exists to fix, so it
+#: must not reappear in the gate's shadow.
+HANDOFF_PARTIAL_NOTE = (
+    "Pentru cealaltă parte a întrebării, te rog întreabă-mă separat."
 )
 
 #: The agent that may never take part in a handoff, in either direction. Its
@@ -147,15 +158,47 @@ class Orchestrator:
         `context` is consulted FIRST, ahead of keyword rules: an active
         document OR active statement (see Context.active_document_id /
         Context.statement_id, set by chat/router.py once it has verified
-        ownership) forces DocumentAgent regardless of what the message
-        says. This is deliberate, not just a convenience - keyword routing
-        runs on the message text, which for a document/statement
-        conversation may itself be influenced by the document's content
-        (e.g. a user pasting a phrase from it). If keyword rules ran first,
-        a message like "transfer 50 RON" while a document is active could
-        route away from DocumentAgent's isolation entirely. Context-first
-        means that can't happen: the override is decided before any keyword
-        is even looked at.
+        ownership) BIASES this turn towards DocumentAgent.
+
+        It biases rather than forces, since the routing-fix pass. It used to
+        force: while anything was attached, EVERY message went to
+        DocumentAgent regardless of intent. Because both fields are sticky
+        across turns - the frontend resends `document_id` with every message
+        until the user detaches (see wireDocumentAttach in frontend/app.js),
+        and `statement_id` re-resolves to the conversation's latest upload on
+        its own (see Context.statement_id) - that turned "I attached a file
+        once" into "no banking question works in this conversation any more".
+        A user asking "cât am acum în cont?" after uploading anything got
+        DocumentAgent explaining it cannot see their accounts. That was the
+        bug, and it is the whole reason this branch is no longer a hard
+        override.
+
+        The order below is what keeps the original intent without the
+        collateral damage:
+
+        1. A message that NAMES the attachment (DOCUMENT_FOLLOWUP_RULE) goes
+           to DocumentAgent even when another agent claims a stem in it - so
+           "ce scrie în extras despre transferuri" stays with the document
+           instead of being taken by BankingAgent's `transfer`.
+        2. Otherwise, a message another agent's rules actually claim routes
+           there normally. This is the fix: live-account questions reach the
+           agent that can answer them.
+        3. Otherwise - nothing matched at all - DocumentAgent still gets it,
+           which covers every vague follow-up ("și mai departe?", "rezumă")
+           that means the attachment and names nothing.
+
+        WHAT THIS DOES NOT WEAKEN. The old docstring justified the hard
+        override as protection against a message influenced by document
+        content routing away from DocumentAgent's isolation. That isolation
+        does not live here and never did: it is `build_document_tools`
+        handing DocumentAgent read_document/summarize_statement and NOTHING
+        else, and every OTHER agent having no tool that can read the
+        attachment at all (see app/ai/service.py). Routing decides which
+        agent answers, not what any agent can reach - so a balance question
+        arriving at BankingAgent while a PDF is attached gets the user's
+        ledger, with no path to a single byte of that PDF. The quarantine in
+        `dispatch` (QUARANTINED_AGENT) and the statement-mode gate in
+        `_handoff_allowed` are likewise untouched by this.
         """
         if self._default is None:
             raise RuntimeError("Orchestrator has no agents registered")
@@ -163,17 +206,9 @@ class Orchestrator:
         if context.active_document_id is not None or context.statement_id is not None:
             document_agent = self._agents.get("documents")
             if document_agent is not None:
-                reason = (
-                    "active_document_in_context"
-                    if context.active_document_id is not None
-                    else "active_statement_in_context"
-                )
-                return RoutingDecision(
-                    agent_name="documents",
-                    reason=reason,
-                    confidence=1.0,
-                    matched_rule="context_override",
-                )
+                attachment_decision = self._route_with_attachment(message, context)
+                if attachment_decision is not None:
+                    return attachment_decision
             # DocumentAgent isn't registered for some reason (e.g. a minimal
             # orchestrator in a test) - fall through to keyword routing
             # rather than raising, same "never let routing itself take down
@@ -192,11 +227,65 @@ class Orchestrator:
 
         return self._classify_with_model(message)
 
-    def _match_rules(self, message: str) -> RoutingDecision | None:
-        """First rule that claims the message wins. None if nothing matched."""
+    def _route_with_attachment(self, message: str, context: Context) -> RoutingDecision | None:
+        """Route a message sent while a document/statement is attached.
+
+        Returns the decision, or None to mean "no attachment-specific
+        outcome" - which today cannot happen (step 3 below always decides),
+        but keeps `route()` honest about owning the fallback rather than
+        this helper silently becoming the only path.
+
+        See `route()`'s docstring for the three-step order and why it
+        replaced an unconditional override.
+        """
+        reason = (
+            "active_document_in_context"
+            if context.active_document_id is not None
+            else "active_statement_in_context"
+        )
+
+        # 1. Names the attachment -> DocumentAgent, ahead of anyone else's
+        #    keywords.
+        if DOCUMENT_FOLLOWUP_RULE.matched(normalise(message)):
+            return RoutingDecision(
+                agent_name="documents",
+                reason=reason,
+                confidence=1.0,
+                matched_rule="context_override",
+            )
+
+        # 2. Another agent actually claims it -> let it. THE FIX: this is the
+        #    branch that did not exist, and its absence is what pinned every
+        #    message to DocumentAgent for the life of the conversation.
+        other = self._match_rules(message, skip=frozenset({"documents"}))
+        if other is not None:
+            return other
+
+        # 3. Nobody claims it. With something attached, that means the
+        #    attachment - a follow-up naming nothing ("rezumă", "și mai
+        #    departe?") is about the file the user is looking at.
+        return RoutingDecision(
+            agent_name="documents",
+            reason=reason,
+            confidence=1.0,
+            matched_rule="context_override",
+        )
+
+    def _match_rules(
+        self, message: str, *, skip: frozenset[str] = frozenset()
+    ) -> RoutingDecision | None:
+        """First rule that claims the message wins. None if nothing matched.
+
+        `skip` names agents to pass over. Only `route()`'s attached-document
+        branch uses it, to ask "does anyone OTHER than DocumentAgent want
+        this?" without DocumentAgent's own keyword rules answering a question
+        that branch has already decided separately.
+        """
         normalised = normalise(message)
 
         for agent_name, agent in self._agents.items():
+            if agent_name in skip:
+                continue
             for rule in agent.routing_rules:
                 matched = rule.matched(normalised)
                 if not matched:
@@ -390,11 +479,24 @@ class Orchestrator:
 
         # A last hop still carrying a `handoff` is one whose request was NOT
         # honoured - every `break` above leaves it that way, and an honoured
-        # one always has another hop after it. If it also said nothing, the
-        # user would otherwise be handed an empty bubble.
+        # one always has another hop after it.
         last = hops[-1]
-        if last.handoff is not None and not last.reply:
-            last.reply = HANDOFF_REFUSED_REPLY
+        if last.handoff is not None:
+            if not last.reply:
+                # Said nothing and got nowhere: the user would otherwise be
+                # handed an empty bubble.
+                last.reply = HANDOFF_REFUSED_REPLY
+            elif last.handoff.answer_so_far:
+                # A COMPOUND question whose second half never got answered:
+                # the source covered its own half (that is what it put in
+                # `answer_so_far`) and the gate stopped the rest. Showing the
+                # half that worked without saying the other half was dropped
+                # is the silent-drop this pass exists to remove - so say it.
+                # Only for `answer_so_far`: an ordinary handoff refusal where
+                # the source happened to have text is a complete answer that
+                # merely also asked for help, and appending to it would be
+                # noise.
+                last.reply = f"{last.reply}\n\n{HANDOFF_PARTIAL_NOTE}"
 
         return TurnDispatchResult(hops=hops)
 

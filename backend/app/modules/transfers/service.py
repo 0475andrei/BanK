@@ -12,9 +12,10 @@ does both inside one transaction.
 """
 
 import uuid
+from datetime import date
+from decimal import Decimal
 
 from postgrest.exceptions import APIError
-from supabase import AsyncClient
 
 from app.core.exceptions import (
     CurrencyMismatchError,
@@ -25,8 +26,10 @@ from app.core.exceptions import (
 from app.db.supabase_client import map_postgrest_error
 from app.modules.accounts import service as accounts_service
 from app.modules.face_auth import service as face_auth_service
+from app.modules.notifications import service as notifications_service
 from app.modules.transfers.schemas import TransferCreate
 from app.modules.users.schemas import UserRead
+from supabase import AsyncClient
 
 
 async def _find_by_idempotency_key(supabase: AsyncClient, idempotency_key: str) -> dict | None:
@@ -59,6 +62,8 @@ async def create_transfer(
     idempotency_key: str,
     face_token: str | None = None,
     proposal_pre_authorized: bool = False,
+    *,
+    password: str | None = None,
 ) -> dict:
     existing = await _find_by_idempotency_key(supabase, idempotency_key)
     if existing is not None:
@@ -86,6 +91,7 @@ async def create_transfer(
             user,
             required=face_auth_service.requires_face_confirmation(payload.amount_minor),
             token=face_token,
+            password=password,
         )
 
     try:
@@ -98,6 +104,122 @@ async def create_transfer(
                 "p_currency": currency,
                 "p_description": payload.description
                 or f"Transfer: {from_account['name']} → {to_account['name']}",
+                "p_idempotency_key": idempotency_key,
+                "p_actor_user_id": str(user.id),
+            },
+        ).execute()
+    except APIError as exc:
+        mapped = map_postgrest_error(exc)
+        if mapped is not None:
+            raise mapped from exc
+        raise
+
+    # Same category payments/service.py uses for "you got paid" - a
+    # transfer moves money into an account just as much as a payment does,
+    # so it gets the same real-time pop-up/animation on the frontend (see
+    # notifications/bus.py). Always this user's own notification (transfers
+    # are strictly own-account-to-own-account - see this module's docstring),
+    # not a cross-user event like the payments one.
+    await notifications_service.create_notification(
+        supabase,
+        user.id,
+        title="Ai primit bani",
+        body=(
+            f"{payload.amount_minor / 100:.2f} {currency} au fost transferați din "
+            f"\"{from_account['name']}\" în \"{to_account['name']}\"."
+        ),
+        category="money_received",
+    )
+
+    return resp.data
+
+
+async def create_fx_transfer(
+    supabase: AsyncClient,
+    user: UserRead,
+    *,
+    from_account_id: uuid.UUID,
+    to_account_id: uuid.UUID,
+    from_amount_minor: int,
+    to_amount_minor: int,
+    exchange_rate: Decimal,
+    exchange_rate_date: date,
+    description: str | None,
+    idempotency_key: str,
+    proposal_pre_authorized: bool = False,
+) -> dict:
+    """A transfer between two accounts in DIFFERENT currencies.
+
+    A sibling of `create_transfer` above rather than a widening of it: an
+    ordinary transfer keeps its exact existing code path, and neither
+    function's reader has to hold the other's case in their head. Both end up
+    in `post_transaction`, which remains the only thing that writes
+    ledger_entries.
+
+    The mechanics live in the `create_fx_transfer` RPC (0024_fx_desk.sql):
+    two balanced single-currency journals through the bank's FX desk, in one
+    transaction. Nothing about the ledger's invariants is relaxed to make
+    this work - see that file's header.
+
+    THE RATE IS PASSED IN, NOT LOOKED UP. It was locked when the proposal was
+    built and shown to the user; re-fetching here would mean executing a
+    number they never saw. BNR publishes once a business day so the two would
+    almost always agree - "almost always" is not the standard for money.
+
+    Currencies are read from the two accounts rather than taken as arguments,
+    for the same reason `propose_transfer` stopped taking one: there is
+    exactly one correct value per account and it is not the caller's to
+    state.
+    """
+    existing = await _find_by_idempotency_key(supabase, idempotency_key)
+    if existing is not None:
+        if not await _is_owned_by(supabase, uuid.UUID(existing["from_account_id"]), user.id):
+            raise IdempotencyKeyConflictError()
+        return existing
+
+    if from_account_id == to_account_id:
+        raise ValidationError("from_account_id and to_account_id must differ.")
+
+    from_account = await accounts_service.get_account(supabase, user, from_account_id)
+    to_account = await accounts_service.get_account(supabase, user, to_account_id)
+    accounts_service.assert_not_locked_for_debit(from_account)
+
+    if from_account["currency"] == to_account["currency"]:
+        # Not an FX transfer. Refused rather than quietly forwarded, so the
+        # ordinary path cannot drift into this one unnoticed.
+        raise ValidationError("Same-currency transfers must use create_transfer.")
+
+    # Step-up auth is judged on what LEAVES the user's account, which is the
+    # source amount in the source currency - the same figure `create_transfer`
+    # passes, and the same one the user was asked to confirm.
+    #
+    # `token=None`: every caller today arrives through the proposal flow,
+    # which has already proved identity and passes
+    # proposal_pre_authorized=True, so this branch is unreachable in
+    # practice. It is kept rather than asserted away so that adding a direct
+    # REST route for FX transfers later cannot accidentally skip step-up.
+    if not proposal_pre_authorized:
+        await face_auth_service.enforce_face_confirmation(
+            supabase,
+            user,
+            required=face_auth_service.requires_face_confirmation(from_amount_minor),
+            token=None,
+        )
+
+    try:
+        resp = await supabase.rpc(
+            "create_fx_transfer",
+            {
+                "p_from_account_id": str(from_account["id"]),
+                "p_to_account_id": str(to_account["id"]),
+                "p_from_amount_minor": from_amount_minor,
+                "p_from_currency": from_account["currency"],
+                "p_to_amount_minor": to_amount_minor,
+                "p_to_currency": to_account["currency"],
+                "p_exchange_rate": str(exchange_rate),
+                "p_exchange_rate_date": exchange_rate_date.isoformat(),
+                "p_description": description
+                or f"Schimb valutar: {from_account['name']} → {to_account['name']}",
                 "p_idempotency_key": idempotency_key,
                 "p_actor_user_id": str(user.id),
             },

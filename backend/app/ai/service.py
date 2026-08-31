@@ -20,6 +20,7 @@ from app.ai.providers.base import ModelProvider
 from app.ai.schemas import Message
 from app.ai.tools.banking import (
     AddBeneficiaryTool,
+    ConvertCurrencyTool,
     CreateScheduledTransferTool,
     FindBeneficiaryByNameTool,
     FreezeCardTool,
@@ -84,6 +85,10 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
             ListTransfersTool(supabase),
             ResolveIbanHolderTool(supabase),
             FindBeneficiaryByNameTool(supabase),
+            # Takes no `supabase`, unlike everything else here: currency
+            # conversion is a pure calculation over BNR's public daily rate
+            # table and reads nothing of the user's (see its docstring).
+            ConvertCurrencyTool(),
             # Low-stakes and reversible: execute directly (see each tool's
             # own docstring for why it doesn't need a UI-level confirm step).
             FreezeCardTool(supabase),
@@ -137,6 +142,11 @@ def build_insights_tools(supabase: AsyncClient, provider: ModelProvider) -> Tool
             ComputeSpendingStatsTool(supabase),
             DetectAnomaliesTool(supabase),
             CompareStatementToLedgerTool(supabase),
+            # Same instance-free read tool the banking agent gets: an analysis
+            # of foreign-currency spending needs to state amounts in RON, and
+            # sending the turn to another agent just to divide by a published
+            # rate would be a handoff that buys nothing.
+            ConvertCurrencyTool(),
             HandoffToAgentTool(),
         ]
     )
@@ -259,13 +269,15 @@ class AIService:
         message falls back to — which is a separate thing from rule order.
 
         DocumentAgent's registration position among these barely matters:
-        `Orchestrator.route()` checks `context.active_document_id` before
-        ANY keyword rule (see orchestrator.py), so whenever a document is
-        active, DocumentAgent wins regardless of where it sits here. Its
-        keyword rules (`document`, `pdf`, `contract`, ...) are only a
-        fallback for "no document attached yet" messages, and don't overlap
-        any other agent's stems, so registering it here — after Insights,
-        before Docs/Banking — costs nothing.
+        DocumentAgent's registration position among these matters only for
+        messages sent with nothing attached. While a document or statement IS
+        attached, `Orchestrator.route()` takes its own path (see
+        `_route_with_attachment`): the attachment gets first refusal and the
+        last word, but a message another agent's rules actually claim — "cât
+        am acum în cont?" — goes to that agent instead of being pinned here.
+        DocumentAgent's own keyword rules (`document`, `pdf`, `contract`, ...)
+        don't overlap any other agent's stems, so registering it here — after
+        Insights, before Docs/Banking — costs nothing either way.
         """
         orchestrator = Orchestrator(provider=provider)
         orchestrator.register(InsightsAgent(provider, build_insights_tools(supabase, provider)))
