@@ -1172,6 +1172,63 @@ body {
     border-bottom-right-radius: 4px;
 }
 
+/* Copy and read-aloud controls, appended under every real AI reply (see
+   appendChatBubble in app.js - skipped for the transient typing bubble).
+   align-self keeps the row a compact left-anchored control rather than
+   stretching full-width like .message-content's other flex children. */
+.message-actions {
+    display: flex;
+    align-self: flex-start;
+    gap: 2px;
+    margin-top: 6px;
+}
+
+.message-copy-btn,
+.message-speak-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    background: transparent;
+    border: none;
+    border-radius: var(--border-radius-sm);
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.message-copy-btn:hover,
+.message-copy-btn:focus-visible,
+.message-speak-btn:hover,
+.message-speak-btn:focus-visible {
+    color: var(--text-main);
+    background-color: var(--overlay-06);
+    outline: none;
+}
+
+.message-copy-btn .icon,
+.message-speak-btn .icon {
+    width: 13px;
+    height: 13px;
+    stroke-width: 2;
+}
+
+/* Quick, subtle confirmation: the icon swaps to a checkmark and tints
+   income-green for a moment (see the setTimeout in app.js), then both
+   revert - no layout shift, no popup. */
+.message-copy-btn.is-copied {
+    color: var(--income-green);
+}
+
+/* Stays teal - not a brief pulse like .is-copied above - for as long as the
+   message is actually playing, since unlike the copy confirmation this
+   reflects real, possibly multi-second, ongoing state (see the stop-glyph
+   swap and stopMessageSpeech in app.js). */
+.message-speak-btn.is-speaking {
+    color: var(--primary-teal);
+}
+
 /* Assistant is thinking: same bubble, a quiet label over three pulsing dots. */
 .typing-label {
     font-size: 12px;
@@ -2424,7 +2481,12 @@ html.i18n-pending body { visibility: hidden; }
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 100;
+    /* Must beat .top-header (200) - it sits in its own stacking context
+       (position: relative for the profile-panel dropdown fix) and would
+       otherwise paint over any modal opened from inside the dashboard,
+       most visibly with the face-confirm flashlight: the header stayed
+       dark and interactive while everything below it went white. */
+    z-index: 300;
 }
 
 .modal-overlay[hidden] { display: none; }
@@ -2450,8 +2512,36 @@ html.i18n-pending body { visibility: hidden; }
 /* Modal-based camera flow (the step-up face-confirm modal): the backdrop
    itself goes white - the .modal card is its own DOM child, so it always
    paints on top of its own parent's background with no z-index changes
-   needed. */
+   needed.
+
+   The card's OWN background goes white too, not just the backdrop around
+   it: .modal is capped at 420px, but on a narrow phone screen (exactly
+   where a flashlight is actually useful) that card fills nearly the whole
+   viewport, leaving almost none of the backdrop's white visible - "full
+   screen" only held on wide viewports without this. Colors below are
+   fixed, not theme tokens: the flashlight is always pure white regardless
+   of the app's light/dark theme, so its own text/buttons need their own
+   fixed dark colors to stay legible against it either way. */
 .modal-overlay.face-flashlight { background-color: #ffffff; }
+
+.modal-overlay.face-flashlight .modal {
+    background-color: #ffffff;
+    border-color: rgba(11, 15, 23, 0.12);
+    color: #0B0F17;
+}
+
+.modal-overlay.face-flashlight .modal-close { color: #0B0F17; }
+.modal-overlay.face-flashlight .modal-close:hover { color: #000000; }
+
+.modal-overlay.face-flashlight .btn-secondary {
+    background-color: rgba(11, 15, 23, 0.06);
+    color: #0B0F17;
+    border-color: rgba(11, 15, 23, 0.2);
+}
+
+.modal-overlay.face-flashlight .btn-secondary:hover {
+    background-color: rgba(11, 15, 23, 0.12);
+}
 
 .modal {
     width: 100%;
@@ -2728,56 +2818,69 @@ html.i18n-pending body { visibility: hidden; }
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* --- Notification pop-up (new notification arriving, see pollNotifications
-   in app.js) - distinct from the plain #toast-container above: this one
-   carries a title+body, is clickable (opens the bell's history and marks
-   THIS notification seen), and gets a special money-themed flourish when
-   the event is a payment received (category === "money_received" - see
-   notifications/schemas.py). The bell dropdown itself is untouched; this is
-   only the "something just happened" moment, not the history. */
+/* --- Notification pop-up (new notification arriving, see
+   startNotificationStream in app.js) - distinct from the plain
+   #toast-container above: this one carries a title+body, is clickable
+   (opens the bell's history and marks THIS notification seen), and gets a
+   special money-themed flourish when the event is a payment received
+   (category === "money_received" - see notifications/schemas.py). The bell
+   dropdown itself is untouched; this is only the "something just happened"
+   moment, not the history.
+
+   A bar that drops from above the very top of the viewport, holds, then
+   retreats back up - not a card sliding in from the side - so it reads as
+   a banner announcing itself from off-screen, on top of whatever view is
+   currently showing (dashboard, chat, cards, ...: this container sits
+   outside every `.view` section, so it is never torn down by switching
+   between them). Centered rather than corner-anchored so it announces
+   itself the same way regardless of screen width. */
 #notification-popup-container {
     position: fixed;
-    top: calc(var(--header-height) + 12px);
-    right: 24px;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 250;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    max-width: 340px;
+    align-items: center;
+    gap: 8px;
+    width: max-content;
+    max-width: min(420px, calc(100vw - 32px));
+    padding-top: 12px;
 }
 
 .notification-popup {
     position: relative;
     display: flex;
     gap: 12px;
-    align-items: flex-start;
+    align-items: center;
     background-color: var(--bg-surface);
     border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    padding: 14px 30px 14px 16px;
+    border-radius: 999px;
+    padding: 10px 34px 10px 12px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     cursor: pointer;
-    animation: notification-pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: notification-drop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .notification-popup.is-leaving {
-    animation: notification-pop-out 0.2s ease-in forwards;
+    animation: notification-drop-out 0.25s ease-in forwards;
 }
 
-@keyframes notification-pop-in {
-    from { opacity: 0; transform: translateX(24px) scale(0.92); }
-    to { opacity: 1; transform: translateX(0) scale(1); }
+@keyframes notification-drop-in {
+    from { opacity: 0; transform: translateY(-130%); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes notification-pop-out {
-    from { opacity: 1; transform: translateX(0) scale(1); }
-    to { opacity: 0; transform: translateX(24px) scale(0.92); }
+@keyframes notification-drop-out {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-130%); }
 }
 
 .notification-popup-icon {
     flex-shrink: 0;
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -2786,15 +2889,16 @@ html.i18n-pending body { visibility: hidden; }
     color: var(--primary-teal);
 }
 
-.notification-popup-icon .icon { width: 18px; height: 18px; }
+.notification-popup-icon .icon { width: 16px; height: 16px; }
 
 .notification-popup-title { font-size: 13px; font-weight: 700; color: var(--text-main); }
-.notification-popup-text { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.notification-popup-text { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
 
 .notification-popup-close {
     position: absolute;
-    top: 6px;
-    right: 6px;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
     background: transparent;
     border: none;
     color: var(--text-muted);
@@ -2821,16 +2925,16 @@ html.i18n-pending body { visibility: hidden; }
 
 .money-particle {
     position: absolute;
-    right: 20px;
-    bottom: 12px;
-    font-size: 16px;
+    left: 16px;
+    bottom: 8px;
+    font-size: 15px;
     opacity: 0;
     pointer-events: none;
     animation: money-particle-rise 1.1s ease-out forwards;
 }
 
-.money-particle:nth-of-type(2) { right: 40px; animation-delay: 0.08s; }
-.money-particle:nth-of-type(3) { right: 60px; animation-delay: 0.18s; }
+.money-particle:nth-of-type(2) { left: 30px; animation-delay: 0.08s; }
+.money-particle:nth-of-type(3) { left: 2px; animation-delay: 0.18s; }
 
 @keyframes money-particle-rise {
     0% { opacity: 0; transform: translateY(0) scale(0.6) rotate(0deg); }

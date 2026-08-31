@@ -675,17 +675,31 @@
     <div class="modal-overlay" id="face-confirm-modal" hidden>
         <div class="modal">
             <div class="modal-header">
-                <h3 data-i18n="face_confirm.title">Confirmă cu Face ID</h3>
+                <h3 id="face-confirm-title" data-i18n="face_confirm.title">Confirmă cu Face ID</h3>
                 <button class="modal-close" id="close-face-confirm-modal"><i data-lucide="x"></i></button>
             </div>
             <p class="field-hint" id="face-confirm-reason" style="margin-bottom: 16px;" data-i18n="face_confirm.default_reason">
                 Suma depășește pragul de confirmare - verifică-ți identitatea prin cameră.
             </p>
             <div class="auth-error" id="face-confirm-error" hidden></div>
-            <div class="face-camera-wrap">
-                <video id="face-confirm-video" autoplay playsinline muted></video>
-                <canvas id="face-confirm-canvas" hidden></canvas>
+
+            <div id="face-confirm-camera-section">
+                <div class="face-camera-wrap">
+                    <video id="face-confirm-video" autoplay playsinline muted></video>
+                    <canvas id="face-confirm-canvas" hidden></canvas>
+                </div>
+                <!-- Revealed only after MAX_FACE_ATTEMPTS failed captures in
+                     this same modal session (see requestFaceConfirmationToken
+                     in app.js) - and only for callers that opted into the
+                     fallback at all (allowPasswordFallback: true). -->
+                <button type="button" class="link-btn" id="face-confirm-use-password" style="margin-top: 12px;" hidden data-i18n="face_confirm.use_password_instead">Folosește parola în loc</button>
             </div>
+
+            <div id="face-confirm-password-section" hidden>
+                <label class="field-label" for="face-confirm-password-input" data-i18n="face_confirm.password_label">Parolă</label>
+                <input class="field-input" type="password" id="face-confirm-password-input" autocomplete="current-password">
+            </div>
+
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" id="cancel-face-confirm" data-i18n="common.Anulează">Anulează</button>
                 <button type="button" class="btn btn-primary" id="capture-face-confirm" data-i18n="common.Confirmă">Confirmă</button>

@@ -38,7 +38,10 @@ def _orchestrator() -> Orchestrator:
     return Orchestrator([banking, documents])
 
 
-def test_active_document_overrides_strong_banking_keywords():
+def test_active_document_claims_a_message_about_the_document():
+    """The attachment still wins when the message NAMES it - even against
+    another agent's keywords in the same sentence ("transferuri" is
+    BankingAgent's stem; "document" keeps this with DocumentAgent)."""
     orchestrator = _orchestrator()
     context = Context(
         user_id=TEST_USER_ID,
@@ -46,11 +49,46 @@ def test_active_document_overrides_strong_banking_keywords():
         active_document_id="doc-1111",
     )
 
-    decision = orchestrator.route("care este soldul meu si ce card am?", context)
+    decision = orchestrator.route("ce scrie in document despre transferuri?", context)
 
     assert decision.agent_name == "documents"
     assert decision.matched_rule == "context_override"
     assert decision.confidence == 1.0
+
+
+def test_active_document_does_not_capture_a_live_account_question():
+    """THE ROUTING FIX. `document_id` is resent with every message until the
+    user detaches (see wireDocumentAttach in frontend/app.js), so before this
+    an attached PDF meant no banking question worked for the rest of the
+    conversation - "cât am acum în cont?" reached DocumentAgent, which cannot
+    see accounts, and said so."""
+    orchestrator = _orchestrator()
+    context = Context(
+        user_id=TEST_USER_ID,
+        account_ids=OWNED_ACCOUNT_IDS,
+        active_document_id="doc-1111",
+    )
+
+    decision = orchestrator.route("cat am acum in cont?", context)
+
+    assert decision.agent_name == "banking"
+    assert decision.matched_rule == "banking_keywords"
+
+
+def test_a_vague_followup_still_belongs_to_the_attached_document():
+    """No agent's rules claim it, so with something attached it means the
+    attachment - the third branch of route()'s attachment order."""
+    orchestrator = _orchestrator()
+    context = Context(
+        user_id=TEST_USER_ID,
+        account_ids=OWNED_ACCOUNT_IDS,
+        active_document_id="doc-1111",
+    )
+
+    decision = orchestrator.route("si mai departe?", context)
+
+    assert decision.agent_name == "documents"
+    assert decision.matched_rule == "context_override"
 
 
 def test_no_active_document_routes_normally():
@@ -65,9 +103,11 @@ def test_no_active_document_routes_normally():
     assert decision.matched_rule == "banking_keywords"
 
 
-def test_active_statement_overrides_strong_banking_keywords():
-    """Step 13's equivalent of test_active_document_overrides_strong_banking_
-    keywords above - context.statement_id triggers the same override."""
+def test_active_statement_claims_a_message_about_the_statement():
+    """Step 13's equivalent of the document case above. `extras` reaches
+    DocumentAgent only because a statement is attached - see
+    DOCUMENT_FOLLOWUP_RULE, which is deliberately not a general routing rule
+    (BankingAgent owns `extras` for "generate me a statement")."""
     orchestrator = _orchestrator()
     context = Context(
         user_id=TEST_USER_ID,
@@ -75,11 +115,40 @@ def test_active_statement_overrides_strong_banking_keywords():
         statement_id="stmt-1111",
     )
 
-    decision = orchestrator.route("care este soldul meu si ce card am?", context)
+    decision = orchestrator.route("ce contine extrasul?", context)
 
     assert decision.agent_name == "documents"
     assert decision.matched_rule == "context_override"
     assert decision.reason == "active_statement_in_context"
+
+
+def test_extras_still_belongs_to_banking_when_nothing_is_attached():
+    """The other half of the rule above: DOCUMENT_FOLLOWUP_RULE must not leak
+    into ordinary routing, or asking the bank to produce a statement would
+    reach the agent that only reads attached ones."""
+    orchestrator = _orchestrator()
+    context = Context(user_id=TEST_USER_ID, account_ids=OWNED_ACCOUNT_IDS)
+
+    decision = orchestrator.route("vreau extrasul de cont pe luna trecuta", context)
+
+    assert decision.agent_name == "banking"
+
+
+def test_active_statement_does_not_capture_a_live_account_question():
+    """The statement half of the routing fix. This one bit harder than the
+    document half: `statement_id` re-resolves to the conversation's latest
+    upload with nothing sent by the client at all (see Context.statement_id),
+    so it went sticky on its own."""
+    orchestrator = _orchestrator()
+    context = Context(
+        user_id=TEST_USER_ID,
+        account_ids=OWNED_ACCOUNT_IDS,
+        statement_id="stmt-1111",
+    )
+
+    decision = orchestrator.route("cat am acum in cont?", context)
+
+    assert decision.agent_name == "banking"
 
 
 # ---------------------------------------------------------------------------

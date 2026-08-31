@@ -67,6 +67,20 @@ class CurrencyMismatchError(AppError):
     default_message = "Currencies do not match."
 
 
+class ExchangeRateUnavailableError(AppError):
+    """No BNR rate could be obtained for a cross-currency transfer.
+
+    503 rather than 422: nothing about the request is wrong, an upstream we
+    depend on is simply not answering and has no cached answer either. The
+    only alternative would be inventing a rate, which is never an option -
+    see app/core/bnr_client.py.
+    """
+
+    status_code = 503
+    error_code = "exchange_rate_unavailable"
+    default_message = "Cursul valutar BNR nu este disponibil momentan."
+
+
 class SubscriptionPriceIncreaseError(AppError):
     """Raised by payments/service.py when a payment to a recognized
     recurring merchant costs more than the sender's last payment to that
@@ -218,8 +232,13 @@ class FaceAuthMethodRequiredError(AppError):
     proposals_service._proposal_requires_face and
     face_auth_service.enforce_face_confirmation. Distinct from
     FaceConfirmationRequiredError: the caller isn't missing a token, they
-    affirmatively chose the wrong step-up method for this amount/recipient,
-    and must retry with `auth_method: "face"` instead."""
+    affirmatively chose the wrong step-up method for this amount/recipient.
+    Not a hard wall, though: proposals_service.confirm_proposal stops
+    raising this once enough failed attempts are already on record for this
+    proposal (FACE_FAILURES_BEFORE_PASSWORD_FALLBACK) - the caller should
+    retry with `auth_method: "face"` UNLESS the UI already walked them
+    through several failed face attempts, in which case a plain password
+    retry is expected to succeed instead."""
 
     status_code = 428
     error_code = "face_auth_method_required"
@@ -307,3 +326,22 @@ class AIProviderMisconfiguredError(AppError):
     status_code = 500
     error_code = "ai_provider_misconfigured"
     default_message = "AI provider is misconfigured"
+
+
+class SpeechServiceUnavailableError(AppError):
+    """AZURE_SPEECH_* is unset or incomplete - see
+    Settings.require_azure_speech(). Fails closed rather than silently
+    returning no audio, same reasoning as AIServiceUnavailableError; the
+    frontend falls back to the browser's own SpeechSynthesis on this."""
+
+    status_code = 503
+    error_code = "speech_service_unavailable"
+    default_message = "Read-aloud is not available right now."
+
+
+class SpeechProviderError(AppError):
+    """The upstream Azure Speech call failed (network, auth, quota, ...)."""
+
+    status_code = 502
+    error_code = "speech_provider_error"
+    default_message = "Text-to-speech request failed"

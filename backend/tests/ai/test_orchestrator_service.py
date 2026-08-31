@@ -285,6 +285,10 @@ def test_insights_agent_has_own_routing_rules():
     assert InsightsAgent.routing_rules
     assert InsightsAgent.routing_rules is not BankingAgent.routing_rules
     assert {rule.name for rule in InsightsAgent.routing_rules} == {
+        # Shared with BankingAgent - both hold convert_currency, so both
+        # route to it (see app/ai/agents/currency_rules.py).
+        "currency_conversion",
+        "currency_named",
         "insights_spending",
         "insights_spending_analysis",
         "insights_analysis",
@@ -322,6 +326,7 @@ def test_insights_agent_gets_only_its_own_tools():
         "compute_spending_stats",
         "detect_anomalies",
         "compare_statement_to_ledger",
+        "convert_currency",
         "handoff_to_agent",
     ]
     assert tools.get("list_cards") is None

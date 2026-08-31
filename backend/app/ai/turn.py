@@ -54,6 +54,14 @@ class HandoffRequest(BaseModel):
     #: turn. PROMPT TEXT ONLY — it never contributes to identity, account
     #: access, or authorisation anywhere (see HandoffToAgentTool.execute).
     context_hint: str
+    #: The source agent's own answer to the part of a compound question it
+    #: could cover, to be shown to the user as that hop's reply. Empty for an
+    #: ordinary handoff, where the source has nothing to say and the target's
+    #: reply is the whole answer. See HandoffToAgentTool for why this rides
+    #: here instead of being text the model emits alongside the tool call —
+    #: `ModelResponse` structurally forbids that. Defaults to "" so every
+    #: handoff written before this field existed still validates.
+    answer_so_far: str = ""
 
 
 class TurnResult(BaseModel):
@@ -114,6 +122,35 @@ class TurnDispatchResult(BaseModel):
             if hop.reply:
                 return hop.reply
         return ""
+
+    @property
+    def combined_reply(self) -> str:
+        """EVERY hop's reply, in order - what the user should actually read.
+
+        `final_reply` above answers "which hop finished the turn", and for a
+        handoff whose source said nothing (the Step 15 demo: Insights calls
+        `handoff_to_agent` and emits no text) the two are byte-identical.
+        They diverge exactly when more than one hop spoke, which is what the
+        compound-question handoff introduced: Insights answers the spending
+        half, hands off, and Banking answers the balance half. `final_reply`
+        would show the user only the balance and silently drop the spending
+        answer that was computed, paid for, and already persisted - the live
+        reply would disagree with the same turn re-read from history after a
+        reload (see _persist_turn in chat/router.py, which stores every hop).
+
+        Kept as a SEPARATE property rather than a redefinition of
+        `final_reply`, which stays exactly what it was - "the hop that
+        finished the turn". That question still has callers and tests of its
+        own (the hop-cap and cycle-guard chains assert on it directly, where
+        last-hop-wins is the behaviour being described), and quietly widening
+        it would have changed what those mean rather than adding something
+        new. `chat/router.py` is the caller that wants every hop; it asks for
+        it by name.
+
+        Empty hops are skipped, so a chain that produced one answer reads as
+        that one answer with no blank padding around it.
+        """
+        return "\n\n".join(hop.reply for hop in self.hops if hop.reply)
 
     @property
     def new_messages(self) -> list[Message]:

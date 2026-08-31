@@ -66,6 +66,17 @@ class HandoffToAgentInput(BaseModel):
             "(ex. cardul și plata recurentă în cauză)."
         ),
     )
+    answer_so_far: str = Field(
+        default="",
+        max_length=2000,
+        description=(
+            "Răspunsul TĂU pentru partea din întrebare pe care ai acoperit-o "
+            "deja, exact așa cum vrei să îl citească utilizatorul. Lasă-l gol "
+            "dacă nu ai răspuns la nimic. Folosește-l pentru întrebări "
+            "compuse: aici pui partea ta, iar în context_hint pui partea "
+            "rămasă, pentru celălalt agent."
+        ),
+    )
 
 
 class HandoffToAgentTool(Tool):
@@ -114,11 +125,25 @@ class HandoffToAgentTool(Tool):
         # dispatch logs it once it has been matched against a real agent.
         logger.info("handoff requested by an agent")
 
+        # `answer_so_far` exists because of a hard constraint one layer down:
+        # `ModelResponse` carries EITHER text OR tool_calls, never both (see
+        # app/ai/schemas.py), and `ToolLoopAgent.run` ends the turn the moment
+        # a model emits text. A source agent therefore cannot say something
+        # AND hand off in the same turn - the natural way to answer half a
+        # compound question and pass the other half on. Carrying that half
+        # here, as an argument, is the way to do it without relaxing an
+        # invariant every provider adapter and every agent depends on.
+        #
+        # It is model-authored text shown to the user, which is exactly what
+        # an agent's ordinary `reply` already is - the same trust level, not a
+        # new one. It contributes nothing to identity, routing or
+        # authorisation; `dispatch`'s gates do not read it.
         payload: dict[str, Any] = {
             HANDOFF_SENTINEL_KEY: {
                 "target": validated_input.target_agent,
                 "reason": validated_input.reason,
                 "context_hint": validated_input.context_hint,
+                "answer_so_far": validated_input.answer_so_far,
             }
         }
         return ToolResult(name=self.name, data=payload)

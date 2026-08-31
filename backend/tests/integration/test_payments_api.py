@@ -40,6 +40,66 @@ async def test_create_payment_moves_balance_between_users(
     assert payee_after["balance_minor"] == payee_account["balance_minor"] + 1_000
 
 
+async def test_create_payment_can_be_confirmed_with_password_instead_of_face(
+    authed_client, authed_client_factory, enroll_face
+):
+    """The frontend only offers this after several failed face captures in
+    the same modal session (see requestFaceConfirmationToken in app.js), but
+    the backend itself just accepts whichever credential it's given - see
+    enforce_face_confirmation's docstring."""
+    payer, payer_user = authed_client
+    payer_account = await _open_account(payer, "Payer")
+
+    payee, _payee_user = await authed_client_factory()
+    payee_account = await _open_account(payee, "Payee")
+
+    # Enrollment is still a precondition either way - only which credential
+    # proves "still you" changes. user_factory always seeds "password123"
+    # (see tests/conftest.py).
+    await enroll_face(payer_user.id)
+    resp = await payer.post(
+        "/api/v1/payments",
+        json={
+            "from_account_id": payer_account["id"],
+            "to_iban": payee_account["iban"],
+            "beneficiary_name": "Payee Person",
+            "amount_minor": 1_000,
+        },
+        headers={"Idempotency-Key": "payment-password-1", "X-Step-Up-Password": "password123"},
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["status"] == "completed"
+
+
+async def test_create_payment_rejects_a_wrong_step_up_password(
+    authed_client, authed_client_factory, enroll_face
+):
+    payer, payer_user = authed_client
+    payer_account = await _open_account(payer, "Payer")
+
+    payee, _payee_user = await authed_client_factory()
+    payee_account = await _open_account(payee, "Payee")
+
+    await enroll_face(payer_user.id)
+    resp = await payer.post(
+        "/api/v1/payments",
+        json={
+            "from_account_id": payer_account["id"],
+            "to_iban": payee_account["iban"],
+            "beneficiary_name": "Payee Person",
+            "amount_minor": 1_000,
+        },
+        headers={"Idempotency-Key": "payment-password-2", "X-Step-Up-Password": "wrong-password"},
+    )
+    assert resp.status_code == 401, resp.text
+
+    # Rejected, not just unconfirmed - no money moved.
+    payer_after = (await payer.get(f"/api/v1/accounts/{payer_account['id']}")).json()
+    payee_after = (await payee.get(f"/api/v1/accounts/{payee_account['id']}")).json()
+    assert payer_after["balance_minor"] == payer_account["balance_minor"]
+    assert payee_after["balance_minor"] == payee_account["balance_minor"]
+
+
 async def test_create_payment_saves_and_updates_beneficiary(
     authed_client, authed_client_factory, enroll_face
 ):

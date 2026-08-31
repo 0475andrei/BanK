@@ -322,8 +322,13 @@
     "voice_input_label": "Dicta tu mensaje",
     "voice_input_not_supported": "Este navegador no admite la entrada de voz.",
     "voice_input_error": "La entrada de voz falló. Inténtalo de nuevo o escribe tu mensaje.",
+    "copy_message": "Copiar mensaje",
+    "speak_message": "Escuchar mensaje",
+    "speak_voice_unavailable_try_edge": "Este navegador no tiene una voz instalada para el idioma del mensaje. Prueba Microsoft Edge, que incluye voces multilingües, o agrega el idioma en Configuración de Windows > Voz.",
+    "speak_voice_unavailable_add_language": "Este navegador no tiene una voz instalada para el idioma del mensaje. Agrega el idioma en Configuración de Windows > Voz.",
     "iban_read_from_file": "IBAN leído del archivo adjunto: {iban}",
     "iban_not_found_in_file": "No se encontró un IBAN claro en el archivo - escríbelo manualmente.",
+    "iban_is_own_account": "Este IBAN es tuyo - no puedes enviarte dinero a ti mismo.",
     "panel_heading": "Asistente de IA de BanK",
     "history": {
       "rename_title": "Cambiar nombre de la conversación",
@@ -466,7 +471,10 @@
   "face_confirm": {
     "title": "Confirmar con Face ID",
     "default_reason": "El importe supera el umbral de confirmación - verifica tu identidad con la cámara.",
-    "camera_error": "No se pudo acceder a la cámara. Comprueba los permisos del navegador."
+    "camera_error": "No se pudo acceder a la cámara. Comprueba los permisos del navegador.",
+    "use_password_instead": "Usar la contraseña en su lugar",
+    "password_label": "Contraseña",
+    "password_required": "Introduce tu contraseña."
   },
   "price_increase": {
     "title": "El precio de la suscripción ha subido",

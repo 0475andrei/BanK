@@ -112,11 +112,15 @@ class ToolLoopAgent(Agent):
                         ).to_message()
                     )
                     logger.info("agent=%s requested a handoff; stopping loop", self.name)
-                    # `reply` is whatever text the model produced alongside the
-                    # handoff call, usually nothing. The target agent's reply is
-                    # what the user sees for this leg of the chain.
+                    # `answer_so_far` first: for a compound question it is the
+                    # source's own half of the answer, and it is the ONLY way
+                    # it can have one. A model emits either text or tool calls
+                    # (see ModelResponse), and this branch is on the tool-call
+                    # side, so `assistant_turn.content` is None in practice -
+                    # kept as the fallback for a provider that does populate
+                    # both rather than silently preferring an empty string.
                     return TurnResult(
-                        reply=assistant_turn.content or "",
+                        reply=handoff.answer_so_far or assistant_turn.content or "",
                         trace=working[trace_start:],
                         handoff=handoff,
                     )
@@ -162,6 +166,10 @@ def _handoff_from(result: ToolResult) -> HandoffRequest | None:
             target_agent=str(payload["target"]),
             reason=str(payload["reason"]),
             context_hint=str(payload["context_hint"]),
+            # `.get`, unlike the three above: a sentinel built before this
+            # field existed is a well-formed handoff with nothing to say, not
+            # a malformed one to discard.
+            answer_so_far=str(payload.get("answer_so_far", "")),
         )
     except (KeyError, ValueError):
         logger.warning("malformed handoff sentinel ignored")

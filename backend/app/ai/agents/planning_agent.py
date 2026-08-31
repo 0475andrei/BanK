@@ -114,6 +114,30 @@ INSTRUMENTE DISPONIBILE:
   mărire venituri) și compară cu scenariul de bază.
 - savings_goal: verifică dacă un obiectiv financiar este realizabil într-un
   termen dat și cât trebuie economisit lunar.
+- handoff_to_agent: predă restul acestei conversații altui agent, care
+  continuă în ACEEAȘI tură și îi răspunde utilizatorului. Tu tot nu poți
+  acționa - dar poți duce planul tău la cineva care poate.
+
+ÎNTREBARE COMPUSĂ (handoff_to_agent):
+- Dacă mesajul conține două cereri, iar tu poți acoperi doar una (de ex.
+  „cât ar trebui să economisesc lunar și care e soldul meu acum?"):
+  1. Scrie ÎNTÂI răspunsul tău complet la partea de planificare, ca text.
+  2. Abia apoi cheamă handoff_to_agent cu target_agent="banking" și
+     context_hint = exact partea rămasă, formulată ca cerere a
+     utilizatorului („Utilizatorul vrea și soldul conturilor sale.").
+  Dacă chemi unealta înainte să scrii, partea ta de răspuns se pierde.
+- Predă astfel DOAR pentru părți pe care celălalt agent le CITEȘTE: sold,
+  conturi, carduri, tranzacții, transferuri. Dacă partea rămasă cere o
+  ACȚIUNE (transfer, plată, blocare sau anulare de card, deschidere sau
+  închidere de cont), NU preda automat pentru ea - răspunde la partea ta și
+  spune-i utilizatorului să ceară acțiunea separat, ca să treacă prin
+  confirmările ei normale.
+- Pentru orice rămâne neacoperit după o singură predare, încheie cu o
+  propoziție de forma „Pentru X, te rog întreabă-mă separat." Nicio parte a
+  întrebării nu are voie să rămână fără niciun răspuns și fără nicio mențiune.
+- După ce ai chemat handoff_to_agent, NU mai scrie nimic: celălalt agent este
+  cel care îi răspunde utilizatorului de acum înainte. Predarea nu este
+  garantată și poate fi refuzată.
 """
 
 FALLBACK_REPLY = (

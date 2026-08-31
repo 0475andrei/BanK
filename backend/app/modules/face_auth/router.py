@@ -14,6 +14,7 @@ router = APIRouter()
 _MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 
 FACE_CONFIRMATION_HEADER_NAME = "X-Face-Confirmation"
+STEP_UP_PASSWORD_HEADER_NAME = "X-Step-Up-Password"
 
 
 async def optional_face_confirmation_token(
@@ -23,6 +24,17 @@ async def optional_face_confirmation_token(
     `face_token: str | None = Depends(optional_face_confirmation_token)`
     on any endpoint that calls face_auth.service.enforce_face_confirmation."""
     return token
+
+
+async def optional_step_up_password(
+    password: str | None = Header(default=None, alias=STEP_UP_PASSWORD_HEADER_NAME),
+) -> str | None:
+    """Sibling of optional_face_confirmation_token above: the account
+    password, accepted by enforce_face_confirmation as an equal alternative
+    to a face token (see that function's docstring) - the frontend only
+    ever sends this after several failed face captures in the same modal
+    session, never alongside a face token."""
+    return password
 
 
 def _set_session_cookie(response: Response, token: str) -> None:

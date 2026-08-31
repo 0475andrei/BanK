@@ -322,8 +322,13 @@
     "voice_input_label": "Dictate your message",
     "voice_input_not_supported": "Voice input isn't supported in this browser.",
     "voice_input_error": "Voice input failed. Please try again or type your message.",
+    "copy_message": "Copy message",
+    "speak_message": "Read message aloud",
+    "speak_voice_unavailable_try_edge": "This browser doesn't have a voice installed for the message's language. Try Microsoft Edge, which includes multilingual voices, or add the language in Windows Settings > Speech.",
+    "speak_voice_unavailable_add_language": "This browser doesn't have a voice installed for the message's language. Add the language in Windows Settings > Speech.",
     "iban_read_from_file": "IBAN read from the attached file: {iban}",
     "iban_not_found_in_file": "We couldn't find a clear IBAN in the file - please type it manually.",
+    "iban_is_own_account": "This IBAN is yours - you can't send money to yourself.",
     "panel_heading": "BanK AI Assistant",
     "history": {
       "rename_title": "Rename conversation",
@@ -466,7 +471,10 @@
   "face_confirm": {
     "title": "Confirm with Face ID",
     "default_reason": "The amount is over the confirmation threshold - verify your identity via camera.",
-    "camera_error": "Couldn't access the camera. Check your browser permissions."
+    "camera_error": "Couldn't access the camera. Check your browser permissions.",
+    "use_password_instead": "Use password instead",
+    "password_label": "Password",
+    "password_required": "Enter your password."
   },
   "price_increase": {
     "title": "The subscription price has increased",

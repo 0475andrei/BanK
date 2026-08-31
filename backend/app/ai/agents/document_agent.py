@@ -45,6 +45,45 @@ DOCUMENT_ROUTING_RULES = (
     ),
 )
 
+#: "This message is about the document/statement already attached." Used ONLY
+#: by `Orchestrator.route()` while `active_document_id` / `statement_id` is
+#: set - never as a general routing rule, which is why it is separate from
+#: DOCUMENT_ROUTING_RULES above rather than another entry in it.
+#:
+#: It can be broader than DOCUMENT_ROUTING_RULES precisely because it is
+#: scoped that way. `extras` is the clearest example: as a general rule it
+#: would steal "vreau extrasul de cont pe luna trecută" (a request to
+#: GENERATE a statement) from BankingAgent, which owns the `extras` stem. With
+#: a statement already attached, the same word almost always means the
+#: attached one, so it is safe here and nowhere else.
+#:
+#: Deliberately NOT a catch-all: a follow-up that names nothing document-ish
+#: ("și mai departe?", "rezumă") matches no rule at all, and `route()` sends
+#: an unmatched message here anyway while a document is active. This rule only
+#: has to win against ANOTHER agent's keywords, not against silence.
+DOCUMENT_FOLLOWUP_RULE = RoutingRule(
+    name="document_followup",
+    keywords=frozenset(
+        {
+            # Everything DOCUMENT_ROUTING_RULES claims generally.
+            "document",
+            "pdf",
+            "contract",
+            "fisier",
+            "atasat",
+            # Statement-specific, safe only while one is attached (see above).
+            "extras",
+            # Parts of a document someone asks about by name.
+            "pagin",
+            "sectiun",
+            "clauz",
+            "paragraf",
+            "rubric",
+            "articol",
+        }
+    ),
+)
+
 SYSTEM_PROMPT = """Ești asistentul pentru documente. Rolul tău este să răspunzi la
 întrebări despre documentul sau extrasul de cont pe care utilizatorul l-a
 atașat conversației.

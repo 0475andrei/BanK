@@ -7,7 +7,6 @@ feature doesn't create (see e.g. enroll_face in conftest.py).
 """
 
 import asyncio
-import uuid
 from datetime import UTC, datetime
 
 import pytest
@@ -178,7 +177,7 @@ async def test_stream_requires_authentication(client):
     assert resp.status_code == 401
 
 
-async def test_creating_a_notification_publishes_it_to_a_subscribed_queue(supabase):
+async def test_creating_a_notification_publishes_it_to_a_subscribed_queue(supabase, user_factory):
     """GET /notifications/stream itself isn't exercised here: httpx's
     ASGITransport fully buffers a StreamingResponse's body when it's wrapped
     by this app's two BaseHTTPMiddleware layers (rate limiting, request-id)
@@ -190,7 +189,8 @@ async def test_creating_a_notification_publishes_it_to_a_subscribed_queue(supaba
     What this DOES prove end to end: create_notification - the one thing
     every real caller (payments, admin, auth) actually invokes - really
     publishes to `bus`, not just inserts a row."""
-    user_id = str(uuid.uuid4())
+    user = await user_factory()
+    user_id = str(user.id)
     queue = bus.subscribe(user_id)
     try:
         await notifications_service.create_notification(
@@ -204,12 +204,15 @@ async def test_creating_a_notification_publishes_it_to_a_subscribed_queue(supaba
     assert published["category"] == "money_received"
 
 
-async def test_creating_a_notification_does_not_publish_to_a_different_users_queue(supabase):
-    user_id = str(uuid.uuid4())
-    other_user_id = str(uuid.uuid4())
+async def test_creating_a_notification_does_not_publish_to_a_different_users_queue(
+    supabase, user_factory
+):
+    user = await user_factory()
+    other_user = await user_factory()
+    user_id = str(user.id)
     queue = bus.subscribe(user_id)
     try:
-        await notifications_service.create_notification(supabase, other_user_id, "Not for you", "Body")
+        await notifications_service.create_notification(supabase, str(other_user.id), "Not for you", "Body")
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(queue.get(), timeout=0.5)
     finally:

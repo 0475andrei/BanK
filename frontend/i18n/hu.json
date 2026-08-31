@@ -322,8 +322,13 @@
     "voice_input_label": "Üzenet diktálása",
     "voice_input_not_supported": "A hangbevitelt ez a böngésző nem támogatja.",
     "voice_input_error": "A hangbevitel sikertelen volt. Próbáld újra, vagy írd be az üzenetet.",
+    "copy_message": "Üzenet másolása",
+    "speak_message": "Üzenet felolvasása",
+    "speak_voice_unavailable_try_edge": "Ez a böngésző nem rendelkezik telepített hanggal az üzenet nyelvéhez. Próbáld ki a Microsoft Edge-et, amely beépített többnyelvű hangokat tartalmaz, vagy add hozzá a nyelvet a Windows beállításokban (Beszéd).",
+    "speak_voice_unavailable_add_language": "Ez a böngésző nem rendelkezik telepített hanggal az üzenet nyelvéhez. Add hozzá a nyelvet a Windows beállításokban (Beszéd).",
     "iban_read_from_file": "IBAN a csatolt fájlból beolvasva: {iban}",
     "iban_not_found_in_file": "Nem találtunk egyértelmű IBAN-t a fájlban - kérjük, írd be kézzel.",
+    "iban_is_own_account": "Ez az IBAN a tiéd - nem küldhetsz pénzt saját magadnak.",
     "panel_heading": "BanK MI-asszisztens",
     "history": {
       "rename_title": "Beszélgetés átnevezése",
@@ -466,7 +471,10 @@
   "face_confirm": {
     "title": "Megerősítés Face ID-vel",
     "default_reason": "Az összeg meghaladja a megerősítési küszöböt - igazold személyazonosságodat a kamerán keresztül.",
-    "camera_error": "Nem sikerült elérni a kamerát. Ellenőrizd a böngésző jogosultságait."
+    "camera_error": "Nem sikerült elérni a kamerát. Ellenőrizd a böngésző jogosultságait.",
+    "use_password_instead": "Jelszó használata helyette",
+    "password_label": "Jelszó",
+    "password_required": "Add meg a jelszavad."
   },
   "price_increase": {
     "title": "Az előfizetés ára emelkedett",

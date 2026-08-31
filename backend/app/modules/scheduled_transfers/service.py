@@ -21,10 +21,16 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from postgrest.exceptions import APIError
-from supabase import AsyncClient
 
+from app.core import bnr_client, fx
 from app.core.audit import record_audit_event
-from app.core.exceptions import AppError, CurrencyMismatchError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    AppError,
+    CurrencyMismatchError,
+    ExchangeRateUnavailableError,
+    NotFoundError,
+    ValidationError,
+)
 from app.db.supabase_client import map_postgrest_error
 from app.modules.accounts import service as accounts_service
 from app.modules.notifications import service as notifications_service
@@ -34,6 +40,7 @@ from app.modules.scheduled_transfers.models import (
 )
 from app.modules.scheduled_transfers.schemas import ScheduledTransferCreate
 from app.modules.users.schemas import UserRead
+from supabase import AsyncClient
 
 _ACTIVE = ScheduledTransferStatus.ACTIVE.value
 
@@ -61,13 +68,15 @@ async def _validate_and_insert(
     from_account = await accounts_service.get_account_for_owner(
         supabase, user_id, payload.from_account_id
     )
-    to_account = await accounts_service.get_account_for_owner(
-        supabase, user_id, payload.to_account_id
-    )
+    # Read for existence/ownership only. Its currency is deliberately NOT
+    # required to match: a destination in another currency is converted at
+    # each run, at that run's BNR rate (see `_execute_one`).
+    await accounts_service.get_account_for_owner(supabase, user_id, payload.to_account_id)
 
+    # `currency` describes what LEAVES, so it must match the source account.
     currency = payload.currency.upper()
-    if from_account["currency"] != currency or to_account["currency"] != currency:
-        raise CurrencyMismatchError("Transfer currency must match both accounts' currency.")
+    if from_account["currency"] != currency:
+        raise CurrencyMismatchError("Transfer currency must match the source account's currency.")
 
     resp = (
         await supabase.table("scheduled_transfers")
@@ -190,14 +199,65 @@ async def resume_scheduled_transfer(
     )
 
 
+async def _run_fx(
+    supabase: AsyncClient,
+    row: dict,
+    from_account: dict,
+    to_account: dict,
+    idempotency_key: str,
+) -> None:
+    """A due schedule whose two accounts are in different currencies.
+
+    THE RATE IS FETCHED NOW, not at creation time - the opposite of the
+    proposal flow, and for the opposite reason. A proposal shows the user a
+    figure and executes seconds later, so the rate they saw is the rate that
+    must apply. A monthly schedule created in January and firing in November
+    has no such figure: quoting January's rate for November's transfer would
+    be knowably wrong on every run but the first. What the user agreed to
+    here is "move 500 EUR into my RON account each month", and the honest
+    reading of that is today's rate each time.
+
+    A BNR outage raises `ExchangeRateUnavailableError`, which is an
+    `AppError` - so `_execute_one`'s existing handler pauses the schedule and
+    notifies the user, exactly as it does for insufficient funds. No rate is
+    ever invented to keep a schedule running.
+    """
+    try:
+        rates, _stale = await bnr_client.get_rates()
+        rate = fx.rate_between(rates, from_account["currency"], to_account["currency"])
+    except (bnr_client.BnrUnavailableError, fx.UnsupportedCurrencyError) as exc:
+        raise ExchangeRateUnavailableError(
+            f"nu am putut obține cursul BNR {from_account['currency']}/"
+            f"{to_account['currency']} ({exc})"
+        ) from exc
+
+    await supabase.rpc(
+        "create_fx_transfer",
+        {
+            "p_from_account_id": str(from_account["id"]),
+            "p_to_account_id": str(to_account["id"]),
+            "p_from_amount_minor": row["amount_minor"],
+            "p_from_currency": from_account["currency"],
+            "p_to_amount_minor": fx.convert_minor(row["amount_minor"], rate),
+            "p_to_currency": to_account["currency"],
+            "p_exchange_rate": str(rate),
+            "p_exchange_rate_date": rates.published_on.isoformat(),
+            "p_description": row["description"]
+            or f"Transfer programat: {from_account['name']} → {to_account['name']}",
+            "p_idempotency_key": idempotency_key,
+            "p_actor_user_id": row["user_id"],
+        },
+    ).execute()
+
+
 async def _execute_one(supabase: AsyncClient, row: dict) -> None:
     """Runs a single due transfer and reschedules or completes it.
 
     Any `AppError` (insufficient funds, closed account, locked term deposit,
-    currency mismatch - the account could have changed state since the
-    schedule was created) pauses the row with the reason recorded, rather
-    than silently retrying forever on every future read or hard-failing the
-    caller's GET /accounts."""
+    currency mismatch, no BNR rate - the account could have changed state
+    since the schedule was created) pauses the row with the reason recorded,
+    rather than silently retrying forever on every future read or hard-failing
+    the caller's GET /accounts."""
     try:
         from_account = await accounts_service.get_account_for_owner(
             supabase, row["user_id"], row["from_account_id"]
@@ -209,19 +269,22 @@ async def _execute_one(supabase: AsyncClient, row: dict) -> None:
 
         idempotency_key = f"scheduled:{row['id']}:{row['next_run_at']}"
         try:
-            await supabase.rpc(
-                "create_transfer",
-                {
-                    "p_from_account_id": str(from_account["id"]),
-                    "p_to_account_id": str(to_account["id"]),
-                    "p_amount_minor": row["amount_minor"],
-                    "p_currency": row["currency"],
-                    "p_description": row["description"]
-                    or f"Transfer programat: {from_account['name']} → {to_account['name']}",
-                    "p_idempotency_key": idempotency_key,
-                    "p_actor_user_id": row["user_id"],
-                },
-            ).execute()
+            if from_account["currency"] != to_account["currency"]:
+                await _run_fx(supabase, row, from_account, to_account, idempotency_key)
+            else:
+                await supabase.rpc(
+                    "create_transfer",
+                    {
+                        "p_from_account_id": str(from_account["id"]),
+                        "p_to_account_id": str(to_account["id"]),
+                        "p_amount_minor": row["amount_minor"],
+                        "p_currency": row["currency"],
+                        "p_description": row["description"]
+                        or f"Transfer programat: {from_account['name']} → {to_account['name']}",
+                        "p_idempotency_key": idempotency_key,
+                        "p_actor_user_id": row["user_id"],
+                    },
+                ).execute()
         except APIError as exc:
             mapped = map_postgrest_error(exc)
             raise (mapped or exc) from exc
@@ -245,7 +308,11 @@ async def _execute_one(supabase: AsyncClient, row: dict) -> None:
     if row["frequency"]:
         next_run_at = _add_period(datetime.fromisoformat(row["next_run_at"]), row["frequency"])
         await supabase.table("scheduled_transfers").update(
-            {"next_run_at": next_run_at.isoformat(), "last_run_at": now.isoformat(), "last_error": None}
+            {
+                "next_run_at": next_run_at.isoformat(),
+                "last_run_at": now.isoformat(),
+                "last_error": None,
+            }
         ).eq("id", row["id"]).execute()
     else:
         await supabase.table("scheduled_transfers").update(
