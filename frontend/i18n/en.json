@@ -474,7 +474,8 @@
     "camera_error": "Couldn't access the camera. Check your browser permissions.",
     "use_password_instead": "Use password instead",
     "password_label": "Password",
-    "password_required": "Enter your password."
+    "password_required": "Enter your password.",
+    "blink_now": "Blink now..."
   },
   "price_increase": {
     "title": "The subscription price has increased",

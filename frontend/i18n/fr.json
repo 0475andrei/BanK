@@ -474,7 +474,8 @@
     "camera_error": "Impossible d'accéder à la caméra. Vérifiez les autorisations du navigateur.",
     "use_password_instead": "Utiliser le mot de passe à la place",
     "password_label": "Mot de passe",
-    "password_required": "Saisissez votre mot de passe."
+    "password_required": "Saisissez votre mot de passe.",
+    "blink_now": "Clignez des yeux maintenant..."
   },
   "price_increase": {
     "title": "Le prix de l'abonnement a augmenté",

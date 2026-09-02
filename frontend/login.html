@@ -44,6 +44,7 @@
                         <canvas id="device-face-canvas" hidden></canvas>
                     </div>
 
+                    <p class="field-hint" id="device-face-blink-hint" style="margin-top: 8px;" hidden data-i18n="face_confirm.blink_now">Clipește acum...</p>
                     <button type="button" class="btn btn-secondary auth-submit" id="device-face-start-btn" data-i18n="auth.start_camera">Pornește camera</button>
                     <button type="button" class="btn btn-primary auth-submit" id="device-face-capture-btn" hidden data-i18n="auth.confirm_with_face">Confirmă cu Face</button>
 
@@ -105,6 +106,7 @@
                         <canvas id="face-login-canvas" hidden></canvas>
                     </div>
 
+                    <p class="field-hint" id="face-login-blink-hint" style="margin-top: 8px;" hidden data-i18n="face_confirm.blink_now">Clipește acum...</p>
                     <button type="button" class="btn btn-secondary auth-submit" id="face-login-start-btn" data-i18n="auth.start_camera">Pornește camera</button>
                     <button type="button" class="btn btn-primary auth-submit" id="face-login-capture-btn" hidden data-i18n="auth.face_login">Login cu Face</button>
                 </div>
@@ -132,6 +134,7 @@
         const deviceFaceStartBtn = document.getElementById('device-face-start-btn');
         const deviceFaceCaptureBtn = document.getElementById('device-face-capture-btn');
         const deviceFaceErrorEl = document.getElementById('device-face-error');
+        const deviceFaceBlinkHintEl = document.getElementById('device-face-blink-hint');
         const deviceFaceUsePasswordLink = document.getElementById('device-face-use-password-link');
         const deviceErrorEl = document.getElementById('device-error');
 
@@ -217,41 +220,43 @@
             }
         });
 
-        deviceFaceCaptureBtn.addEventListener('click', () => {
+        deviceFaceCaptureBtn.addEventListener('click', async () => {
             deviceFaceErrorEl.hidden = true;
-            deviceFaceCanvas.width = deviceFaceVideo.videoWidth;
-            deviceFaceCanvas.height = deviceFaceVideo.videoHeight;
-            deviceFaceCanvas.getContext('2d').drawImage(deviceFaceVideo, 0, 0);
+            deviceFaceCaptureBtn.disabled = true;
+            if (deviceFaceBlinkHintEl) deviceFaceBlinkHintEl.hidden = false;
 
-            deviceFaceCanvas.toBlob(async (blob) => {
+            try {
+                const frames = await captureFaceBurst(deviceFaceVideo, deviceFaceCanvas);
                 const formData = new FormData();
                 formData.append('email', deviceFaceEmail);
-                formData.append('file', blob, 'face.jpg');
-                try {
-                    const res = await fetch(`${API_BASE_URL}/auth/face/login`, {
-                        method: 'POST',
-                        credentials: 'include',
-                        body: formData,
-                    });
-                    if (!res.ok) {
-                        const body = await res.json().catch(() => ({}));
-                        throw new Error(body?.error?.message || `Request failed (${res.status})`);
-                    }
-                    window.location.href = 'index.html';
-                } catch (err) {
-                    deviceFaceAttempts += 1;
-                    const attemptsLeft = DEVICE_FACE_MAX_ATTEMPTS - deviceFaceAttempts;
-                    if (attemptsLeft > 0) {
-                        deviceFaceErrorEl.textContent =
-                            t("auth.device_face_attempts_left", "{message} Mai poți încerca de {count} ori.", { message: err.message, count: attemptsLeft });
-                        deviceFaceErrorEl.hidden = false;
-                    } else {
-                        fallBackToDevicePassword(
-                            t("auth.device_face_failed_fallback", "Nu am reușit să te recunoaștem prin Face ID. Continuă cu parola.")
-                        );
-                    }
+                frames.forEach((blob, i) => formData.append('files', blob, `frame-${i}.jpg`));
+
+                const res = await fetch(`${API_BASE_URL}/auth/face/login`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    body: formData,
+                });
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body?.error?.message || `Request failed (${res.status})`);
                 }
-            }, 'image/jpeg', 0.92);
+                window.location.href = 'index.html';
+            } catch (err) {
+                deviceFaceAttempts += 1;
+                const attemptsLeft = DEVICE_FACE_MAX_ATTEMPTS - deviceFaceAttempts;
+                if (attemptsLeft > 0) {
+                    deviceFaceErrorEl.textContent =
+                        t("auth.device_face_attempts_left", "{message} Mai poți încerca de {count} ori.", { message: err.message, count: attemptsLeft });
+                    deviceFaceErrorEl.hidden = false;
+                } else {
+                    fallBackToDevicePassword(
+                        t("auth.device_face_failed_fallback", "Nu am reușit să te recunoaștem prin Face ID. Continuă cu parola.")
+                    );
+                }
+            } finally {
+                if (deviceFaceBlinkHintEl) deviceFaceBlinkHintEl.hidden = true;
+                deviceFaceCaptureBtn.disabled = false;
+            }
         });
 
         document.getElementById('device-login-form').addEventListener('submit', async (event) => {
@@ -300,6 +305,7 @@
         const faceStartBtn = document.getElementById("face-login-start-btn");
         const faceCaptureBtn = document.getElementById("face-login-capture-btn");
         const faceErrorEl = document.getElementById("face-login-error");
+        const faceBlinkHintEl = document.getElementById("face-login-blink-hint");
 
         let faceLoginStream = null;
 
@@ -345,7 +351,7 @@
             }
         });
 
-        faceCaptureBtn.addEventListener("click", () => {
+        faceCaptureBtn.addEventListener("click", async () => {
             faceErrorEl.hidden = true;
             const email = document.getElementById("face-login-email").value;
             if (!email) {
@@ -354,30 +360,32 @@
                 return;
             }
 
-            faceCanvas.width = faceVideo.videoWidth;
-            faceCanvas.height = faceVideo.videoHeight;
-            faceCanvas.getContext("2d").drawImage(faceVideo, 0, 0);
+            faceCaptureBtn.disabled = true;
+            if (faceBlinkHintEl) faceBlinkHintEl.hidden = false;
 
-            faceCanvas.toBlob(async (blob) => {
+            try {
+                const frames = await captureFaceBurst(faceVideo, faceCanvas);
                 const formData = new FormData();
                 formData.append("email", email);
-                formData.append("file", blob, "face.jpg");
-                try {
-                    const res = await fetch(`${API_BASE_URL}/auth/face/login`, {
-                        method: "POST",
-                        credentials: "include",
-                        body: formData,
-                    });
-                    if (!res.ok) {
-                        const body = await res.json().catch(() => ({}));
-                        throw new Error(body?.error?.message || `Request failed (${res.status})`);
-                    }
-                    window.location.href = "index.html";
-                } catch (err) {
-                    faceErrorEl.textContent = err.message;
-                    faceErrorEl.hidden = false;
+                frames.forEach((blob, i) => formData.append("files", blob, `frame-${i}.jpg`));
+
+                const res = await fetch(`${API_BASE_URL}/auth/face/login`, {
+                    method: "POST",
+                    credentials: "include",
+                    body: formData,
+                });
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body?.error?.message || `Request failed (${res.status})`);
                 }
-            }, "image/jpeg", 0.92);
+                window.location.href = "index.html";
+            } catch (err) {
+                faceErrorEl.textContent = err.message;
+                faceErrorEl.hidden = false;
+            } finally {
+                if (faceBlinkHintEl) faceBlinkHintEl.hidden = true;
+                faceCaptureBtn.disabled = false;
+            }
         });
     </script>
 </body>

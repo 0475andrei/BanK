@@ -8,7 +8,7 @@
     // could drift out of sync, leaving browsers stuck on a stale bundle that
     // rendered raw "section.key" strings for any key added after their cache
     // was written.
-    const I18N_VERSION = 25;
+    const I18N_VERSION = 26;
     const CACHE_PREFIX = `bank_i18n_v${I18N_VERSION}:`;
     const DEFAULT_LANGUAGE = 'ro';
     const LANGUAGES = { ro: 'Română', en: 'English', uk: 'Українська', hu: 'Magyar', tr: 'Türkçe', it: 'Italiano', es: 'Español', fr: 'Français', de: 'Deutsch' };

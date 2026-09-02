@@ -59,6 +59,33 @@ function setFaceFlashlight(active, modalOverlayEl) {
   if (overlay) overlay.classList.toggle("is-active", active);
 }
 
+/** Captures a short burst of JPEG frames from `video` (reusing `canvas` for
+ * each grab) instead of a single photo - the backend's face liveness check
+ * (vision/app/face.py::extract_embedding_with_liveness) requires a genuine
+ * blink across the burst before it will return an embedding at all, since a
+ * single still photo - including one held up to the camera - can never
+ * blink. Every face capture (login, enrollment, step-up confirm, on both
+ * login.html and index.html) uses this same helper so the three flows
+ * can't drift into three different liveness behaviors.
+ *
+ * `onFrame(count, total)`, if given, fires after each frame - callers use
+ * it to drive a "blink now" progress hint. Resolves to a Blob[]. */
+async function captureFaceBurst(video, canvas, { frameCount = 10, intervalMs = 150, onFrame } = {}) {
+  const frames = [];
+  for (let i = 0; i < frameCount; i++) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    if (blob) frames.push(blob);
+    if (onFrame) onFrame(i + 1, frameCount);
+    if (i < frameCount - 1) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+  return frames;
+}
+
 function formatMoney(amountMinor, currency) {
   const major = amountMinor / 100;
   const language = document.documentElement.lang || "ro";

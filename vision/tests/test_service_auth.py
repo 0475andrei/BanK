@@ -15,7 +15,6 @@ ENDPOINTS = [
     "/v1/id-card",
     "/v1/iban",
     "/v1/pdf-text",
-    "/v1/face/embedding",
 ]
 
 
@@ -63,3 +62,32 @@ def test_health_needs_no_token(monkeypatch):
     """Otherwise the container healthcheck could never pass."""
     client = _client(monkeypatch, "s3cret")
     assert client.get("/health").status_code == 200
+
+
+# /v1/face/embedding takes a BURST of frames under a repeated "files" field,
+# not the single "file" field the other three endpoints share (see
+# app/face.py's liveness docstring) - kept as its own small set of tests
+# rather than folded into the parametrized ENDPOINTS list above.
+_FACE_FILES = [("files", ("x.jpg", b"not-an-image", "image/jpeg"))]
+
+
+def test_face_embedding_missing_token_is_rejected(monkeypatch):
+    client = _client(monkeypatch, "s3cret")
+    resp = client.post("/v1/face/embedding", files=_FACE_FILES)
+    assert resp.status_code == 401
+
+
+def test_face_embedding_wrong_token_is_rejected(monkeypatch):
+    client = _client(monkeypatch, "s3cret")
+    resp = client.post(
+        "/v1/face/embedding", files=_FACE_FILES, headers={"X-Vision-Token": "wrong"}
+    )
+    assert resp.status_code == 401
+
+
+def test_face_embedding_unset_token_fails_closed(monkeypatch):
+    client = _client(monkeypatch, "")
+    resp = client.post(
+        "/v1/face/embedding", files=_FACE_FILES, headers={"X-Vision-Token": "anything"}
+    )
+    assert resp.status_code == 503
