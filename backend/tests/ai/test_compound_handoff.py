@@ -528,3 +528,96 @@ def test_tool_loop_agent_is_still_the_only_run_implementation():
     loop's handoff branch, so no agent may have grown its own `run`."""
     for agent_type in (InsightsAgent, BankingAgent, PlanningAgent):
         assert agent_type.run is ToolLoopAgent.run
+
+
+# ---------------------------------------------------------------------------
+# 7. BankingAgent must not overclaim what it cannot deliver (Step 16
+#    Priority 2, item 9)
+#
+# Screenshot bug: a 3-clause message (spending analysis + balance + a
+# savings-feasibility estimate) only ever produces the documented 2-hop chain
+# (insights -> banking; BankingAgent holds no handoff_to_agent, so Planning is
+# never reached). BankingAgent's reply nonetheless promised it would "verifica
+# soldul si estima daca poate economisi 500 RON" and then delivered only the
+# balance - claiming a capability (a savings projection) it structurally does
+# not have.
+# ---------------------------------------------------------------------------
+
+THREE_CLAUSE_MESSAGE = (
+    "cat am cheltuit pe mancare luna asta, care e soldul meu curent, "
+    "si pot economisi 500 RON luna viitoare?"
+)
+
+
+def test_banking_prompt_forbids_claiming_a_savings_estimate_on_handoff():
+    """Static, like the rest of this section: there is no real model in this
+    offline suite (see test_verbosity_regression.py's docstring), so this
+    locks the POLICY TEXT BankingAgent is instructed with rather than an
+    actual reply."""
+    assert "estimare" in BANKING_PROMPT
+    assert "Nu pretinde niciodată că te ocupi" in BANKING_PROMPT
+    assert "întreabă-mă separat" in BANKING_PROMPT
+
+
+async def test_banking_still_sees_the_full_original_message_on_a_handoff(context):
+    """Confirms WHY the fix has to live in BankingAgent's own prompt rather
+    than relying solely on InsightsAgent writing a narrow context_hint:
+    Orchestrator.dispatch APPENDS the hint as a new turn, it does not replace
+    the transcript - so the raw 3-clause message, savings-estimate clause
+    included, is still the first thing BankingAgent's own model call reads.
+    """
+    banking_provider = MockProvider(
+        [
+            ModelResponse(
+                text=(
+                    "Soldul tau este 3.500,00 RON. Pentru estimarea de "
+                    "economisire, te rog intreaba-ma separat."
+                )
+            )
+        ],
+        repeat_last=True,
+    )
+    orchestrator = Orchestrator()
+    orchestrator.register(
+        InsightsAgent(
+            MockProvider(
+                [
+                    ModelResponse(
+                        tool_calls=[
+                            compound_handoff_call(
+                                "banking",
+                                answer=SPENDING_HALF,
+                                hint="Utilizatorul vrea si soldul conturilor sale.",
+                            )
+                        ]
+                    )
+                ],
+                repeat_last=True,
+            ),
+            _insights_tools(FakeSupabase()),
+        )
+    )
+    orchestrator.register(
+        BankingAgent(banking_provider, build_banking_tools(FakeSupabase())),
+        default=True,
+    )
+
+    turn = await orchestrator.dispatch(
+        [Message(role="user", content=THREE_CLAUSE_MESSAGE)],
+        THREE_CLAUSE_MESSAGE,
+        context,
+    )
+
+    # The condition the prompt fix defends against: BankingAgent's own model
+    # call really did receive the raw, un-narrowed original message, not just
+    # the context_hint - so it could just as easily have answered from it.
+    banking_messages = banking_provider.calls[0]
+    assert any(THREE_CLAUSE_MESSAGE in (m.content or "") for m in banking_messages)
+    # And the system prompt handed to it is where the anti-overclaim rule
+    # actually lives.
+    assert "Nu pretinde niciodată că te ocupi" in (banking_messages[0].content or "")
+
+    # The reply (scripted above as the CORRECTED shape the new prompt asks
+    # for) never claims the estimate it cannot deliver.
+    assert "estimez" not in turn.combined_reply.lower()
+    assert "voi estima" not in turn.combined_reply.lower()
