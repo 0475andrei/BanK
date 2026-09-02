@@ -25,7 +25,33 @@ logger = logging.getLogger(__name__)
 #: stays here unconditionally: InsightsAgent is registered before Banking
 #: and only claims "cheltui" alongside an analytical marker of its own, so a
 #: bare "cheltui" already falls through to this rule with no change needed
-#: on this side of that collision.
+#: on this side of that collision. `limita` is likewise NOT here - see
+#: `banking_card_limit_action` below and CARD_LIMIT_ACTION_MARKERS.
+#:
+#: COLLISION, RESOLVED (Step 16 Priority 2, item 8): `limita` is also a
+#: DocsAgent keyword (generic product-limit documentation), and DocsAgent is
+#: registered before Banking - a bare "limita" mention always reached
+#: DocsAgent's generic answer first, even for "vreau să schimb limita
+#: cardului meu", which is a real action BankingAgent already has a tool for
+#: (set_card_spending_limit). `banking_card_limit_action` below and
+#: DocsAgent's `docs_card_limit_info` rule resolve this the same way
+#: `econom` was resolved: Banking claims "limita" only alongside one of
+#: `CARD_LIMIT_ACTION_MARKERS` (an action-intent verb), and DocsAgent backs
+#: off "limita" in exactly that same case, via `excludes_any_of`. A bare
+#: "limita" with no such marker ("ce este limita unui card de credit?") has
+#: no action intent and correctly still falls through to DocsAgent.
+CARD_LIMIT_ACTION_MARKERS = frozenset(
+    {
+        "schimb",
+        "maresc",
+        "mareste",
+        "modific",
+        "cresc",
+        "creste",
+        "vreau",
+    }
+)
+
 BANKING_ROUTING_RULES = (
     # FIRST, deliberately: a conversion question mentions money and often an
     # account, so `banking_keywords` below would claim it. See
@@ -59,6 +85,11 @@ BANKING_ROUTING_RULES = (
         name="banking_savings_default",
         keywords=frozenset({"econom"}),
         excludes_any_of=PLANNING_FORWARD_MARKERS,
+    ),
+    RoutingRule(
+        name="banking_card_limit_action",
+        keywords=frozenset({"limita"}),
+        requires_any_of=CARD_LIMIT_ACTION_MARKERS,
     ),
 )
 

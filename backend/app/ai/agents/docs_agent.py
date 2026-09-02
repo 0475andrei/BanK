@@ -3,6 +3,7 @@ RAG (app/ai/knowledge), never from the model's own knowledge."""
 
 from __future__ import annotations
 
+from app.ai.agents.banking_agent import CARD_LIMIT_ACTION_MARKERS
 from app.ai.agents.scope_guardrail import OFF_TOPIC_GUARDRAIL
 from app.ai.agents.tool_loop import MAX_ITERATIONS as _MAX_ITERATIONS
 from app.ai.agents.tool_loop import ToolLoopAgent
@@ -17,6 +18,10 @@ from app.ai.routing import RoutingRule
 #: that message on their own, and DocsAgent is registered before Banking in
 #: ai/service.py so it gets first refusal on anything naming a fee/product
 #: term, the same precedence reasoning InsightsAgent uses against Banking.
+#:
+#: `limita` is split out into its own rule below (`docs_card_limit_info`)
+#: rather than staying in `docs_products` - see banking_agent.py's
+#: `CARD_LIMIT_ACTION_MARKERS` comment for the collision this resolves.
 DOCS_ROUTING_RULES = (
     RoutingRule(
         name="docs_fees",
@@ -39,13 +44,17 @@ DOCS_ROUTING_RULES = (
             {
                 "produs",
                 "plafon",
-                "limita",
                 "deschidere de cont",
                 "ce oferiti",
                 "ce tipuri de cont",
                 "product",
             }
         ),
+    ),
+    RoutingRule(
+        name="docs_card_limit_info",
+        keywords=frozenset({"limita"}),
+        excludes_any_of=CARD_LIMIT_ACTION_MARKERS,
     ),
 )
 
