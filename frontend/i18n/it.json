@@ -474,7 +474,8 @@
     "camera_error": "Impossibile accedere alla fotocamera. Controlla i permessi del browser.",
     "use_password_instead": "Usa la password invece",
     "password_label": "Password",
-    "password_required": "Inserisci la password."
+    "password_required": "Inserisci la password.",
+    "blink_now": "Sbatti le palpebre ora..."
   },
   "price_increase": {
     "title": "Il prezzo dell'abbonamento è aumentato",

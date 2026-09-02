@@ -474,7 +474,8 @@
     "camera_error": "Kameraya erişilemedi. Tarayıcı izinlerinizi kontrol edin.",
     "use_password_instead": "Bunun yerine şifre kullan",
     "password_label": "Şifre",
-    "password_required": "Şifreni gir."
+    "password_required": "Şifreni gir.",
+    "blink_now": "Şimdi göz kırp..."
   },
   "price_increase": {
     "title": "Abonelik ücreti arttı",

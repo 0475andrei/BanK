@@ -84,6 +84,44 @@ async def _post_file(
     return response.json()
 
 
+async def _post_files(
+    path: str,
+    *,
+    frames: list[bytes],
+    content_type: str,
+) -> dict[str, Any]:
+    """Like `_post_file`, but for the one endpoint that takes a burst of
+    frames instead of a single image (face liveness - see
+    vision/app/face.py). httpx accepts a list of (field_name, file_tuple)
+    pairs for a repeated multipart field, which is what lets several files
+    travel under the same "files" name."""
+    url = f"{settings.VISION_SERVICE_URL.rstrip('/')}{path}"
+    files = [("files", (f"frame-{i}.jpg", frame, content_type)) for i, frame in enumerate(frames)]
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.post(
+                url,
+                files=files,
+                headers={"X-Vision-Token": settings.VISION_SERVICE_TOKEN or ""},
+            )
+    except httpx.HTTPError as exc:
+        logger.exception("vision-service request failed: %s", url)
+        raise VisionServiceUnavailableError() from exc
+
+    if response.status_code == 422:
+        raise ValidationError(_detail_of(response))
+    if response.status_code >= 400:
+        logger.error(
+            "vision-service returned %s for %s: %s",
+            response.status_code,
+            path,
+            _detail_of(response),
+        )
+        raise VisionServiceUnavailableError()
+
+    return response.json()
+
+
 def _detail_of(response: httpx.Response) -> str:
     try:
         return str(response.json().get("detail", ""))
@@ -118,11 +156,10 @@ async def extract_pdf_text(content: bytes) -> tuple[str, int]:
     return body["text"], body["page_count"]
 
 
-async def extract_face_embedding(content: bytes) -> list[float]:
-    body = await _post_file(
-        "/v1/face/embedding",
-        content=content,
-        filename="face.jpg",
-        content_type="image/jpeg",
-    )
+async def extract_face_embedding(frames: list[bytes]) -> list[float]:
+    """`frames` is a short burst captured over ~1.5-2s, not one photo - the
+    vision service requires a genuine blink across them before it will hand
+    back an embedding at all (see vision/app/face.py). A single still photo,
+    including one held up to the camera, never blinks."""
+    body = await _post_files("/v1/face/embedding", frames=frames, content_type="image/jpeg")
     return body["embedding"]

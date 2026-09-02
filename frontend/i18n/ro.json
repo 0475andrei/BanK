@@ -474,7 +474,8 @@
     "camera_error": "Nu s-a putut accesa camera. Verifică permisiunile browserului.",
     "use_password_instead": "Folosește parola în loc",
     "password_label": "Parolă",
-    "password_required": "Introdu parola."
+    "password_required": "Introdu parola.",
+    "blink_now": "Clipește acum..."
   },
   "price_increase": {
     "title": "Prețul abonamentului a crescut",

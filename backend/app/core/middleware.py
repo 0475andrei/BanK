@@ -64,6 +64,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 
 def configure_middleware(app: FastAPI) -> None:
+    # Starlette's add_middleware() makes each new call the OUTERMOST layer
+    # (it prepends to the stack), so registration order here is innermost
+    # to outermost. CORSMiddleware must be added LAST: RateLimitMiddleware
+    # short-circuits with its own JSONResponse before calling `call_next`,
+    # and a response built INSIDE CORSMiddleware never passes back through
+    # it to pick up CORS headers - a rate-limited browser request used to
+    # come back as an unreadable "blocked by CORS policy" instead of the
+    # actual 429 body.
+    app.add_middleware(RateLimitMiddleware, requests_per_minute=settings.RATE_LIMIT_PER_MINUTE)
+    app.add_middleware(RequestIDMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
@@ -71,8 +81,6 @@ def configure_middleware(app: FastAPI) -> None:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.add_middleware(RateLimitMiddleware, requests_per_minute=settings.RATE_LIMIT_PER_MINUTE)
-    app.add_middleware(RequestIDMiddleware)
 
 
 def register_exception_handlers(app: FastAPI) -> None:

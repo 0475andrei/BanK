@@ -1541,7 +1541,22 @@ function wireStepUpModal() {
         // /chat/proposals/{id}/confirm) once enough face failures are on
         // record for this proposal - see confirm_proposal's own gate.
         modal.hidden = true;
-        const credential = await requestFaceConfirmationToken(undefined, { allowPasswordFallback: true });
+        const credential = await requestFaceConfirmationToken(undefined, {
+            allowPasswordFallback: true,
+            // A failed CAPTURE never itself calls /chat/proposals/{id}/confirm,
+            // so without this the backend's own failure counter for this
+            // proposal would still read zero the moment "use password
+            // instead" appears, and reject the first real password attempt
+            // with 428 - see requestFaceConfirmationToken's docstring. This
+            // records the same failure the counter is watching for by
+            // making a real (deliberately failing) confirm call.
+            onCaptureFailed: async () => {
+                await apiFetch(`/chat/proposals/${proposalId}/confirm`, {
+                    method: 'POST',
+                    body: JSON.stringify({ auth_method: 'face', credential: 'capture-failed' }),
+                }).catch(() => {});
+            },
+        });
         if (!credential) {
             modal.hidden = false;
             return;
@@ -3180,8 +3195,20 @@ const MAX_FACE_CONFIRM_ATTEMPTS = 3;
  * Callers that never pass `allowPasswordFallback` see the exact same
  * string-or-null shape as before this fallback existed - the password path
  * is simply never reachable for them (the link stays hidden), so they need
- * no changes at all. */
-function requestFaceConfirmationToken(reason = faceConfirmDefaultReason(), { allowPasswordFallback = false } = {}) {
+ * no changes at all.
+ *
+ * `onCaptureFailed`, if given, is awaited after each failed capture (up to
+ * MAX_FACE_CONFIRM_ATTEMPTS times) - the ONLY caller that needs this is
+ * wireStepUpModal's chat-proposal confirm, whose backend gate
+ * (proposals_service.confirm_proposal's FACE_FAILURES_BEFORE_PASSWORD_FALLBACK
+ * check) counts failed calls to POST /chat/proposals/{id}/confirm, a
+ * different endpoint than the one a failed CAPTURE hits here
+ * (POST /auth/face/confirm). Without this hook, a camera that fails 3 times
+ * would reveal "use password instead" only for the backend to reject that
+ * password on the very first real attempt, since its own counter was still
+ * at zero - the fix is to let the failing side make the same counter move
+ * the same way a real failed confirm attempt would. */
+function requestFaceConfirmationToken(reason = faceConfirmDefaultReason(), { allowPasswordFallback = false, onCaptureFailed = null } = {}) {
     return new Promise((resolve) => {
         const modal = document.getElementById('face-confirm-modal');
         const video = document.getElementById('face-confirm-video');
@@ -3194,6 +3221,7 @@ function requestFaceConfirmationToken(reason = faceConfirmDefaultReason(), { all
         const passwordSection = document.getElementById('face-confirm-password-section');
         const passwordInput = document.getElementById('face-confirm-password-input');
         const usePasswordBtn = document.getElementById('face-confirm-use-password');
+        const blinkHintEl = document.getElementById('face-confirm-blink-hint');
 
         let stream = null;
         let usingPassword = false;
@@ -3245,7 +3273,7 @@ function requestFaceConfirmationToken(reason = faceConfirmDefaultReason(), { all
 
         startCamera();
 
-        captureBtn.onclick = () => {
+        captureBtn.onclick = async () => {
             if (usingPassword) {
                 const password = passwordInput.value;
                 if (!password) {
@@ -3258,34 +3286,43 @@ function requestFaceConfirmationToken(reason = faceConfirmDefaultReason(), { all
             }
 
             errorEl.hidden = true;
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
+            captureBtn.disabled = true;
+            if (blinkHintEl) blinkHintEl.hidden = false;
 
-            canvas.toBlob(async (blob) => {
+            try {
+                // A short BURST of frames, not one photo - the backend's
+                // liveness check needs a real blink across them (see
+                // captureFaceBurst in api.js and vision/app/face.py). A
+                // still photo held up to the camera never blinks.
+                const frames = await captureFaceBurst(video, canvas);
                 const formData = new FormData();
-                formData.append('file', blob, 'confirm.jpg');
-                try {
-                    const res = await fetch(`${API_BASE_URL}/auth/face/confirm`, {
-                        method: 'POST',
-                        credentials: 'include',
-                        body: formData,
-                    });
-                    if (!res.ok) {
-                        const errBody = await res.json().catch(() => ({}));
-                        throw new Error(errBody?.error?.message || `Request failed (${res.status})`);
-                    }
-                    const { token } = await res.json();
-                    cleanup(token);
-                } catch (err) {
-                    errorEl.textContent = err.message;
-                    errorEl.hidden = false;
-                    failedAttempts += 1;
-                    if (allowPasswordFallback && failedAttempts >= MAX_FACE_CONFIRM_ATTEMPTS) {
-                        usePasswordBtn.hidden = false;
-                    }
+                frames.forEach((blob, i) => formData.append('files', blob, `frame-${i}.jpg`));
+
+                const res = await fetch(`${API_BASE_URL}/auth/face/confirm`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    body: formData,
+                });
+                if (!res.ok) {
+                    const errBody = await res.json().catch(() => ({}));
+                    throw new Error(errBody?.error?.message || `Request failed (${res.status})`);
                 }
-            }, 'image/jpeg', 0.92);
+                const { token } = await res.json();
+                cleanup(token);
+            } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.hidden = false;
+                failedAttempts += 1;
+                if (onCaptureFailed) {
+                    await onCaptureFailed();
+                }
+                if (allowPasswordFallback && failedAttempts >= MAX_FACE_CONFIRM_ATTEMPTS) {
+                    usePasswordBtn.hidden = false;
+                }
+            } finally {
+                if (blinkHintEl) blinkHintEl.hidden = true;
+                captureBtn.disabled = false;
+            }
         };
 
         usePasswordBtn.onclick = switchToPassword;
@@ -4116,6 +4153,7 @@ function wireFaceLoginPanel() {
     const removeBtn = document.getElementById('face-remove-btn');
     const errorEl = document.getElementById('face-enroll-error');
     const successEl = document.getElementById('face-enroll-success');
+    const blinkHintEl = document.getElementById('face-enroll-blink-hint');
 
     startBtn.addEventListener('click', async () => {
         errorEl.hidden = true;
@@ -4132,37 +4170,42 @@ function wireFaceLoginPanel() {
         }
     });
 
-    captureBtn.addEventListener('click', () => {
+    captureBtn.addEventListener('click', async () => {
         errorEl.hidden = true;
         successEl.hidden = true;
+        captureBtn.disabled = true;
+        if (blinkHintEl) blinkHintEl.hidden = false;
 
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
-
-        canvas.toBlob(async (blob) => {
+        try {
+            // A burst, not one photo - enrollment goes through the same
+            // blink-liveness check as login/step-up confirm (see
+            // captureFaceBurst in api.js), so a spoofed enrollment from a
+            // photo of someone else is closed too, not just the check-in
+            // gate.
+            const frames = await captureFaceBurst(video, canvas);
             const formData = new FormData();
-            formData.append('file', blob, 'face.jpg');
-            try {
-                await fetch(`${API_BASE_URL}/auth/face/enroll`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    body: formData,
-                }).then(async (res) => {
-                    if (!res.ok) {
-                        const body = await res.json().catch(() => ({}));
-                        throw new Error(body?.error?.message || `Request failed (${res.status})`);
-                    }
-                });
-                successEl.textContent = t('profile.face_success', 'Face Login activat cu succes!');
-                successEl.hidden = false;
-                stopFaceCamera();
-                await loadFaceStatus();
-            } catch (err) {
-                errorEl.textContent = err.message;
-                errorEl.hidden = false;
+            frames.forEach((blob, i) => formData.append('files', blob, `frame-${i}.jpg`));
+
+            const res = await fetch(`${API_BASE_URL}/auth/face/enroll`, {
+                method: 'POST',
+                credentials: 'include',
+                body: formData,
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.error?.message || `Request failed (${res.status})`);
             }
-        }, 'image/jpeg', 0.92);
+            successEl.textContent = t('profile.face_success', 'Face Login activat cu succes!');
+            successEl.hidden = false;
+            stopFaceCamera();
+            await loadFaceStatus();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        } finally {
+            if (blinkHintEl) blinkHintEl.hidden = true;
+            captureBtn.disabled = false;
+        }
     });
 
     removeBtn.addEventListener('click', async () => {
