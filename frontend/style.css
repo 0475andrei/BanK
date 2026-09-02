@@ -2637,6 +2637,34 @@ html.i18n-pending body { visibility: hidden; }
     #confirm-dialog-overlay, .confirm-dialog { animation: none; }
 }
 
+/* --- Prompt dialog (window.prompt() replacement, see showPromptDialog in
+   app.js) - reuses the .confirm-dialog shell (same entrance animation,
+   same icon/title/message layout) with a neutral teal icon instead of the
+   danger-red one, plus a single labeled input. --- */
+.prompt-dialog-icon {
+    background-color: rgba(45, 212, 191, 0.12);
+    color: var(--primary-teal);
+}
+
+.prompt-dialog-form { margin-top: 18px; }
+
+.prompt-dialog-input-wrap { position: relative; }
+
+.prompt-dialog-input-wrap .field-input { padding-right: 52px; text-align: left; }
+
+.prompt-dialog-suffix {
+    position: absolute;
+    top: 50%;
+    right: 14px;
+    transform: translateY(-50%);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+.prompt-dialog-form .auth-error { margin: 12px 0 0; }
+
 /* --- Subscription price-increase block --- */
 @keyframes price-increase-pop-in {
     0% { opacity: 0; transform: scale(0.9) translateY(12px); }

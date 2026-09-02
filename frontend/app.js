@@ -1326,6 +1326,74 @@ function showConfirmDialog({ title, message, confirmLabel, cancelLabel, danger =
     });
 }
 
+/** Sleek in-app replacement for window.prompt() - same shell as
+ * showConfirmDialog above (see #prompt-dialog-overlay in index.html), with
+ * a single labeled input instead of a plain yes/no choice. `validate`
+ * receives the trimmed value and returns an error string to show inline
+ * (never an alert()), or a falsy value when it's fine. Resolves the
+ * trimmed input on submit, or null if the user cancels, hits Escape, or
+ * clicks the backdrop - never rejects. */
+function showPromptDialog({ title, message, initialValue = '', placeholder = '', suffix = '',
+                            confirmLabel, cancelLabel, validate } = {}) {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('prompt-dialog-overlay');
+        const titleEl = document.getElementById('prompt-dialog-title');
+        const messageEl = document.getElementById('prompt-dialog-message');
+        const form = document.getElementById('prompt-dialog-form');
+        const input = document.getElementById('prompt-dialog-input');
+        const suffixEl = document.getElementById('prompt-dialog-suffix');
+        const errorEl = document.getElementById('prompt-dialog-error');
+        const cancelBtn = document.getElementById('prompt-dialog-cancel');
+        const confirmBtn = document.getElementById('prompt-dialog-confirm');
+
+        titleEl.textContent = title || '';
+        messageEl.textContent = message || '';
+        messageEl.hidden = !message;
+        input.value = initialValue;
+        input.placeholder = placeholder;
+        suffixEl.textContent = suffix;
+        suffixEl.hidden = !suffix;
+        errorEl.hidden = true;
+        errorEl.textContent = '';
+        cancelBtn.textContent = cancelLabel || t('common.Anulează', 'Anulează');
+        confirmBtn.textContent = confirmLabel || t('common.Confirmă', 'Confirmă');
+
+        overlay.hidden = false;
+        if (window.lucide) lucide.createIcons();
+        input.focus();
+        input.select();
+
+        function close(result) {
+            overlay.hidden = true;
+            form.onsubmit = null;
+            cancelBtn.onclick = null;
+            overlay.onclick = null;
+            document.removeEventListener('keydown', onKeydown);
+            resolve(result);
+        }
+        function onKeydown(event) {
+            if (event.key === 'Escape') close(null);
+        }
+        function submit(event) {
+            event.preventDefault();
+            const value = input.value.trim();
+            const error = validate ? validate(value) : null;
+            if (error) {
+                errorEl.textContent = error;
+                errorEl.hidden = false;
+                input.focus();
+                return;
+            }
+            close(value);
+        }
+
+        form.onsubmit = submit;
+        cancelBtn.onclick = () => close(null);
+        overlay.onclick = (event) => { if (event.target === overlay) close(null); };
+        document.addEventListener('keydown', onKeydown);
+    });
+}
+
 async function deleteConversation(conversation) {
     const approved = await showConfirmDialog({
         title: t('chat.history.delete_title', 'Delete conversation'),
@@ -3443,7 +3511,7 @@ function renderCardsList(cards) {
                 </button>
             </div>
             <div class="card-actions-row">
-                <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}" title="${t('cards.limit_hint', 'Setează limita de cheltuieli')}">
+                <button class="card-limit-btn" data-card-id="${card.id}" data-current-limit="${card.spending_limit_minor ?? ''}" data-currency="${escapeHTML(account ? account.currency : 'RON')}" title="${t('cards.limit_hint', 'Setează limita de cheltuieli')}">
                     <i data-lucide="sliders-horizontal"></i>
                     <span>${t('cards.limit', 'Limită')}</span>
                 </button>
@@ -3495,7 +3563,12 @@ function renderCardsList(cards) {
 
     list.querySelectorAll('.card-cancel-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-            if (!confirm(t('cards.cancel_confirm', 'Sigur anulezi acest card? Nu poate fi reactivat.'))) return;
+            const approved = await showConfirmDialog({
+                title: t('cards.cancel', 'Anulează'),
+                message: t('cards.cancel_confirm', 'Sigur anulezi acest card? Nu poate fi reactivat.'),
+                confirmLabel: t('cards.cancel', 'Anulează'),
+            });
+            if (!approved) return;
             try {
                 await apiFetch(`/cards/${btn.dataset.cardId}`, { method: 'DELETE' });
                 await loadCards();
@@ -3526,18 +3599,23 @@ function renderCardsList(cards) {
             const currentLimit = btn.dataset.currentLimit
                 ? (Number(btn.dataset.currentLimit) / 100).toString()
                 : '';
-            const input = prompt(
-                t('cards.limit_prompt', 'New spending limit (leave blank to remove the limit):'),
-                currentLimit
-            );
-            if (input === null) return;
+            const trimmed = await showPromptDialog({
+                title: t('cards.limit', 'Limită'),
+                message: t('cards.limit_prompt', 'Noua limită de cheltuieli (lasă gol pentru a elimina limita):'),
+                initialValue: currentLimit,
+                suffix: btn.dataset.currency || 'RON',
+                validate: (value) => {
+                    if (!value) return null;
+                    const num = parseFloat(value);
+                    if (!Number.isFinite(num) || num <= 0) {
+                        return t('cards.invalid_limit', 'Introdu o sumă validă, mai mare decât 0.');
+                    }
+                    return null;
+                },
+            });
+            if (trimmed === null) return;
 
-            const trimmed = input.trim();
             const spendingLimitMinor = trimmed ? Math.round(parseFloat(trimmed) * 100) : null;
-            if (trimmed && (!Number.isFinite(spendingLimitMinor) || spendingLimitMinor <= 0)) {
-                alert(t('cards.invalid_limit', 'Enter a valid amount greater than 0.'));
-                return;
-            }
 
             try {
                 await apiFetch(`/cards/${btn.dataset.cardId}/spending-limit`, {
@@ -3798,7 +3876,12 @@ function renderBeneficiariesList(contacts) {
     list.querySelectorAll('.contact-remove-btn').forEach(btn => {
         btn.addEventListener('click', async (event) => {
             event.stopPropagation();
-            if (!confirm(t('payments.remove_contact_confirm', 'Ștergi acest contact salvat?'))) return;
+            const approved = await showConfirmDialog({
+                title: t('payments.remove_contact_title', 'Șterge contactul'),
+                message: t('payments.remove_contact_confirm', 'Ștergi acest contact salvat?'),
+                confirmLabel: t('common.Confirmă', 'Confirmă'),
+            });
+            if (!approved) return;
             try {
                 await apiFetch(`/beneficiaries/${btn.dataset.id}`, { method: 'DELETE' });
                 await loadBeneficiaries();

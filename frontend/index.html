@@ -757,6 +757,30 @@
         </div>
     </div>
 
+    <!-- Sleek in-app replacement for window.prompt() (see showPromptDialog
+         in app.js) - same shell as #confirm-dialog-overlay above, but with a
+         neutral (non-danger) icon/button and a single labeled input instead
+         of a plain yes/no choice. Reusable; currently wired to the card
+         spending-limit editor. -->
+    <div class="modal-overlay confirm-dialog-overlay" id="prompt-dialog-overlay" hidden>
+        <div class="modal confirm-dialog prompt-dialog">
+            <div class="confirm-dialog-icon prompt-dialog-icon"><i data-lucide="sliders-horizontal"></i></div>
+            <h3 class="confirm-dialog-title" id="prompt-dialog-title"></h3>
+            <p class="confirm-dialog-message" id="prompt-dialog-message"></p>
+            <form id="prompt-dialog-form" class="prompt-dialog-form">
+                <div class="prompt-dialog-input-wrap">
+                    <input class="field-input" id="prompt-dialog-input" type="text" inputmode="decimal" autocomplete="off">
+                    <span class="prompt-dialog-suffix" id="prompt-dialog-suffix" hidden></span>
+                </div>
+                <p class="auth-error" id="prompt-dialog-error" hidden></p>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="prompt-dialog-cancel"></button>
+                    <button type="submit" class="btn btn-primary" id="prompt-dialog-confirm"></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Step-up auth modal - confirms an AI-proposed action (see
          app/modules/chat/proposals_service.py) with Face ID or password
          before the backend executes it. Opened by openStepUpModal() in
