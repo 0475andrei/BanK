@@ -1,11 +1,12 @@
 import uuid
 
+from supabase import AsyncClient
+
 from app.ai.routing import RoutingDecision
 from app.ai.schemas import Message, ToolCall
 from app.core.exceptions import ConversationNotFoundError
 from app.modules.chat.schemas import MessageRead
 from app.modules.users.schemas import UserRead
-from supabase import AsyncClient
 
 
 async def create_conversation(supabase: AsyncClient, user: UserRead) -> dict:
@@ -133,10 +134,17 @@ async def delete_conversation(supabase: AsyncClient, conversation_id: uuid.UUID)
     await supabase.table("conversations").delete().eq("id", str(conversation_id)).execute()
 
 
-async def rename_conversation(supabase: AsyncClient, conversation_id: uuid.UUID, title: str) -> None:
+async def rename_conversation(
+    supabase: AsyncClient, conversation_id: uuid.UUID, title: str
+) -> None:
     """Rename a conversation.
 
     NOT ownership-checked, same as `delete_conversation` above - the caller
     must call `get_conversation` first (see chat/router.py::rename_conversation).
     """
-    await supabase.table("conversations").update({"title": title}).eq("id", str(conversation_id)).execute()
+    await (
+        supabase.table("conversations")
+        .update({"title": title})
+        .eq("id", str(conversation_id))
+        .execute()
+    )

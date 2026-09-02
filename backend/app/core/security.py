@@ -50,7 +50,8 @@ def generate_otp_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
-_REFERRAL_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I - avoids visual ambiguity when shared
+# No 0/O/1/I - avoids visual ambiguity when shared.
+_REFERRAL_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 _REFERRAL_CODE_LENGTH = 8
 
 

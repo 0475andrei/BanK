@@ -175,7 +175,9 @@ def _parse_classification_response(raw_text: str, descriptions: list[str]) -> di
     malformed response and a hallucinated category: either failure mode
     just drops that one description (it falls back to UNCATEGORIZED
     upstream) rather than raising and losing the whole batch."""
-    cleaned = raw_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    cleaned = (
+        raw_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    )
     try:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError:
@@ -277,7 +279,9 @@ async def categorize_spending(
 
     if provider is not None:
         uncategorized_texts = [
-            text for entry_id, text in entry_text.items() if entry_category[entry_id] == UNCATEGORIZED
+            text
+            for entry_id, text in entry_text.items()
+            if entry_category[entry_id] == UNCATEGORIZED
         ]
         improved = await _classify_uncategorized_with_llm(supabase, provider, uncategorized_texts)
         for entry_id, text in entry_text.items():

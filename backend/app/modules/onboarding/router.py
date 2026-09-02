@@ -57,7 +57,13 @@ def _redact_passwords(history: list[Message]) -> list[Message]:
             redacted.append(message)
             continue
         cleaned_calls = [
-            call.model_copy(update={"arguments": {k: v for k, v in call.arguments.items() if k != "password"}})
+            call.model_copy(
+                update={
+                    "arguments": {
+                        k: v for k, v in call.arguments.items() if k != "password"
+                    }
+                }
+            )
             for call in message.tool_calls
         ]
         redacted.append(message.model_copy(update={"tool_calls": cleaned_calls}))

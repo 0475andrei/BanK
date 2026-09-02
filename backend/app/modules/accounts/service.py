@@ -98,7 +98,8 @@ async def _insert_account_with_iban(
             )
             return resp.data[0]
         except APIError as exc:
-            if exc.code != UNIQUE_VIOLATION or "iban" not in f"{exc.message} {exc.details or ''}".lower():
+            message = f"{exc.message} {exc.details or ''}".lower()
+            if exc.code != UNIQUE_VIOLATION or "iban" not in message:
                 raise
             last_error = exc
     raise last_error  # pragma: no cover - astronomically unlikely
@@ -193,7 +194,9 @@ async def accrue_interest_if_due(supabase: AsyncClient, account: dict) -> None:
         await _accrue_term_deposit_interest(supabase, account)
 
 
-async def _get_first_active_account(supabase: AsyncClient, user_id: str, currency: str) -> dict | None:
+async def _get_first_active_account(
+    supabase: AsyncClient, user_id: str, currency: str
+) -> dict | None:
     resp = (
         await supabase.table("accounts")
         .select("*")
@@ -251,7 +254,9 @@ async def _pay_referral_reward(supabase: AsyncClient, reward: dict, payout_accou
     )
 
 
-async def _record_and_pay_referrer_reward(supabase: AsyncClient, user: UserRead, account: dict) -> None:
+async def _record_and_pay_referrer_reward(
+    supabase: AsyncClient, user: UserRead, account: dict
+) -> None:
     """The other half of `user.referral_bonus_eligible` above: if `user` was
     referred by someone's per-user code (not the fallback), that person is
     owed a reward now that `user` has an account. Records it unconditionally
@@ -288,7 +293,9 @@ async def _record_and_pay_referrer_reward(supabase: AsyncClient, user: UserRead,
         await _pay_referral_reward(supabase, reward, referrer_account)
 
 
-async def _pay_pending_referral_rewards(supabase: AsyncClient, user: UserRead, account: dict) -> None:
+async def _pay_pending_referral_rewards(
+    supabase: AsyncClient, user: UserRead, account: dict
+) -> None:
     """The referrer side of the deferred case: `user` just opened a RON
     account, so any reward(s) left `pending` for them (from people they
     referred before they had a RON account of their own) can be paid now."""
@@ -369,7 +376,9 @@ async def get_account_holder_by_iban(supabase: AsyncClient, iban: str) -> dict:
     paying, same as any real bank's payee-name display). Deliberately
     returns only first/last name, nothing else."""
     iban = iban.replace(" ", "").upper()
-    resp = await supabase.table("accounts").select("user_id").eq("iban", iban).maybe_single().execute()
+    resp = (
+        await supabase.table("accounts").select("user_id").eq("iban", iban).maybe_single().execute()
+    )
     account = resp.data if resp is not None else None
     if account is None:
         raise IbanNotFoundError()
