@@ -226,10 +226,24 @@ async def _persist_turn(
     back as real user input on the next turn. The handoff is already recorded,
     in the target hop's routing row (`reason` + `handoff_from`).
 
+    Every row this call writes - the user's message and every hop's trace and
+    final-reply rows alike - is stamped with the SAME `turn_id`, minted fresh
+    here (one `_persist_turn` call is one conversational turn by construction:
+    `chat()` calls it exactly once per POST /chat). That is what lets a reload
+    merge a compound-handoff turn's hop rows back into one bubble, the same
+    shape `combined_reply` produced live - see groupMessagesForDisplay in
+    frontend/app.js and migrations/0025_messages_turn_id.sql for why this
+    isn't a reused HTTP-level request id (client-overridable, and scoped to
+    request tracing, not to "one turn") or a timestamp comparison (fragile:
+    hops in one turn can collide or drift).
+
     Returns every message written, flat, for `_extract_proposal` to scan.
     """
+    turn_id = uuid.uuid4()
     written: list[Message] = [Message(role="user", content=user_message)]
-    await conversations_service.append_message(supabase, conversation_id, written[0])
+    await conversations_service.append_message(
+        supabase, conversation_id, written[0], turn_id=turn_id
+    )
 
     for hop in turn.hops:
         hop_messages = [*hop.trace, Message(role="assistant", content=hop.reply)]
@@ -240,6 +254,7 @@ async def _persist_turn(
                 conversation_id,
                 message,
                 routing=hop.routing if is_final_reply else None,
+                turn_id=turn_id,
             )
         written.extend(hop_messages)
 

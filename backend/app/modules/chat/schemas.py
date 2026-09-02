@@ -128,6 +128,13 @@ class MessageRead(BaseModel):
     #: Set only on the assistant turn a routed agent produced; None on every
     #: other row (user turns, tool results) and on messages predating Step 7.
     routing: RoutingDecision | None = None
+    #: Every row one `_persist_turn` call wrote shares this value (see
+    #: chat/router.py) - the frontend groups consecutive assistant rows with
+    #: the same non-null `turn_id` into one bubble on reload, mirroring how
+    #: `TurnDispatchResult.combined_reply` merges them live. None on messages
+    #: predating migrations/0025_messages_turn_id.sql; those rows never merge
+    #: with anything and keep rendering one bubble per row, as before.
+    turn_id: uuid.UUID | None = None
 
 
 class ConversationRead(BaseModel):

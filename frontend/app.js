@@ -536,6 +536,63 @@ function agentChainsByMessage(messages) {
     return chains;
 }
 
+/** Merge a turn's hop rows back into the single bubble they were shown as
+ * live (bug fix: a compound-handoff turn - 2+ agent hops that each produce
+ * reply text, e.g. Insights answers the spending half then hands off to
+ * Banking for the balance half - rendered as ONE bubble live via
+ * `ChatResponse.reply` (= `TurnDispatchResult.combined_reply`, which joins
+ * every hop's non-empty reply with "\n\n" - see app/ai/turn.py), but replayed
+ * from history as ONE BUBBLE PER ROW, since each hop is its own `messages`
+ * row with no shared key. `turn_id` (migrations/0025_messages_turn_id.sql) is
+ * that shared key: every row one `_persist_turn` call wrote carries the same
+ * value.
+ *
+ * Takes the ALREADY content-filtered, role-filtered `dialogue` array (user +
+ * assistant rows with non-empty content, in order) and merges consecutive
+ * ASSISTANT rows that share a non-null `turn_id` into one group, joining
+ * their content with "\n\n" - the exact same join `combined_reply` does
+ * server-side. A user row never merges with anything, and a row with
+ * `turn_id == null` (written before this migration) never merges either -
+ * each keeps rendering as its own single-row group, exactly as it did before
+ * this fix existed. That is the deliberate, permanent behaviour for
+ * pre-migration data: there is no reliable way to know which of those old
+ * rows belonged together, and guessing from timestamps is the fragile
+ * heuristic this fix replaces, not one to reintroduce for old rows.
+ *
+ * Returns an array of { role, text, lastMessage } - `lastMessage` is the
+ * group's last row, i.e. the same key `agentChainsByMessage` used for that
+ * run, so the caller can still look up the group's agent-chain pill. */
+function groupMessagesForDisplay(dialogue) {
+    const groups = [];
+
+    dialogue.forEach(message => {
+        const last = groups[groups.length - 1];
+        const canMerge =
+            message.role === 'assistant' &&
+            last &&
+            last.role === 'assistant' &&
+            message.turn_id != null &&
+            message.turn_id === last.turnId;
+        if (canMerge) {
+            last.parts.push(message.content);
+            last.lastMessage = message;
+        } else {
+            groups.push({
+                role: message.role,
+                turnId: message.turn_id ?? null,
+                parts: [message.content],
+                lastMessage: message,
+            });
+        }
+    });
+
+    return groups.map(group => ({
+        role: group.role,
+        text: group.parts.join('\n\n'),
+        lastMessage: group.lastMessage,
+    }));
+}
+
 /** Builds a chat bubble matching the existing markup and appends it.
  * `options.routingChain`, when present on an 'ai' message, renders the agent
  * chain (see renderAgentChain) above the bubble. `options.routing` is the
@@ -1198,13 +1255,16 @@ async function openConversation(conversationId) {
         const dialogue = messages.filter(message =>
             (message.role === 'user' || message.role === 'assistant') && message.content
         );
-        if (dialogue.length) {
-            dialogue.forEach(message => appendChatBubble(
-                message.role === 'user' ? 'user' : 'ai',
-                message.content,
+        // Then merged back into the bubbles a compound-handoff turn was shown
+        // as live - see groupMessagesForDisplay.
+        const turns = groupMessagesForDisplay(dialogue);
+        if (turns.length) {
+            turns.forEach(turnGroup => appendChatBubble(
+                turnGroup.role === 'user' ? 'user' : 'ai',
+                turnGroup.text,
                 {
-                    routingChain: chains.get(message),
-                    routing: message.routing || undefined,
+                    routingChain: chains.get(turnGroup.lastMessage),
+                    routing: turnGroup.lastMessage.routing || undefined,
                 }
             ));
         } else {

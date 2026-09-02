@@ -86,13 +86,13 @@ def two_hop_turn() -> TurnDispatchResult:
 
 
 @pytest.fixture
-def recorded(monkeypatch) -> list[tuple[Message, RoutingDecision | None]]:
+def recorded(monkeypatch) -> list[tuple[Message, RoutingDecision | None, uuid.UUID | None]]:
     """Capture what `_persist_turn` would write, in order."""
-    calls: list[tuple[Message, RoutingDecision | None]] = []
+    calls: list[tuple[Message, RoutingDecision | None, uuid.UUID | None]] = []
 
-    async def fake_append(supabase, conversation_id, message, routing=None):
+    async def fake_append(supabase, conversation_id, message, routing=None, turn_id=None):
         assert conversation_id == CONVERSATION_ID
-        calls.append((message, routing))
+        calls.append((message, routing, turn_id))
         return {}
 
     monkeypatch.setattr(conversations_service, "append_message", fake_append)
@@ -107,7 +107,7 @@ def recorded(monkeypatch) -> list[tuple[Message, RoutingDecision | None]]:
 async def test_a_two_hop_turn_is_written_in_execution_order(recorded):
     await chat_router._persist_turn(None, CONVERSATION_ID, USER_MESSAGE, two_hop_turn())
 
-    roles = [message.role for message, _ in recorded]
+    roles = [message.role for message, _, _ in recorded]
     # user | insights' trace | insights' (empty) reply | banking's trace | banking's reply
     assert roles == ["user", "assistant", "tool", "assistant", "assistant", "tool", "assistant"]
 
@@ -118,7 +118,7 @@ async def test_routing_rides_on_each_hops_final_assistant_row_only(recorded):
     a tool result is not a decision."""
     await chat_router._persist_turn(None, CONVERSATION_ID, USER_MESSAGE, two_hop_turn())
 
-    attached = [routing for _, routing in recorded]
+    attached = [routing for _, routing, _ in recorded]
     assert [r is not None for r in attached] == [False, False, False, True, False, False, True]
 
     first_hop, second_hop = attached[3], attached[6]
@@ -137,7 +137,7 @@ async def test_a_hop_that_said_nothing_still_gets_its_row(recorded):
     keeping it costs no blank bubble."""
     await chat_router._persist_turn(None, CONVERSATION_ID, USER_MESSAGE, two_hop_turn())
 
-    empty_row, routing = recorded[3]
+    empty_row, routing, _ = recorded[3]
     assert empty_row.role == "assistant"
     assert empty_row.content == ""
     assert routing is not None
@@ -148,8 +148,92 @@ async def test_the_model_authored_context_hint_is_never_written_as_a_user_turn(r
     own transcript - and feed them back as real user input next turn."""
     await chat_router._persist_turn(None, CONVERSATION_ID, USER_MESSAGE, two_hop_turn())
 
-    user_rows = [message for message, _ in recorded if message.role == "user"]
+    user_rows = [message for message, _, _ in recorded if message.role == "user"]
     assert [m.content for m in user_rows] == [USER_MESSAGE]
+
+
+# ---------------------------------------------------------------------------
+# turn_id (reload-bubble-splitting fix)
+# ---------------------------------------------------------------------------
+
+
+async def test_every_row_of_a_turn_shares_the_same_turn_id(recorded):
+    """The key a reload merges hop rows back together on (see
+    groupMessagesForDisplay in frontend/app.js) - minted once per
+    `_persist_turn` call and stamped on the user row and every hop's trace and
+    final-reply rows alike."""
+    await chat_router._persist_turn(None, CONVERSATION_ID, USER_MESSAGE, two_hop_turn())
+
+    turn_ids = [turn_id for _, _, turn_id in recorded]
+    assert all(tid is not None for tid in turn_ids)
+    assert len(set(turn_ids)) == 1
+
+
+async def test_two_persist_calls_get_different_turn_ids(recorded):
+    """Two separate turns must never merge into one bubble on reload."""
+    await chat_router._persist_turn(None, CONVERSATION_ID, USER_MESSAGE, two_hop_turn())
+    first_turn_ids = {turn_id for _, _, turn_id in recorded}
+    recorded.clear()
+
+    await chat_router._persist_turn(None, CONVERSATION_ID, USER_MESSAGE, two_hop_turn())
+    second_turn_ids = {turn_id for _, _, turn_id in recorded}
+
+    assert first_turn_ids.isdisjoint(second_turn_ids)
+
+
+def compound_two_hop_turn() -> TurnDispatchResult:
+    """Both hops speak: Insights answers the spending half via `answer_so_far`
+    and hands off; Banking answers the balance half. Mirrors
+    tests/ai/test_compound_handoff.py's SPENDING_HALF/BALANCE_HALF scenario,
+    but as a hand-built TurnDispatchResult so this file stays offline and
+    self-contained like the rest of it."""
+    insights_hop = TurnResult(
+        reply="Ai cheltuit 1.200,00 RON luna aceasta.",
+        trace=[
+            Message(
+                role="assistant",
+                tool_calls=[ToolCall(id="c1", name="handoff_to_agent", arguments={})],
+            ),
+            Message(
+                role="tool",
+                content='{"ok": true}',
+                tool_call_id="c1",
+                name="handoff_to_agent",
+            ),
+        ],
+        routing=insights_decision(),
+    )
+    banking_hop = TurnResult(
+        reply="Soldul tau este 3.500,00 RON.",
+        trace=[],
+        routing=banking_decision(),
+    )
+    return TurnDispatchResult(hops=[insights_hop, banking_hop])
+
+
+async def test_a_compound_turns_history_rows_join_into_the_same_combined_reply(recorded):
+    """The evidence the reload fix actually fixes the bug: joining the
+    persisted rows for one turn_id with "\\n\\n" - the same merge
+    groupMessagesForDisplay does client-side - must reproduce EXACTLY what
+    `combined_reply` produced live, for a turn where both hops speak."""
+    turn = compound_two_hop_turn()
+
+    await chat_router._persist_turn(None, CONVERSATION_ID, USER_MESSAGE, turn)
+
+    turn_id = recorded[0][2]
+    assert turn_id is not None
+
+    # What the history endpoint would return for this turn's assistant rows
+    # with non-empty content, in order - i.e. what the frontend groups.
+    assistant_rows_with_content = [
+        message
+        for message, _, tid in recorded
+        if message.role == "assistant" and message.content and tid == turn_id
+    ]
+    reconstructed = "\n\n".join(m.content for m in assistant_rows_with_content)
+
+    assert reconstructed == turn.combined_reply
+    assert reconstructed == "Ai cheltuit 1.200,00 RON luna aceasta.\n\nSoldul tau este 3.500,00 RON."
 
 
 async def test_persist_returns_every_written_message_for_proposal_extraction(recorded):
@@ -181,8 +265,8 @@ async def test_a_single_agent_turn_persists_exactly_as_it_used_to(recorded):
 
     await chat_router._persist_turn(None, CONVERSATION_ID, "care e soldul", turn)
 
-    assert [m.role for m, _ in recorded] == ["user", "assistant", "assistant"]
-    assert [r is not None for _, r in recorded] == [False, False, True]
+    assert [m.role for m, _, _ in recorded] == ["user", "assistant", "assistant"]
+    assert [r is not None for _, r, _ in recorded] == [False, False, True]
 
 
 # ---------------------------------------------------------------------------
