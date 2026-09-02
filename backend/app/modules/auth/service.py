@@ -61,9 +61,7 @@ UNIQUE_VIOLATION = "23505"
 FALLBACK_REFERRAL_CODE = "BanKTHA"
 
 
-async def _resolve_referral(
-    supabase: AsyncClient, referral_code: str | None
-) -> tuple[bool, str | None]:
+async def _resolve_referral(supabase: AsyncClient, referral_code: str | None) -> tuple[bool, str | None]:
     """Returns (bonus_eligible, referrer_user_id). referrer_user_id is only
     ever set for a per-user code match - the fallback code makes the new
     user eligible for their own welcome balance, but has no specific referrer
@@ -137,9 +135,7 @@ async def register_user(supabase: AsyncClient, payload: RegisterRequest) -> tupl
     if not is_valid:
         raise ValidationError(reason)
 
-    referral_bonus_eligible, referred_by_user_id = await _resolve_referral(
-        supabase, payload.referral_code
-    )
+    referral_bonus_eligible, referred_by_user_id = await _resolve_referral(supabase, payload.referral_code)
 
     try:
         resp = (
@@ -287,21 +283,12 @@ async def request_password_reset(supabase: AsyncClient, email: str) -> None:
     )
 
     await record_audit_event(
-        supabase,
-        user_id=uuid.UUID(user_id),
-        action="auth.request_password_reset",
-        entity=f"users:{user_id}",
+        supabase, user_id=uuid.UUID(user_id), action="auth.request_password_reset", entity=f"users:{user_id}"
     )
 
 
 async def _get_user_id_for_reset(supabase: AsyncClient, email: str) -> str:
-    resp = (
-        await supabase.table("users")
-        .select("id")
-        .eq("email", email.lower())
-        .maybe_single()
-        .execute()
-    )
+    resp = await supabase.table("users").select("id").eq("email", email.lower()).maybe_single().execute()
     user_row = resp.data if resp is not None else None
     # Same generic error whether the email is unknown, the code is wrong, or
     # it expired - never confirm which one it was (see request_password_reset).
@@ -372,10 +359,7 @@ async def reset_password(supabase: AsyncClient, payload: ResetPasswordRequest) -
     await supabase.table("sessions").delete().eq("user_id", user_id).execute()
 
     await record_audit_event(
-        supabase,
-        user_id=uuid.UUID(user_id),
-        action="auth.reset_password",
-        entity=f"users:{user_id}",
+        supabase, user_id=uuid.UUID(user_id), action="auth.reset_password", entity=f"users:{user_id}"
     )
 
 
@@ -391,11 +375,7 @@ async def change_password(
     every *other* session is invalidated, since the whole point here is
     "I'm already logged in on this device and just want a new password"."""
     resp = (
-        await supabase.table("users")
-        .select("password_hash")
-        .eq("id", str(user.id))
-        .maybe_single()
-        .execute()
+        await supabase.table("users").select("password_hash").eq("id", str(user.id)).maybe_single().execute()
     )
     user_row = resp.data if resp is not None else None
     if user_row is None or not verify_password(payload.current_password, user_row["password_hash"]):

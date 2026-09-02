@@ -153,13 +153,10 @@ async def _count_recent_failed_attempts(supabase: AsyncClient, email: str) -> in
     return resp.count or 0
 
 
-async def login_with_face(
-    supabase: AsyncClient, email: str, image_bytes: bytes
-) -> tuple[UserRead, str]:
+async def login_with_face(supabase: AsyncClient, email: str, image_bytes: bytes) -> tuple[UserRead, str]:
     email = email.lower()
 
-    recent_failures = await _count_recent_failed_attempts(supabase, email)
-    if recent_failures >= auth_service.LOGIN_MAX_FAILED_ATTEMPTS:
+    if await _count_recent_failed_attempts(supabase, email) >= auth_service.LOGIN_MAX_FAILED_ATTEMPTS:
         raise LoginRateLimitedError()
 
     resp = await supabase.table("users").select("*").eq("email", email).maybe_single().execute()
@@ -203,9 +200,7 @@ def _hash_confirmation_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-async def create_face_confirmation(
-    supabase: AsyncClient, user: UserRead, image_bytes: bytes
-) -> str:
+async def create_face_confirmation(supabase: AsyncClient, user: UserRead, image_bytes: bytes) -> str:
     """Re-verifies the already-logged-in `user`'s face (1:1, same comparison
     as login_with_face) and issues a short-lived, single-use token proving
     "yes, still you" - the step-up auth transfers/payments require above
@@ -266,9 +261,7 @@ async def _consume_face_confirmation(supabase: AsyncClient, user: UserRead, toke
     )
 
 
-async def consume_face_confirmation_token(
-    supabase: AsyncClient, user: UserRead, token: str
-) -> None:
+async def consume_face_confirmation_token(supabase: AsyncClient, user: UserRead, token: str) -> None:
     """Public entry point for callers that need to consume a step-up token
     unconditionally - unlike `enforce_face_confirmation` below, this never
     no-ops for a user with no face enrolled (that no-op exists there because

@@ -28,14 +28,6 @@ jobs:
       run:
         working-directory: backend
     env:
-      # app/config.py::Settings requires SUPABASE_URL/SUPABASE_KEY just to
-      # import - there's no .env file in a fresh checkout, so without these
-      # every test fails at collection time before it even runs. Pointed at
-      # the same disposable test project as the TEST_ pair below: a CI
-      # runner is ephemeral and has no "real" project to protect, so there's
-      # no meaningful distinction here the way there is on a dev machine.
-      SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
-      SUPABASE_KEY: ${{ secrets.TEST_SUPABASE_KEY }}
       TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
       TEST_SUPABASE_KEY: ${{ secrets.TEST_SUPABASE_KEY }}
     steps:

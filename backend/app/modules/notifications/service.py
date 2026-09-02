@@ -41,9 +41,7 @@ async def create_notification(
     return created
 
 
-async def list_notifications(
-    supabase: AsyncClient, user: UserRead, limit: int = DEFAULT_LIMIT
-) -> list[dict]:
+async def list_notifications(supabase: AsyncClient, user: UserRead, limit: int = DEFAULT_LIMIT) -> list[dict]:
     resp = (
         await supabase.table("notifications")
         .select("*")
@@ -76,9 +74,7 @@ async def mark_all_read(supabase: AsyncClient, user: UserRead) -> None:
     )
 
 
-async def mark_read(
-    supabase: AsyncClient, user: UserRead, notification_id: uuid.UUID | str
-) -> None:
+async def mark_read(supabase: AsyncClient, user: UserRead, notification_id: uuid.UUID | str) -> None:
     """One notification, not the whole inbox - "seen" now means the user
     clicked THIS item, not "opened the dropdown at all" (see mark_all_read
     above, which the frontend no longer calls on open). Scoped by user_id in
