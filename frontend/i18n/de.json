@@ -475,7 +475,8 @@
     "camera_error": "Auf die Kamera konnte nicht zugegriffen werden. Überprüfe die Browserberechtigungen.",
     "use_password_instead": "Stattdessen Passwort verwenden",
     "password_label": "Passwort",
-    "password_required": "Gib dein Passwort ein."
+    "password_required": "Gib dein Passwort ein.",
+    "blink_now": "Blinzle jetzt..."
   },
   "price_increase": {
     "title": "Der Abo-Preis ist gestiegen",

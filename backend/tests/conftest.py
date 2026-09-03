@@ -58,6 +58,14 @@ _TABLES_IN_FK_ORDER = (
     "conversations",
     "accounts",
     "users",
+    # No FK to anything else (see migrations/0019_merchant_category_cache.sql),
+    # so it has no ordering constraint - but it's GLOBAL, not scoped to any
+    # user/account this fixture also wipes, so leaving it out let a
+    # classification cached by one test run survive into the next one and
+    # skip the LLM call a later test expected (merchant descriptions repeat
+    # across runs, e.g. "Totally Novel Merchant Xyz" in
+    # test_categorize_transactions_tool.py).
+    "merchant_category_cache",
 )
 
 # PostgREST rejects an unconditional DELETE; this filter matches every real

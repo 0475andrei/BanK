@@ -1,13 +1,19 @@
 """List every account the signed-in user owns, with live ledger balances.
 
-Takes no arguments on purpose: there is nothing for the model to narrow, and
-nothing for it to guess. The account set comes from the trusted `Context`'s
-user id, so the model cannot ask about anyone else's accounts - not by naming
-them, and not by omitting them.
+Takes no identity-narrowing arguments on purpose: there is nothing for the
+model to guess about WHO the accounts belong to. The account set comes from
+the trusted `Context`'s user id, so the model cannot ask about anyone else's
+accounts - not by naming them, and not by omitting them.
 
 Balances are included inline rather than left for a follow-up `get_balance`
 call: users asking "ce conturi am?" almost always want the amounts too, and
 one tool call beats N+1 round-trips through the model.
+
+Closed accounts are excluded by default (see
+accounts_service.list_accounts_for_owner's `include_closed` - this tool is
+one of its callers, not a second place the filtering happens), so an account
+the user closed weeks ago no longer appears here, or in its balance, unless
+`include_closed` is explicitly set - see ListAccountsInput.
 """
 
 from __future__ import annotations
@@ -15,7 +21,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.ai.context import Context
 from app.ai.schemas import ToolResult
@@ -26,7 +32,18 @@ if TYPE_CHECKING:
 
 
 class ListAccountsInput(BaseModel):
-    """No arguments: the user's accounts are fully determined by their identity."""
+    """The only argument narrows by STATUS, never by identity - the account
+    owner is always the context user."""
+
+    include_closed: bool = Field(
+        default=False,
+        description=(
+            "Set to true ONLY when the user explicitly asks to also see closed/"
+            "historical accounts (e.g. 'arată-mi și conturile închise'). Leave "
+            "false for every ordinary balance/account question - a closed "
+            "account must not appear, or be counted, in an ordinary answer."
+        ),
+    )
 
 
 class ListAccountsTool(Tool):
@@ -56,7 +73,7 @@ class ListAccountsTool(Tool):
         # the account set is decided. A user with no accounts gets an empty
         # list, which is a legitimate state, not an error.
         accounts = await accounts_service.list_accounts_for_owner(
-            self._supabase, context.user_id
+            self._supabase, context.user_id, include_closed=validated_input.include_closed
         )
 
         listed = []

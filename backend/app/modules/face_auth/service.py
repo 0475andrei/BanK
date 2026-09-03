@@ -1,13 +1,18 @@
 """DIY face login ("varianta DIY cu camera" - see the design discussion this
 followed, not WebAuthn/passkeys). Enrollment stores one face_recognition
 (dlib) embedding per user; login extracts a fresh embedding from a live
-photo and compares it 1:1 against the enrolled one for the claimed email.
+capture and compares it 1:1 against the enrolled one for the claimed email.
 
-IMPORTANT - this is demo-grade biometric auth, not a real security boundary:
-there is no liveness detection, so a printed photo or a photo of a photo of
-the enrolled user passes it. Good enough for a hackathon-style feature;
-never treat this as equivalent to the password/OTP flows for anything that
-actually matters. See migration 0011's header for the same caveat.
+LIVENESS: every capture is a short BURST of frames (see `_extract_embedding`
+below and vision/app/face.py), and vision-service refuses to return an
+embedding at all unless the eyes actually blink across that burst - a
+printed photo, or a photo of a phone screen held up to the camera, has
+nothing moving in it and never produces the required open -> closed -> open
+sequence. This is still demo-grade biometric auth, not a real security
+boundary - it does not defend against a played VIDEO of the enrolled user
+blinking, only against a still image - so never treat it as equivalent to
+the password/OTP flows for anything that actually matters. See migration
+0011's header for the same caveat.
 """
 
 import hashlib
@@ -50,24 +55,35 @@ _FACE_EXTRACTION_MESSAGES = {
     "multiple_faces_detected": (
         "Multiple faces detected - only one person can enroll at a time."
     ),
+    "no_blink_detected": (
+        "No blink detected - hold the camera steady, look at it, and blink naturally."
+    ),
 }
 
 
-async def _extract_embedding(image_bytes: bytes) -> list[float]:
-    """Turn a photo into a 128-value embedding, via vision-service.
+async def _extract_embedding(frames: list[bytes]) -> list[float]:
+    """Turn a burst of frames into a 128-value embedding, via vision-service.
 
-    THE SPLIT: only this step needs dlib, so only this step left the
+    `frames` (not a single photo) is what makes this a LIVENESS check rather
+    than a plain photo match: vision-service requires the eyes to actually
+    blink across the burst before it returns anything at all - see
+    vision/app/face.py's module docstring for why one still photo can never
+    prove that. Every real caller (enroll_face, login_with_face,
+    create_face_confirmation below) captures and sends a burst; nothing here
+    accepts a single frame anymore.
+
+    THE SPLIT: only the CV step needs dlib, so only that step left the
     backend (see vision/app/face.py). Everything else about faces in this
     module - storing an embedding, comparing two of them, issuing and
     consuming confirmation tokens - is arithmetic and database work and
     stays here, which is why `enforce_face_confirmation` and friends can
     still be called in-process from transfers, payments and proposals.
 
-    The photo goes to a container that has no database and no session
-    context; it comes back as numbers and is never persisted there.
+    The frames go to a container that has no database and no session
+    context; they come back as numbers and are never persisted there.
     """
     try:
-        return await vision_client.extract_face_embedding(image_bytes)
+        return await vision_client.extract_face_embedding(frames)
     except ValidationError as exc:
         # Re-raised with this module's own wording so the API's error text
         # is unchanged by the split.
@@ -89,8 +105,8 @@ def _distance(known: list[float], candidate: list[float]) -> float:
     return math.dist(known, candidate)
 
 
-async def enroll_face(supabase: AsyncClient, user: UserRead, image_bytes: bytes) -> None:
-    embedding = await _extract_embedding(image_bytes)
+async def enroll_face(supabase: AsyncClient, user: UserRead, frames: list[bytes]) -> None:
+    embedding = await _extract_embedding(frames)
 
     try:
         await (
@@ -153,7 +169,7 @@ async def _count_recent_failed_attempts(supabase: AsyncClient, email: str) -> in
     return resp.count or 0
 
 
-async def login_with_face(supabase: AsyncClient, email: str, image_bytes: bytes) -> tuple[UserRead, str]:
+async def login_with_face(supabase: AsyncClient, email: str, frames: list[bytes]) -> tuple[UserRead, str]:
     email = email.lower()
 
     if await _count_recent_failed_attempts(supabase, email) >= auth_service.LOGIN_MAX_FAILED_ATTEMPTS:
@@ -175,7 +191,7 @@ async def login_with_face(supabase: AsyncClient, email: str, image_bytes: bytes)
 
     matched = False
     if user_row is not None and credential_row is not None:
-        candidate = await _extract_embedding(image_bytes)
+        candidate = await _extract_embedding(frames)
         distance = _distance(credential_row["embedding"], candidate)
         matched = bool(distance <= MATCH_THRESHOLD)
 
@@ -200,7 +216,7 @@ def _hash_confirmation_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-async def create_face_confirmation(supabase: AsyncClient, user: UserRead, image_bytes: bytes) -> str:
+async def create_face_confirmation(supabase: AsyncClient, user: UserRead, frames: list[bytes]) -> str:
     """Re-verifies the already-logged-in `user`'s face (1:1, same comparison
     as login_with_face) and issues a short-lived, single-use token proving
     "yes, still you" - the step-up auth transfers/payments require above
@@ -218,7 +234,7 @@ async def create_face_confirmation(supabase: AsyncClient, user: UserRead, image_
     if credential_row is None:
         raise ValidationError("Face Login is not enabled on this account.")
 
-    candidate = await _extract_embedding(image_bytes)
+    candidate = await _extract_embedding(frames)
     distance = _distance(credential_row["embedding"], candidate)
     if distance > MATCH_THRESHOLD:
         raise UnauthorizedError("Face not recognized.")

@@ -474,7 +474,8 @@
     "camera_error": "Не вдалося отримати доступ до камери. Перевірте дозволи браузера.",
     "use_password_instead": "Використати пароль замість цього",
     "password_label": "Пароль",
-    "password_required": "Введіть пароль."
+    "password_required": "Введіть пароль.",
+    "blink_now": "Кліпніть зараз..."
   },
   "price_increase": {
     "title": "Ціна підписки зросла",

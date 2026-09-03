@@ -52,9 +52,17 @@ async def append_message(
     conversation_id: uuid.UUID,
     message: Message,
     routing: RoutingDecision | None = None,
+    turn_id: uuid.UUID | None = None,
 ) -> dict:
     """Store one turn. `routing` belongs on the assistant turn the routed agent
-    produced, and is None everywhere else (user turns, tool results)."""
+    produced, and is None everywhere else (user turns, tool results).
+
+    `turn_id` ties every row ONE `_persist_turn` call writes back to the same
+    conversational turn (see chat/router.py) - the user's row and every hop's
+    trace + final-reply rows alike. None for rows written before this existed
+    (see migrations/0025_messages_turn_id.sql); those replay exactly as they
+    did before, one bubble per row.
+    """
     resp = (
         await supabase.table("messages")
         .insert(
@@ -66,6 +74,7 @@ async def append_message(
                 "tool_call_id": message.tool_call_id,
                 "name": message.name,
                 "routing_metadata": routing.model_dump() if routing is not None else None,
+                "turn_id": str(turn_id) if turn_id is not None else None,
             }
         )
         .execute()
@@ -117,6 +126,9 @@ async def load_messages_with_routing(
             routing=RoutingDecision(**row["routing_metadata"])
             if row["routing_metadata"]
             else None,
+            # `.get`, not `row[...]`: a row written before migrations/0025 has
+            # no such column in the dict Supabase returns for it.
+            turn_id=row.get("turn_id"),
         )
         for row in resp.data
     ]

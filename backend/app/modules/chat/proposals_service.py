@@ -168,17 +168,47 @@ async def create_proposal(
     return resp.data[0]
 
 
-async def get_proposal(supabase: AsyncClient, user: UserRead, proposal_id: str) -> dict:
-    """Ownership-checked read. A missing id and one owned by someone else look
-    identical to the caller - NotFoundError either way, never 403, so a
+async def get_proposal_for_owner(supabase: AsyncClient, user_id: str, proposal_id: str) -> dict:
+    """Ownership-checked read for callers holding a bare user id rather than a
+    full `UserRead` - the AI layer's `Context` only ever carries the former
+    (see app/ai/context.py), same reason accounts_service.get_account_for_owner
+    exists alongside get_account. A missing id and one owned by someone else
+    look identical to the caller - NotFoundError either way, never 403, so a
     non-owner can't confirm a proposal exists by the error shape alone."""
     resp = (
         await supabase.table("proposals").select("*").eq("id", proposal_id).maybe_single().execute()
     )
     proposal = resp.data if resp is not None else None
-    if proposal is None or proposal["user_id"] != str(user.id):
+    if proposal is None or proposal["user_id"] != str(user_id):
         raise NotFoundError("Proposal not found.")
     return proposal
+
+
+async def get_proposal(supabase: AsyncClient, user: UserRead, proposal_id: str) -> dict:
+    return await get_proposal_for_owner(supabase, str(user.id), proposal_id)
+
+
+async def get_pending_proposal_for_conversation(
+    supabase: AsyncClient, user_id: str, conversation_id: str
+) -> dict | None:
+    """The conversation's one live proposal, if it still has one, or None.
+
+    `create_proposal` supersedes any earlier pending proposal in the same
+    conversation (see its own docstring), so there is at most one `pending`
+    row per (user, conversation) at a time - this is what lets `cancel_proposal`
+    (app/ai/tools/banking/cancel_proposal.py) work without the model needing to
+    have retained the exact proposal id from earlier in the conversation, which
+    may have been several turns ago."""
+    resp = (
+        await supabase.table("proposals")
+        .select("*")
+        .eq("conversation_id", conversation_id)
+        .eq("user_id", str(user_id))
+        .eq("status", "pending")
+        .maybe_single()
+        .execute()
+    )
+    return resp.data if resp is not None else None
 
 
 async def ensure_pending_and_not_expired(supabase: AsyncClient, proposal: dict) -> None:
@@ -187,9 +217,18 @@ async def ensure_pending_and_not_expired(supabase: AsyncClient, proposal: dict) 
     OTP+Face path for admin-issued documents (confirm_admin_document).
 
     Status is checked BEFORE expiry so an already-decided proposal reports
-    its real state rather than "expired" if it happens to also be old."""
+    its real state rather than "expired" if it happens to also be old.
+
+    Both errors below carry the proposal's real terminal status in `details`
+    - not just a generic "not pending" - so a caller (chat/router.py's error
+    body, and from there the frontend) can tell "already rejected" apart from
+    "already confirmed (e.g. a second tab)" instead of having to guess. See
+    frontend/app.js's confirmWithCredential, which used to default every
+    ProposalNotPendingError to "confirmed" and rendered a green "Confirmată"
+    card for a proposal a user had actually rejected minutes earlier - a
+    false success screen on a banking app."""
     if proposal["status"] != "pending":
-        raise ProposalNotPendingError()
+        raise ProposalNotPendingError(details={"status": proposal["status"]})
 
     created_at = datetime.fromisoformat(proposal["created_at"])
     if datetime.now(UTC) - created_at > timedelta(minutes=PROPOSAL_EXPIRY_MINUTES):
@@ -199,7 +238,7 @@ async def ensure_pending_and_not_expired(supabase: AsyncClient, proposal: dict) 
             .eq("id", proposal["id"])
             .execute()
         )
-        raise ProposalExpiredError()
+        raise ProposalExpiredError(details={"status": "expired"})
 
 
 async def mark_confirmed(supabase: AsyncClient, proposal: dict, result: dict) -> dict:
@@ -327,10 +366,20 @@ async def confirm_proposal(
     return await mark_confirmed(supabase, proposal, result)
 
 
-async def reject_proposal(supabase: AsyncClient, user: UserRead, proposal_id: str) -> dict:
-    proposal = await get_proposal(supabase, user, proposal_id)
+async def reject_proposal_for_owner(supabase: AsyncClient, user_id: str, proposal_id: str) -> dict:
+    """Bare-user-id counterpart to `reject_proposal`, for the AI layer's
+    `cancel_proposal` tool - see `get_proposal_for_owner` for why this shape
+    exists alongside the `UserRead`-taking version below."""
+    proposal = await get_proposal_for_owner(supabase, user_id, proposal_id)
     if proposal["status"] != "pending":
-        raise ProposalNotPendingError()
+        # Same reverse-case gap as ensure_pending_and_not_expired above:
+        # without `details`, rejecting an already-confirmed proposal and
+        # rejecting an already-rejected one were indistinguishable to the
+        # caller. This path never produced a false-success UI state (see
+        # frontend/app.js's handleRejectProposal, whose catch block never
+        # marks the card resolved) - only a generic error toast - but it
+        # deserves the same real status here too.
+        raise ProposalNotPendingError(details={"status": proposal["status"]})
 
     updated = (
         await supabase.table("proposals")
@@ -339,6 +388,10 @@ async def reject_proposal(supabase: AsyncClient, user: UserRead, proposal_id: st
         .execute()
     )
     return updated.data[0]
+
+
+async def reject_proposal(supabase: AsyncClient, user: UserRead, proposal_id: str) -> dict:
+    return await reject_proposal_for_owner(supabase, str(user.id), proposal_id)
 
 
 def _locked_conversion(proposal: dict) -> dict[str, Any] | None:

@@ -25,7 +25,33 @@ logger = logging.getLogger(__name__)
 #: stays here unconditionally: InsightsAgent is registered before Banking
 #: and only claims "cheltui" alongside an analytical marker of its own, so a
 #: bare "cheltui" already falls through to this rule with no change needed
-#: on this side of that collision.
+#: on this side of that collision. `limita` is likewise NOT here - see
+#: `banking_card_limit_action` below and CARD_LIMIT_ACTION_MARKERS.
+#:
+#: COLLISION, RESOLVED (Step 16 Priority 2, item 8): `limita` is also a
+#: DocsAgent keyword (generic product-limit documentation), and DocsAgent is
+#: registered before Banking - a bare "limita" mention always reached
+#: DocsAgent's generic answer first, even for "vreau să schimb limita
+#: cardului meu", which is a real action BankingAgent already has a tool for
+#: (set_card_spending_limit). `banking_card_limit_action` below and
+#: DocsAgent's `docs_card_limit_info` rule resolve this the same way
+#: `econom` was resolved: Banking claims "limita" only alongside one of
+#: `CARD_LIMIT_ACTION_MARKERS` (an action-intent verb), and DocsAgent backs
+#: off "limita" in exactly that same case, via `excludes_any_of`. A bare
+#: "limita" with no such marker ("ce este limita unui card de credit?") has
+#: no action intent and correctly still falls through to DocsAgent.
+CARD_LIMIT_ACTION_MARKERS = frozenset(
+    {
+        "schimb",
+        "maresc",
+        "mareste",
+        "modific",
+        "cresc",
+        "creste",
+        "vreau",
+    }
+)
+
 BANKING_ROUTING_RULES = (
     # FIRST, deliberately: a conversion question mentions money and often an
     # account, so `banking_keywords` below would claim it. See
@@ -59,6 +85,11 @@ BANKING_ROUTING_RULES = (
         name="banking_savings_default",
         keywords=frozenset({"econom"}),
         excludes_any_of=PLANNING_FORWARD_MARKERS,
+    ),
+    RoutingRule(
+        name="banking_card_limit_action",
+        keywords=frozenset({"limita"}),
+        requires_any_of=CARD_LIMIT_ACTION_MARKERS,
     ),
 )
 
@@ -111,6 +142,12 @@ Ce unealtă folosești:
   „soldul contului de economii”) → get_balance
 - „ce conturi am”, „câte conturi am”, „arată-mi conturile” → list_accounts
   (întoarce toate conturile, fiecare cu soldul lui — nu mai e nevoie de get_balance)
+- list_accounts și get_balance NU includ conturile ÎNCHISE implicit — un cont
+  închis nu apare și nu este numărat la niciun sold general. Cheamă
+  list_accounts cu include_closed=true DOAR când utilizatorul cere explicit
+  conturile închise/istoricul conturilor (ex. „arată-mi și conturile
+  închise”, „ce conturi am avut”) — niciodată pentru o întrebare obișnuită de
+  sold.
 - „ultimele tranzacții”, „ce am cheltuit”, „arată-mi tranzacțiile” → list_transactions
   (implicit ultimele 30 de zile; folosește days_back=7 pentru „săptămâna asta”,
   days_back=90 pentru „ultimul trimestru”)
@@ -160,6 +197,15 @@ Ce unealtă folosești:
 - „deschide-mi un cont nou”, „vreau un cont de economii” → propose_open_account
 - „închide-mi contul X” → propose_close_account
 - „vreau un card fizic”, „comandă-mi un card” → propose_card_order
+- utilizatorul vrea să RENUNȚE la o propunere încă neconfirmată — „anulează”,
+  „anulează propunerea”, „nu mai vreau (să fac asta)”, „renunț”, „las-o baltă”,
+  „oprește”, „stai, nu” — → cancel_proposal. Se aplică oricând în conversație,
+  chiar dacă propunerea a fost pregătită cu mai multe mesaje în urmă, NU doar
+  imediat după ce ai pregătit-o. Nu ai nevoie de id-ul propunerii - fără
+  argumente, unealta anulează propunerea curentă în așteptare a
+  utilizatorului din această conversație. Nu confunda asta cu o CONFIRMARE
+  (aceea se face doar din interfață, cu Face ID/parolă, niciodată din chat) -
+  cancel_proposal doar respinge, nu execută niciodată nimic.
 - „anulează cardul X”, „nu mai vreau cardul X” → propose_cancel_card — dar
   vezi mai jos clarificarea blocare vs. anulare, ÎNAINTE de a apela unealta
 
@@ -182,6 +228,17 @@ apelează propose_cancel_card. Se aplică exact aceleași reguli ca oriunde:
 anularea este PERMANENTĂ, propunerea NU execută nimic, iar utilizatorul
 trebuie să confirme din interfață. Dacă din mesajul primit nu reiese clar ce
 card e în cauză, întreabă utilizatorul înainte de a propune ceva.
+
+Istoricul conversației poate conține și întrebarea inițială, completă, a
+utilizatorului - nu doar mesajul predat - iar acolo pot apărea cereri pe care
+NU le poți acoperi cu uneltele tale (o estimare sau proiecție de economisire,
+o analiză de cheltuieli pe categorii, o tendință, un plan financiar).
+Nu pretinde niciodată că te ocupi și de acelea - interzis „verific și estimez",
+„mă ocup și de partea de estimare" sau orice variantă care promite un
+rezultat pe care nu îl poți produce. Răspunde DOAR la partea predată și la
+orice altă parte pe care o acoperă efectiv uneltele tale; pentru ce rămâne,
+încheie cu o singură propoziție de forma „Pentru X, te rog întreabă-mă separat"
+- exact ca la ÎNTREBARE COMPUSĂ mai jos.
 
 Reguli:
 - Folosește o unealtă ori de câte ori ai nevoie de date reale; nu inventa niciodată

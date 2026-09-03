@@ -417,6 +417,7 @@
                             <canvas id="face-canvas" hidden></canvas>
                         </div>
 
+                        <p class="field-hint" id="face-enroll-blink-hint" style="margin-top: 8px;" hidden data-i18n="face_confirm.blink_now">Clipește acum...</p>
                         <div class="auth-error" id="face-enroll-error" hidden></div>
                         <div class="auth-success" id="face-enroll-success" hidden></div>
 
@@ -688,6 +689,11 @@
                     <video id="face-confirm-video" autoplay playsinline muted></video>
                     <canvas id="face-confirm-canvas" hidden></canvas>
                 </div>
+                <!-- Shown only while a capture burst is running (see
+                     captureFaceBurst in api.js) - the liveness check needs a
+                     real blink, not just a photo, so the user is told to
+                     provide one. -->
+                <p class="field-hint" id="face-confirm-blink-hint" style="margin-top: 8px;" hidden data-i18n="face_confirm.blink_now">Clipește acum...</p>
                 <!-- Revealed only after MAX_FACE_ATTEMPTS failed captures in
                      this same modal session (see requestFaceConfirmationToken
                      in app.js) - and only for callers that opted into the

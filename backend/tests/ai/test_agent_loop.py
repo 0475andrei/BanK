@@ -104,6 +104,7 @@ async def test_tools_are_advertised_to_the_provider(make_agent, context):
         "propose_open_account",
         "propose_close_account",
         "propose_cancel_card",
+        "cancel_proposal",
     ]
 
     params = specs[0]["function"]["parameters"]

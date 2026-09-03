@@ -474,7 +474,8 @@
     "camera_error": "Nem sikerült elérni a kamerát. Ellenőrizd a böngésző jogosultságait.",
     "use_password_instead": "Jelszó használata helyette",
     "password_label": "Jelszó",
-    "password_required": "Add meg a jelszavad."
+    "password_required": "Add meg a jelszavad.",
+    "blink_now": "Pislogj most..."
   },
   "price_increase": {
     "title": "Az előfizetés ára emelkedett",

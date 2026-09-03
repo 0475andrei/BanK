@@ -9,15 +9,18 @@ Offline, same as tests/ai/test_routing.py.
 from __future__ import annotations
 
 from app.ai.agents.banking_agent import BankingAgent
+from app.ai.agents.docs_agent import DocsAgent
 from app.ai.agents.document_agent import DocumentAgent
 from app.ai.agents.insights_agent import InsightsAgent
 from app.ai.agents.planning_agent import PlanningAgent
 from app.ai.context import Context
 from app.ai.orchestrator import Orchestrator
+from app.ai.providers.mock_embedding_provider import MockEmbeddingProvider
 from app.ai.providers.mock_provider import MockProvider
 from app.ai.schemas import ModelResponse
 from app.ai.service import (
     build_banking_tools,
+    build_docs_tools,
     build_document_tools,
     build_insights_tools,
     build_planning_tools,
@@ -233,3 +236,77 @@ def test_bani_routes_to_banking_unchanged():
 
     assert decision.agent_name == "banking"
     assert decision.matched_rule == "banking_keywords"
+
+
+# ---------------------------------------------------------------------------
+# `limita` collision rules (Step 16 Priority 2, item 8)
+#
+# Registered in the same relative order as AIService.__init__ - docs, then
+# banking - since DocsAgent's first-registered `docs_card_limit_info` rule is
+# what used to shadow BankingAgent's card-limit tool for every "limita"
+# mention, action-intent or not.
+# ---------------------------------------------------------------------------
+
+
+def _card_limit_orchestrator() -> Orchestrator:
+    supabase = FakeSupabase()
+    provider = MockProvider([ModelResponse(text="ok")], repeat_last=True)
+    docs = DocsAgent(provider, build_docs_tools(supabase, MockEmbeddingProvider()))
+    banking = BankingAgent(provider, build_banking_tools(supabase))
+    return Orchestrator([docs, banking])
+
+
+def _card_limit_context() -> Context:
+    return Context(user_id=TEST_USER_ID, account_ids=OWNED_ACCOUNT_IDS)
+
+
+def test_a_card_limit_change_request_routes_to_banking():
+    """Screenshot phrasing 1. `card` is also a bare `banking_keywords` stem
+    here, so that rule is what actually wins - the fix is that DocsAgent's
+    `docs_card_limit_info` no longer claims "limita" first and shadows it."""
+    orchestrator = _card_limit_orchestrator()
+
+    decision = orchestrator.route(
+        "vreau sa schimb limita cardului meu", _card_limit_context()
+    )
+
+    assert decision.agent_name == "banking"
+    assert decision.matched_rule == "banking_keywords"
+
+
+def test_a_card_limit_increase_question_routes_to_banking():
+    """Screenshot phrasing 2."""
+    orchestrator = _card_limit_orchestrator()
+
+    decision = orchestrator.route(
+        "care e limita cardului meu si pot s-o maresc?", _card_limit_context()
+    )
+
+    assert decision.agent_name == "banking"
+    assert decision.matched_rule == "banking_keywords"
+
+
+def test_a_bare_limita_with_an_action_marker_still_reaches_banking():
+    """Unlike the two screenshots above, this phrasing names no `card`/`cont`
+    stem at all - only `banking_card_limit_action` itself can claim it, which
+    is the regression the two tests above cannot catch on their own."""
+    orchestrator = _card_limit_orchestrator()
+
+    decision = orchestrator.route("vreau sa-mi maresc limita", _card_limit_context())
+
+    assert decision.agent_name == "banking"
+    assert decision.matched_rule == "banking_card_limit_action"
+
+
+def test_a_purely_informational_limit_question_still_routes_to_docs():
+    """The other half of the collision: no action marker, no action intent -
+    DocsAgent must still answer the generic "what is a card limit" question,
+    exactly as before this fix."""
+    orchestrator = _card_limit_orchestrator()
+
+    decision = orchestrator.route(
+        "ce este limita unui card de credit?", _card_limit_context()
+    )
+
+    assert decision.agent_name == "docs"
+    assert decision.matched_rule == "docs_card_limit_info"

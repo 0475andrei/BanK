@@ -20,6 +20,7 @@ from app.ai.providers.base import ModelProvider
 from app.ai.schemas import Message
 from app.ai.tools.banking import (
     AddBeneficiaryTool,
+    CancelProposalTool,
     ConvertCurrencyTool,
     CreateScheduledTransferTool,
     FindBeneficiaryByNameTool,
@@ -105,6 +106,10 @@ def build_banking_tools(supabase: AsyncClient) -> ToolRegistry:
             ProposeOpenAccountTool(supabase),
             ProposeCloseAccountTool(supabase),
             ProposeCancelCardTool(supabase),
+            # The symmetric counterpart to the propose_* tools above: cancels
+            # a still-pending one, reachable from chat at any later turn (Bug
+            # fix - see app/ai/tools/banking/cancel_proposal.py).
+            CancelProposalTool(supabase),
             # NO HandoffToAgentTool here, deliberately (Step 15): BankingAgent
             # is TERMINAL in a handoff chain. It is the agent that produces
             # proposals - the end of the line - and the one holding every

@@ -48,6 +48,12 @@ def _set_session_cookie(response: Response, token: str) -> None:
     )
 
 
+#: Comfortably above what a ~2s burst at a modest capture rate needs (see
+#: captureFaceBurst in frontend/api.js), just enough to stop an oversized
+#: upload from reaching the vision service at all.
+_MAX_LIVENESS_FRAMES = 30
+
+
 async def _read_image(file: UploadFile) -> bytes:
     if file.content_type not in {"image/jpeg", "image/png"}:
         raise ValidationError("Only JPEG or PNG images are supported.")
@@ -57,6 +63,17 @@ async def _read_image(file: UploadFile) -> bytes:
     if len(contents) > _MAX_UPLOAD_BYTES:
         raise ValidationError("Image is too large (max 8 MB).")
     return contents
+
+
+async def _read_frames(files: list[UploadFile]) -> list[bytes]:
+    """Every face capture is now a short BURST of frames, not one photo -
+    see vision/app/face.py's liveness docstring for why. Each frame is
+    validated exactly like the single photo used to be."""
+    if not files:
+        raise ValidationError("No frames uploaded.")
+    if len(files) > _MAX_LIVENESS_FRAMES:
+        raise ValidationError("Too many frames uploaded.")
+    return [await _read_image(file) for file in files]
 
 
 @router.get("/status", response_model=FaceStatusRead)
@@ -70,12 +87,12 @@ async def get_face_status(
 
 @router.post("/enroll", status_code=204)
 async def enroll(
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     supabase: AsyncClient = Depends(get_supabase),
     user: UserRead = Depends(get_current_user),
 ) -> None:
-    image_bytes = await _read_image(file)
-    await service.enroll_face(supabase, user, image_bytes)
+    frames = await _read_frames(files)
+    await service.enroll_face(supabase, user, frames)
 
 
 @router.delete("/enroll", status_code=204)
@@ -88,12 +105,12 @@ async def unenroll(
 
 @router.post("/confirm", response_model=FaceConfirmationRead)
 async def confirm(
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     supabase: AsyncClient = Depends(get_supabase),
     user: UserRead = Depends(get_current_user),
 ) -> FaceConfirmationRead:
-    image_bytes = await _read_image(file)
-    token = await service.create_face_confirmation(supabase, user, image_bytes)
+    frames = await _read_frames(files)
+    token = await service.create_face_confirmation(supabase, user, frames)
     return FaceConfirmationRead(token=token)
 
 
@@ -101,10 +118,10 @@ async def confirm(
 async def login_with_face(
     response: Response,
     email: str = Form(...),
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     supabase: AsyncClient = Depends(get_supabase),
 ) -> UserRead:
-    image_bytes = await _read_image(file)
-    user, token = await service.login_with_face(supabase, email, image_bytes)
+    frames = await _read_frames(files)
+    user, token = await service.login_with_face(supabase, email, frames)
     _set_session_cookie(response, token)
     return user

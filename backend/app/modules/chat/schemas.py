@@ -97,6 +97,17 @@ class ChatResponse(BaseModel):
     #: currently only reaches the user as prose in the reply, not as a
     #: confirm/reject card. Follow-up: migrate it onto proposals_service.
     proposal: ProposalRead | None = None
+    #: Set only when this turn's agent called cancel_proposal and it
+    #: succeeded - the id and new terminal status of the proposal it moved
+    #: out of "pending". Unlike `proposal` above, this proposal's card was
+    #: rendered on an EARLIER turn (possibly several messages back), so the
+    #: frontend can't rely on "the card just created this turn" - it has to
+    #: look this id up among its still-live proposal cards and resolve that
+    #: one directly. See router._extract_resolved_proposal and
+    #: frontend/app.js's chat-send handler. Same "optional, additive"
+    #: pattern as `proposal`/`routing`.
+    resolved_proposal_id: str | None = None
+    resolved_proposal_status: str | None = None
 
 
 class MessageRead(BaseModel):
@@ -117,6 +128,13 @@ class MessageRead(BaseModel):
     #: Set only on the assistant turn a routed agent produced; None on every
     #: other row (user turns, tool results) and on messages predating Step 7.
     routing: RoutingDecision | None = None
+    #: Every row one `_persist_turn` call wrote shares this value (see
+    #: chat/router.py) - the frontend groups consecutive assistant rows with
+    #: the same non-null `turn_id` into one bubble on reload, mirroring how
+    #: `TurnDispatchResult.combined_reply` merges them live. None on messages
+    #: predating migrations/0025_messages_turn_id.sql; those rows never merge
+    #: with anything and keep rendering one bubble per row, as before.
+    turn_id: uuid.UUID | None = None
 
 
 class ConversationRead(BaseModel):

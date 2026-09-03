@@ -1,0 +1,35 @@
+-- Explicit turn-grouping key (multi-agent turn reload fix).
+--
+-- Bug: a compound-handoff turn (2+ agent hops that each produce reply text)
+-- renders as ONE merged bubble live (see TurnDispatchResult.combined_reply in
+-- app/ai/turn.py, sent as ChatResponse.reply), but `_persist_turn` in
+-- app/modules/chat/router.py always wrote one `messages` row PER HOP, with no
+-- column tying those rows back together - only `created_at` order and each
+-- row's `routing_metadata.handoff_from` implied which rows belonged to the
+-- same turn. On reload the frontend rendered one bubble per non-empty-content
+-- row, so the same turn that showed as one bubble live showed as N bubbles
+-- after a reload.
+--
+-- `turn_id` is generated once per `_persist_turn` call (see chat/router.py)
+-- and stamped on every row that call writes for that turn - the user's row
+-- and every hop's trace + final-reply rows alike. The frontend groups
+-- consecutive assistant rows sharing a non-null `turn_id` into one bubble,
+-- joining their content the same way `combined_reply` does live (see
+-- groupMessagesForDisplay in frontend/app.js).
+--
+-- Nullable, and deliberately NOT backfilled: every row written before this
+-- migration has no way to know which turn it belonged to, and guessing from
+-- `created_at` proximity is exactly the fragile heuristic this column exists
+-- to replace. Pre-migration rows keep `turn_id IS NULL` forever and the
+-- frontend treats each one as its own single-row group - i.e. they keep
+-- rendering exactly as they do today (split bubbles for a pre-migration
+-- compound-handoff turn is an accepted, permanent known limitation).
+--
+-- No index: nothing filters or aggregates on it - the history endpoint
+-- already returns every row for a conversation, ordered by created_at, and
+-- grouping is done in memory over that list (same reasoning as
+-- 0007_routing_metadata.sql).
+--
+-- Se ruleaza dupa 0001-0024, in Supabase SQL Editor.
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS turn_id UUID;

@@ -179,6 +179,7 @@ async def chat(
 
     new_messages = await _persist_turn(supabase, conversation_id, payload.message, turn)
     proposal = await _extract_proposal(supabase, user, new_messages)
+    resolved_proposal_id, resolved_proposal_status = _extract_resolved_proposal(new_messages)
 
     routing_chain = turn.routing_chain
     return ChatResponse(
@@ -192,6 +193,8 @@ async def chat(
         # Backward-compatible duplicate of the last hop - see ChatResponse.
         routing=routing_chain[-1] if routing_chain else None,
         proposal=proposal,
+        resolved_proposal_id=resolved_proposal_id,
+        resolved_proposal_status=resolved_proposal_status,
     )
 
 
@@ -223,10 +226,24 @@ async def _persist_turn(
     back as real user input on the next turn. The handoff is already recorded,
     in the target hop's routing row (`reason` + `handoff_from`).
 
+    Every row this call writes - the user's message and every hop's trace and
+    final-reply rows alike - is stamped with the SAME `turn_id`, minted fresh
+    here (one `_persist_turn` call is one conversational turn by construction:
+    `chat()` calls it exactly once per POST /chat). That is what lets a reload
+    merge a compound-handoff turn's hop rows back into one bubble, the same
+    shape `combined_reply` produced live - see groupMessagesForDisplay in
+    frontend/app.js and migrations/0025_messages_turn_id.sql for why this
+    isn't a reused HTTP-level request id (client-overridable, and scoped to
+    request tracing, not to "one turn") or a timestamp comparison (fragile:
+    hops in one turn can collide or drift).
+
     Returns every message written, flat, for `_extract_proposal` to scan.
     """
+    turn_id = uuid.uuid4()
     written: list[Message] = [Message(role="user", content=user_message)]
-    await conversations_service.append_message(supabase, conversation_id, written[0])
+    await conversations_service.append_message(
+        supabase, conversation_id, written[0], turn_id=turn_id
+    )
 
     for hop in turn.hops:
         hop_messages = [*hop.trace, Message(role="assistant", content=hop.reply)]
@@ -237,6 +254,7 @@ async def _persist_turn(
                 conversation_id,
                 message,
                 routing=hop.routing if is_final_reply else None,
+                turn_id=turn_id,
             )
         written.extend(hop_messages)
 
@@ -269,6 +287,29 @@ async def _extract_proposal(
         proposal = await proposals_service.get_proposal(supabase, user, proposal_id)
         return ProposalRead.model_validate(proposal)
     return None
+
+
+def _extract_resolved_proposal(new_messages: list[Message]) -> tuple[str | None, str | None]:
+    """If this turn called cancel_proposal and it succeeded, surface the id
+    and new status of the proposal it resolved (see ChatResponse.
+    resolved_proposal_id) so the frontend can update THAT proposal's card -
+    which was rendered on an earlier turn, not this one - instead of leaving
+    it stale with live Confirm/Reject buttons after a chat-driven "anulează"
+    sent as a later message (see app/ai/tools/banking/cancel_proposal.py).
+
+    No extra DB round trip: cancel_proposal's own ToolResult already carries
+    both the id and the resulting status, same as _extract_proposal reads
+    `proposal_id` off the propose_* tools' result above - the trace is
+    already the single source of truth for what happened this turn."""
+    for message in new_messages:
+        if message.role != "tool" or message.name != "cancel_proposal":
+            continue
+        content = json.loads(message.content or "{}")
+        if not content.get("ok"):
+            continue
+        result = content["result"]
+        return result["proposal_id"], result["status"]
+    return None, None
 
 
 @router.get("/conversations", response_model=list[ConversationRead])

@@ -536,6 +536,63 @@ function agentChainsByMessage(messages) {
     return chains;
 }
 
+/** Merge a turn's hop rows back into the single bubble they were shown as
+ * live (bug fix: a compound-handoff turn - 2+ agent hops that each produce
+ * reply text, e.g. Insights answers the spending half then hands off to
+ * Banking for the balance half - rendered as ONE bubble live via
+ * `ChatResponse.reply` (= `TurnDispatchResult.combined_reply`, which joins
+ * every hop's non-empty reply with "\n\n" - see app/ai/turn.py), but replayed
+ * from history as ONE BUBBLE PER ROW, since each hop is its own `messages`
+ * row with no shared key. `turn_id` (migrations/0025_messages_turn_id.sql) is
+ * that shared key: every row one `_persist_turn` call wrote carries the same
+ * value.
+ *
+ * Takes the ALREADY content-filtered, role-filtered `dialogue` array (user +
+ * assistant rows with non-empty content, in order) and merges consecutive
+ * ASSISTANT rows that share a non-null `turn_id` into one group, joining
+ * their content with "\n\n" - the exact same join `combined_reply` does
+ * server-side. A user row never merges with anything, and a row with
+ * `turn_id == null` (written before this migration) never merges either -
+ * each keeps rendering as its own single-row group, exactly as it did before
+ * this fix existed. That is the deliberate, permanent behaviour for
+ * pre-migration data: there is no reliable way to know which of those old
+ * rows belonged together, and guessing from timestamps is the fragile
+ * heuristic this fix replaces, not one to reintroduce for old rows.
+ *
+ * Returns an array of { role, text, lastMessage } - `lastMessage` is the
+ * group's last row, i.e. the same key `agentChainsByMessage` used for that
+ * run, so the caller can still look up the group's agent-chain pill. */
+function groupMessagesForDisplay(dialogue) {
+    const groups = [];
+
+    dialogue.forEach(message => {
+        const last = groups[groups.length - 1];
+        const canMerge =
+            message.role === 'assistant' &&
+            last &&
+            last.role === 'assistant' &&
+            message.turn_id != null &&
+            message.turn_id === last.turnId;
+        if (canMerge) {
+            last.parts.push(message.content);
+            last.lastMessage = message;
+        } else {
+            groups.push({
+                role: message.role,
+                turnId: message.turn_id ?? null,
+                parts: [message.content],
+                lastMessage: message,
+            });
+        }
+    });
+
+    return groups.map(group => ({
+        role: group.role,
+        text: group.parts.join('\n\n'),
+        lastMessage: group.lastMessage,
+    }));
+}
+
 /** Builds a chat bubble matching the existing markup and appends it.
  * `options.routingChain`, when present on an 'ai' message, renders the agent
  * chain (see renderAgentChain) above the bubble. `options.routing` is the
@@ -999,6 +1056,9 @@ async function sendMessage() {
             supersedeLivePendingProposalCards();
             livePendingProposalCards.push(renderProposalCard(response.proposal, aiBubble));
         }
+        if (response.resolved_proposal_id) {
+            resolveLivePendingProposalCard(response.resolved_proposal_id, response.resolved_proposal_status);
+        }
         setCurrentConversationId(response.conversation_id);
         void loadConversationHistory();
         // The agent can freeze/unfreeze a card, change a limit, or touch
@@ -1195,13 +1255,16 @@ async function openConversation(conversationId) {
         const dialogue = messages.filter(message =>
             (message.role === 'user' || message.role === 'assistant') && message.content
         );
-        if (dialogue.length) {
-            dialogue.forEach(message => appendChatBubble(
-                message.role === 'user' ? 'user' : 'ai',
-                message.content,
+        // Then merged back into the bubbles a compound-handoff turn was shown
+        // as live - see groupMessagesForDisplay.
+        const turns = groupMessagesForDisplay(dialogue);
+        if (turns.length) {
+            turns.forEach(turnGroup => appendChatBubble(
+                turnGroup.role === 'user' ? 'user' : 'ai',
+                turnGroup.text,
                 {
-                    routingChain: chains.get(message),
-                    routing: message.routing || undefined,
+                    routingChain: chains.get(turnGroup.lastMessage),
+                    routing: turnGroup.lastMessage.routing || undefined,
                 }
             ));
         } else {
@@ -1453,6 +1516,23 @@ function supersedeLivePendingProposalCards() {
     livePendingProposalCards = [];
 }
 
+/** Resolves ONE specific still-live card by proposal id - the counterpart to
+ * supersedeLivePendingProposalCards above, for cancel_proposal (see
+ * ChatResponse.resolved_proposal_id): a user can say "anulează" as a LATER
+ * message, several turns after the proposal's card was rendered, so that
+ * card is not necessarily this turn's card (or even still in
+ * livePendingProposalCards's most recent entry) - it has to be looked up by
+ * id. Leaves every other live card untouched, unlike the supersede-all
+ * behaviour above, which is specifically for "a new proposal replaces
+ * whatever was pending before it". */
+function resolveLivePendingProposalCard(proposalId, status) {
+    const card = livePendingProposalCards.find(c => c.dataset.proposalId === proposalId);
+    if (!card || !card.isConnected) return;
+    if (card.classList.contains('proposal-confirmed') || card.classList.contains('proposal-rejected')) return;
+    markProposalCardResolved(card, status === 'confirmed' ? 'confirmed' : 'rejected');
+    livePendingProposalCards = livePendingProposalCards.filter(c => c !== card);
+}
+
 /** Simple toast for background feedback that doesn't belong in the chat
  * transcript itself (a proposal being confirmed/rejected). Auto-dismisses. */
 function showToast(message) {
@@ -1525,7 +1605,22 @@ async function handleRejectProposal(proposalId, card) {
         showToast(t('chat.proposal.reject_success', 'Propunerea a fost anulată.'));
     } catch (err) {
         buttons.forEach(btn => { btn.disabled = false; });
-        showToast(t('chat.proposal.reject_error', 'Eroare la anulare.'));
+        // Rejecting an already-confirmed/rejected/expired proposal (e.g. a
+        // second tab, or a chat-driven confirm sent as a later message)
+        // never marks this card resolved - it's left stale with live
+        // buttons rather than shown as falsely rejected. err.details.status
+        // (see reject_proposal_for_owner in proposals_service.py) lets the
+        // toast at least say what really happened instead of a generic
+        // error.
+        const actualStatus = err.details?.status;
+        const message = actualStatus === 'confirmed'
+            ? t('chat.proposal.already_confirmed', 'Această propunere a fost deja confirmată.')
+            : actualStatus === 'expired'
+                ? t('chat.proposal.already_expired', 'Această propunere a expirat.')
+                : actualStatus === 'rejected'
+                    ? t('chat.proposal.already_rejected', 'Această propunere a fost deja anulată.')
+                    : t('chat.proposal.reject_error', 'Eroare la anulare.');
+        showToast(message);
     }
 }
 
@@ -1578,11 +1673,29 @@ async function confirmWithCredential(proposalId, authMethod, credential, card) {
         return proposal;
     } catch (err) {
         if (err.status === 409) {
-            // Already confirmed/rejected/expired elsewhere (e.g. a second
-            // tab) - the card's own buttons are stale, so just reflect it.
+            // Already confirmed/rejected/expired elsewhere - e.g. a second
+            // tab, or (the case that used to break) a chat-driven rejection
+            // sent as a later message while this stale card was still
+            // showing. err.code alone can't tell "rejected" apart from
+            // "confirmed elsewhere" (both are proposal_not_pending), so we
+            // read the proposal's REAL terminal status from err.details -
+            // see ensure_pending_and_not_expired in proposals_service.py.
+            // Defaulting to "confirmed" here (the old behaviour) painted a
+            // false success card for a proposal the user had rejected and
+            // that never executed - never do that again on missing/unknown
+            // details.
             closeStepUpModal();
-            markProposalCardResolved(card, err.code === 'proposal_expired' ? 'rejected' : 'confirmed');
-            showToast(err.message);
+            const actualStatus = err.details?.status;
+            const resolvedState = actualStatus === 'confirmed' ? 'confirmed' : 'rejected';
+            markProposalCardResolved(card, resolvedState);
+            const message = actualStatus === 'confirmed'
+                ? t('chat.proposal.already_confirmed', 'Această propunere a fost deja confirmată.')
+                : actualStatus === 'expired'
+                    ? t('chat.proposal.already_expired', 'Această propunere a expirat.')
+                    : actualStatus === 'rejected'
+                        ? t('chat.proposal.already_rejected', 'Această propunere a fost deja anulată.')
+                        : err.message;
+            showToast(message);
             return null;
         }
         showStepUpError(err.message || t('chat.proposal.auth_failed', 'Autentificare eșuată.'));
@@ -1609,7 +1722,22 @@ function wireStepUpModal() {
         // /chat/proposals/{id}/confirm) once enough face failures are on
         // record for this proposal - see confirm_proposal's own gate.
         modal.hidden = true;
-        const credential = await requestFaceConfirmationToken(undefined, { allowPasswordFallback: true });
+        const credential = await requestFaceConfirmationToken(undefined, {
+            allowPasswordFallback: true,
+            // A failed CAPTURE never itself calls /chat/proposals/{id}/confirm,
+            // so without this the backend's own failure counter for this
+            // proposal would still read zero the moment "use password
+            // instead" appears, and reject the first real password attempt
+            // with 428 - see requestFaceConfirmationToken's docstring. This
+            // records the same failure the counter is watching for by
+            // making a real (deliberately failing) confirm call.
+            onCaptureFailed: async () => {
+                await apiFetch(`/chat/proposals/${proposalId}/confirm`, {
+                    method: 'POST',
+                    body: JSON.stringify({ auth_method: 'face', credential: 'capture-failed' }),
+                }).catch(() => {});
+            },
+        });
         if (!credential) {
             modal.hidden = false;
             return;
@@ -3248,8 +3376,20 @@ const MAX_FACE_CONFIRM_ATTEMPTS = 3;
  * Callers that never pass `allowPasswordFallback` see the exact same
  * string-or-null shape as before this fallback existed - the password path
  * is simply never reachable for them (the link stays hidden), so they need
- * no changes at all. */
-function requestFaceConfirmationToken(reason = faceConfirmDefaultReason(), { allowPasswordFallback = false } = {}) {
+ * no changes at all.
+ *
+ * `onCaptureFailed`, if given, is awaited after each failed capture (up to
+ * MAX_FACE_CONFIRM_ATTEMPTS times) - the ONLY caller that needs this is
+ * wireStepUpModal's chat-proposal confirm, whose backend gate
+ * (proposals_service.confirm_proposal's FACE_FAILURES_BEFORE_PASSWORD_FALLBACK
+ * check) counts failed calls to POST /chat/proposals/{id}/confirm, a
+ * different endpoint than the one a failed CAPTURE hits here
+ * (POST /auth/face/confirm). Without this hook, a camera that fails 3 times
+ * would reveal "use password instead" only for the backend to reject that
+ * password on the very first real attempt, since its own counter was still
+ * at zero - the fix is to let the failing side make the same counter move
+ * the same way a real failed confirm attempt would. */
+function requestFaceConfirmationToken(reason = faceConfirmDefaultReason(), { allowPasswordFallback = false, onCaptureFailed = null } = {}) {
     return new Promise((resolve) => {
         const modal = document.getElementById('face-confirm-modal');
         const video = document.getElementById('face-confirm-video');
@@ -3262,6 +3402,7 @@ function requestFaceConfirmationToken(reason = faceConfirmDefaultReason(), { all
         const passwordSection = document.getElementById('face-confirm-password-section');
         const passwordInput = document.getElementById('face-confirm-password-input');
         const usePasswordBtn = document.getElementById('face-confirm-use-password');
+        const blinkHintEl = document.getElementById('face-confirm-blink-hint');
 
         let stream = null;
         let usingPassword = false;
@@ -3313,7 +3454,7 @@ function requestFaceConfirmationToken(reason = faceConfirmDefaultReason(), { all
 
         startCamera();
 
-        captureBtn.onclick = () => {
+        captureBtn.onclick = async () => {
             if (usingPassword) {
                 const password = passwordInput.value;
                 if (!password) {
@@ -3326,34 +3467,43 @@ function requestFaceConfirmationToken(reason = faceConfirmDefaultReason(), { all
             }
 
             errorEl.hidden = true;
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
+            captureBtn.disabled = true;
+            if (blinkHintEl) blinkHintEl.hidden = false;
 
-            canvas.toBlob(async (blob) => {
+            try {
+                // A short BURST of frames, not one photo - the backend's
+                // liveness check needs a real blink across them (see
+                // captureFaceBurst in api.js and vision/app/face.py). A
+                // still photo held up to the camera never blinks.
+                const frames = await captureFaceBurst(video, canvas);
                 const formData = new FormData();
-                formData.append('file', blob, 'confirm.jpg');
-                try {
-                    const res = await fetch(`${API_BASE_URL}/auth/face/confirm`, {
-                        method: 'POST',
-                        credentials: 'include',
-                        body: formData,
-                    });
-                    if (!res.ok) {
-                        const errBody = await res.json().catch(() => ({}));
-                        throw new Error(errBody?.error?.message || `Request failed (${res.status})`);
-                    }
-                    const { token } = await res.json();
-                    cleanup(token);
-                } catch (err) {
-                    errorEl.textContent = err.message;
-                    errorEl.hidden = false;
-                    failedAttempts += 1;
-                    if (allowPasswordFallback && failedAttempts >= MAX_FACE_CONFIRM_ATTEMPTS) {
-                        usePasswordBtn.hidden = false;
-                    }
+                frames.forEach((blob, i) => formData.append('files', blob, `frame-${i}.jpg`));
+
+                const res = await fetch(`${API_BASE_URL}/auth/face/confirm`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    body: formData,
+                });
+                if (!res.ok) {
+                    const errBody = await res.json().catch(() => ({}));
+                    throw new Error(errBody?.error?.message || `Request failed (${res.status})`);
                 }
-            }, 'image/jpeg', 0.92);
+                const { token } = await res.json();
+                cleanup(token);
+            } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.hidden = false;
+                failedAttempts += 1;
+                if (onCaptureFailed) {
+                    await onCaptureFailed();
+                }
+                if (allowPasswordFallback && failedAttempts >= MAX_FACE_CONFIRM_ATTEMPTS) {
+                    usePasswordBtn.hidden = false;
+                }
+            } finally {
+                if (blinkHintEl) blinkHintEl.hidden = true;
+                captureBtn.disabled = false;
+            }
         };
 
         usePasswordBtn.onclick = switchToPassword;
@@ -4199,6 +4349,7 @@ function wireFaceLoginPanel() {
     const removeBtn = document.getElementById('face-remove-btn');
     const errorEl = document.getElementById('face-enroll-error');
     const successEl = document.getElementById('face-enroll-success');
+    const blinkHintEl = document.getElementById('face-enroll-blink-hint');
 
     startBtn.addEventListener('click', async () => {
         errorEl.hidden = true;
@@ -4215,37 +4366,42 @@ function wireFaceLoginPanel() {
         }
     });
 
-    captureBtn.addEventListener('click', () => {
+    captureBtn.addEventListener('click', async () => {
         errorEl.hidden = true;
         successEl.hidden = true;
+        captureBtn.disabled = true;
+        if (blinkHintEl) blinkHintEl.hidden = false;
 
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
-
-        canvas.toBlob(async (blob) => {
+        try {
+            // A burst, not one photo - enrollment goes through the same
+            // blink-liveness check as login/step-up confirm (see
+            // captureFaceBurst in api.js), so a spoofed enrollment from a
+            // photo of someone else is closed too, not just the check-in
+            // gate.
+            const frames = await captureFaceBurst(video, canvas);
             const formData = new FormData();
-            formData.append('file', blob, 'face.jpg');
-            try {
-                await fetch(`${API_BASE_URL}/auth/face/enroll`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    body: formData,
-                }).then(async (res) => {
-                    if (!res.ok) {
-                        const body = await res.json().catch(() => ({}));
-                        throw new Error(body?.error?.message || `Request failed (${res.status})`);
-                    }
-                });
-                successEl.textContent = t('profile.face_success', 'Face Login activat cu succes!');
-                successEl.hidden = false;
-                stopFaceCamera();
-                await loadFaceStatus();
-            } catch (err) {
-                errorEl.textContent = err.message;
-                errorEl.hidden = false;
+            frames.forEach((blob, i) => formData.append('files', blob, `frame-${i}.jpg`));
+
+            const res = await fetch(`${API_BASE_URL}/auth/face/enroll`, {
+                method: 'POST',
+                credentials: 'include',
+                body: formData,
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.error?.message || `Request failed (${res.status})`);
             }
-        }, 'image/jpeg', 0.92);
+            successEl.textContent = t('profile.face_success', 'Face Login activat cu succes!');
+            successEl.hidden = false;
+            stopFaceCamera();
+            await loadFaceStatus();
+        } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        } finally {
+            if (blinkHintEl) blinkHintEl.hidden = true;
+            captureBtn.disabled = false;
+        }
     });
 
     removeBtn.addEventListener('click', async () => {

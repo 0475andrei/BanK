@@ -26,7 +26,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, File, Header, HTTPException, UploadFile
 
-from app.face import MultipleFacesDetectedError, NoFaceDetectedError, extract_embedding
+from app.face import (
+    MultipleFacesDetectedError,
+    NoBlinkDetectedError,
+    NoFaceDetectedError,
+    extract_embedding_with_liveness,
+)
 from app.iban import extract_iban
 from app.id_card import extract_id_fields
 from app.pdf_text import UnreadablePdfError, extract_pdf_text
@@ -129,14 +134,20 @@ async def read_pdf_text(file: UploadFile = File(...)) -> dict:
 
 
 @protected.post("/v1/face/embedding")
-async def read_face_embedding(file: UploadFile = File(...)) -> dict:
-    content = await _read_upload(file)
+async def read_face_embedding(files: list[UploadFile] = File(...)) -> dict:
+    """`files` is a short BURST of frames, not one photo - see
+    app/face.py's module docstring for why a single photo can never prove
+    liveness. Every real caller (face_auth/service.py's enroll/login/step-up
+    confirm) sends one; nothing else in this codebase calls this route."""
+    contents = [await _read_upload(f) for f in files]
     try:
-        return {"embedding": extract_embedding(content)}
+        return {"embedding": extract_embedding_with_liveness(contents)}
     except NoFaceDetectedError:
         raise HTTPException(status_code=422, detail="no_face_detected") from None
     except MultipleFacesDetectedError:
         raise HTTPException(status_code=422, detail="multiple_faces_detected") from None
+    except NoBlinkDetectedError:
+        raise HTTPException(status_code=422, detail="no_blink_detected") from None
 
 
 app.include_router(protected)

@@ -71,3 +71,7 @@ error) whenever the file is absent.
 - `seed_fake_purchases.py` - fake purchase history for an existing user.
 - `seed_insights_test_data.py` - fixtures for exercising the insights tools.
 - `ingest_knowledge_base.py` - loads the static knowledge base documents.
+- `diagnose_handoff_variance.py` - Bug 2b diagnostic: fires one compound
+  question at InsightsAgent N times against the real Azure deployment and
+  tabulates how often it calls `handoff_to_agent`. Not a test - a
+  distribution to look at, not a pass/fail. Needs `AZURE_OPENAI_*` in `.env`.

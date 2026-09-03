@@ -78,6 +78,26 @@ class ToolLoopAgent(Agent):
         for iteration in range(1, self._max_iterations + 1):
             response = self._provider.complete(working, specs)
 
+            # Diagnostic only (Bug 2b): how often does the model reach for
+            # handoff_to_agent at all, before dispatch ever gets a say? DEBUG,
+            # not INFO, and the target is logged as-is despite the untrusted-
+            # content boundary noted in handoff_tool.py — unlike that INFO log
+            # this one is off by default and exists to measure variance, not
+            # to run in production. Fires on every iteration with a model
+            # response, whether or not tools were requested, so a "no handoff"
+            # hop is as visible as an accepted one.
+            requested_handoff = next(
+                (call for call in response.tool_calls if call.name == "handoff_to_agent"),
+                None,
+            )
+            logger.debug(
+                "agent=%s iteration=%d handoff_requested=%s target=%s",
+                self.name,
+                iteration,
+                requested_handoff is not None,
+                requested_handoff.arguments.get("target_agent") if requested_handoff else None,
+            )
+
             if not response.wants_tools:
                 return TurnResult(reply=response.text or "", trace=working[trace_start:])
 
